@@ -2,28 +2,62 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays } from 'lucide-react';
 
-// Comprehensive peptide/medication list
+// Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
-  { name: 'Semaglutide', category: 'GLP-1', color: '#10b981', defaultSchedule: 7 },
-  { name: 'Tirzepatide', category: 'GLP-1/GIP', color: '#14b8a6', defaultSchedule: 7 },
-  { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1 },
-  { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7 },
-  { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7 },
-  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7 },
-  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7 },
-  { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3 },
-  { name: 'BPC-157', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1 },
-  { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3 },
-  { name: 'Ipamorelin', category: 'Peptide', color: '#fbbf24', defaultSchedule: 1 },
-  { name: 'CJC-1295', category: 'Peptide', color: '#f97316', defaultSchedule: 1 },
-  { name: 'Tesamorelin', category: 'Peptide', color: '#ea580c', defaultSchedule: 1 },
-  { name: 'Sermorelin', category: 'Peptide', color: '#fb923c', defaultSchedule: 1 },
-  { name: 'MK-677', category: 'Peptide', color: '#c2410c', defaultSchedule: 1 },
-  { name: 'AOD-9604', category: 'Peptide', color: '#ec4899', defaultSchedule: 1 },
-  { name: 'Melanotan II', category: 'Peptide', color: '#db2777', defaultSchedule: 7 },
-  { name: 'PT-141', category: 'Peptide', color: '#be185d', defaultSchedule: 0 },
-  { name: 'Other', category: 'Other', color: '#6b7280', defaultSchedule: 7 }
+  { name: 'Semaglutide', category: 'GLP-1', color: '#10b981', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
+  { name: 'Tirzepatide', category: 'GLP-1/GIP', color: '#14b8a6', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
+  { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
+  { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
+  { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
+  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168 },
+  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168 },
+  { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 33, peakHours: 12, effectDuration: 72 },
+  { name: 'BPC-157', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
+  { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 240, peakHours: 24, effectDuration: 168 },
+  { name: 'Ipamorelin', category: 'Peptide', color: '#fbbf24', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 4 },
+  { name: 'CJC-1295', category: 'Peptide', color: '#f97316', defaultSchedule: 1, halfLife: 168, peakHours: 12, effectDuration: 168 },
+  { name: 'Tesamorelin', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 3 },
+  { name: 'Sermorelin', category: 'Peptide', color: '#fb923c', defaultSchedule: 1, halfLife: 0.2, peakHours: 0.1, effectDuration: 1 },
+  { name: 'MK-677', category: 'Peptide', color: '#c2410c', defaultSchedule: 1, halfLife: 24, peakHours: 2, effectDuration: 24 },
+  { name: 'AOD-9604', category: 'Peptide', color: '#ec4899', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 3 },
+  { name: 'Melanotan II', category: 'Peptide', color: '#db2777', defaultSchedule: 7, halfLife: 33, peakHours: 12, effectDuration: 168 },
+  { name: 'PT-141', category: 'Peptide', color: '#be185d', defaultSchedule: 0, halfLife: 3, peakHours: 1, effectDuration: 8 },
+  { name: 'Other', category: 'Other', color: '#6b7280', defaultSchedule: 7, halfLife: 168, peakHours: 24, effectDuration: 168 }
 ];
+
+// Effect profiles for different medication categories
+const EFFECT_PROFILES = {
+  'GLP-1': {
+    effects: ['Appetite Suppression', 'Nausea Risk', 'Blood Sugar Control', 'Weight Loss'],
+    sideEffects: ['Nausea', 'Fatigue', 'Constipation', 'Headache'],
+    peakEffects: 'Days 1-3 post-injection',
+    steadyState: '4-5 weeks of consistent dosing'
+  },
+  'GLP-1/GIP': {
+    effects: ['Appetite Suppression', 'Insulin Sensitivity', 'Fat Burning', 'Weight Loss'],
+    sideEffects: ['Nausea', 'Diarrhea', 'Fatigue', 'Injection Site Reactions'],
+    peakEffects: 'Days 1-3 post-injection',
+    steadyState: '4-5 weeks of consistent dosing'
+  },
+  'Triple Agonist': {
+    effects: ['Appetite Control', 'Metabolic Boost', 'Fat Loss', 'Energy Increase'],
+    sideEffects: ['Nausea', 'Increased Heart Rate', 'Fatigue'],
+    peakEffects: 'Days 1-3 post-injection',
+    steadyState: '4-6 weeks of consistent dosing'
+  },
+  'Hormone': {
+    effects: ['Muscle Growth', 'Energy', 'Mood Enhancement', 'Libido'],
+    sideEffects: ['Injection Site Pain', 'Acne', 'Mood Changes'],
+    peakEffects: 'Days 2-3 post-injection',
+    steadyState: '4 weeks of consistent dosing'
+  },
+  'Peptide': {
+    effects: ['Healing', 'Recovery', 'Growth Hormone Release'],
+    sideEffects: ['Injection Site Reactions', 'Water Retention'],
+    peakEffects: 'Hours to days post-injection',
+    steadyState: 'Varies by peptide'
+  }
+};
 
 const INJECTION_SITES = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)', 'Arm (Right)', 'Glute (Left)', 'Glute (Right)', 'Subcutaneous', 'Intramuscular'];
 const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
@@ -558,6 +592,136 @@ const HealthTracker = () => {
     setReconResult({ concentration: (concentrationMcgPerMl / 1000).toFixed(2), ml: volumeMl.toFixed(3), units: (volumeMl * 100).toFixed(1) });
   };
 
+  // Medication level calculations (pharmacokinetics)
+  const calculateMedicationLevel = (injection, medication) => {
+    const now = new Date();
+    const injectionDate = parseLocalDate(injection.date);
+    const hoursElapsed = (now - injectionDate) / (1000 * 60 * 60);
+    
+    if (hoursElapsed < 0) return 0; // Future injection
+    if (!medication.halfLife) return 0;
+    
+    // Calculate remaining percentage using exponential decay
+    const halfLivesElapsed = hoursElapsed / medication.halfLife;
+    const remainingPercentage = Math.pow(0.5, halfLivesElapsed) * 100;
+    
+    return Math.max(0, remainingPercentage);
+  };
+
+  const getMedicationInsights = () => {
+    const insights = [];
+    const now = new Date();
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    
+    // Get recent injections (last 30 days for most meds)
+    const recentInjections = injectionEntries.filter(inj => {
+      const injDate = parseLocalDate(inj.date);
+      const daysAgo = (now - injDate) / (1000 * 60 * 60 * 24);
+      return daysAgo <= 30;
+    });
+    
+    // Group by medication type
+    const byMedication = {};
+    recentInjections.forEach(inj => {
+      if (!byMedication[inj.type]) byMedication[inj.type] = [];
+      byMedication[inj.type].push(inj);
+    });
+    
+    // Calculate insights for each medication
+    Object.entries(byMedication).forEach(([medName, injections]) => {
+      const medication = MEDICATIONS.find(m => m.name === medName);
+      if (!medication) return;
+      
+      // Sort by date, most recent first
+      const sorted = injections.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+      const lastInjection = sorted[0];
+      const hoursAgo = (now - parseLocalDate(lastInjection.date)) / (1000 * 60 * 60);
+      
+      // Calculate current level
+      const currentLevel = calculateMedicationLevel(lastInjection, medication);
+      
+      // Determine phase
+      let phase = 'Declining';
+      let phaseColor = 'text-red-400';
+      if (hoursAgo <= medication.peakHours) {
+        phase = 'Absorption';
+        phaseColor = 'text-yellow-400';
+      } else if (hoursAgo <= medication.peakHours * 2) {
+        phase = 'Peak Effect';
+        phaseColor = 'text-emerald-400';
+      } else if (currentLevel > 50) {
+        phase = 'Active';
+        phaseColor = 'text-cyan-400';
+      }
+      
+      // Calculate next injection time
+      const schedule = schedules.find(s => s.medication === medName);
+      let nextInjection = null;
+      if (schedule) {
+        const nextDate = new Date(parseLocalDate(lastInjection.date));
+        nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
+        nextInjection = nextDate;
+      }
+      
+      insights.push({
+        medication: medName,
+        color: medication.color,
+        category: medication.category,
+        currentLevel: currentLevel.toFixed(1),
+        phase,
+        phaseColor,
+        lastInjection: lastInjection.date,
+        lastDose: lastInjection.dose,
+        lastUnit: lastInjection.unit,
+        hoursAgo: hoursAgo.toFixed(1),
+        nextInjection,
+        effectProfile: EFFECT_PROFILES[medication.category]
+      });
+    });
+    
+    return insights.sort((a, b) => parseFloat(b.currentLevel) - parseFloat(a.currentLevel));
+  };
+
+  const getMedicationLevelChartData = (medName) => {
+    const medication = MEDICATIONS.find(m => m.name === medName);
+    if (!medication) return [];
+    
+    const recentInjections = injectionEntries
+      .filter(inj => inj.type === medName)
+      .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+    
+    if (recentInjections.length === 0) return [];
+    
+    const now = new Date();
+    const data = [];
+    
+    // Generate data points for the last 14 days
+    for (let i = -14; i <= 0; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Calculate total level from all injections
+      let totalLevel = 0;
+      recentInjections.forEach(inj => {
+        const injDate = parseLocalDate(inj.date);
+        if (injDate <= date) {
+          const hoursElapsed = (date - injDate) / (1000 * 60 * 60);
+          const halfLivesElapsed = hoursElapsed / medication.halfLife;
+          const level = Math.pow(0.5, halfLivesElapsed) * 100;
+          if (level > 0.1) totalLevel += level;
+        }
+      });
+      
+      data.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        level: Math.min(totalLevel, 150).toFixed(1) // Cap at 150% for visualization
+      });
+    }
+    
+    return data;
+  };
+
   const filteredMedications = MEDICATIONS.filter(med => med.name.toLowerCase().includes(medSearchTerm.toLowerCase()) || med.category.toLowerCase().includes(medSearchTerm.toLowerCase()));
   const groupedMedications = filteredMedications.reduce((acc, med) => { if (!acc[med.category]) acc[med.category] = []; acc[med.category].push(med); return acc; }, {});
 
@@ -595,6 +759,7 @@ const HealthTracker = () => {
         <div className="flex bg-slate-800 rounded-xl p-1 mb-6 overflow-x-auto">
           {[
             { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
+            { id: 'insights', icon: Activity, label: 'Insights' },
             { id: 'weight', icon: Scale, label: 'Weight' },
             { id: 'injections', icon: Syringe, label: 'Injections' },
             { id: 'measurements', icon: Ruler, label: 'Body' },
@@ -736,8 +901,8 @@ const HealthTracker = () => {
             {/* Chart */}
             {(weightEntries.length > 0 || injectionEntries.length > 0) && (
               <div className="bg-slate-800/50 rounded-xl p-4">
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={getSummaryChartData()}>
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={getSummaryChartData()} margin={{ top: 30, right: 10, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={Math.max(0, Math.floor(getSummaryChartData().length / 6))} />
                     <YAxis yAxisId="left" stroke="#94a3b8" fontSize={10} domain={['dataMin - 2', 'dataMax + 2']} orientation="right" tickFormatter={(v) => `${v} lbs`} />
@@ -769,6 +934,151 @@ const HealthTracker = () => {
                   {getLoggedMedications().map(med => <div key={med} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: getMedicationColor(med) }}></div><span className="text-xs text-slate-400">{med}</span></div>)}
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* INSIGHTS TAB */}
+        {activeTab === 'insights' && (
+          <div className="space-y-4">
+            {getMedicationInsights().length === 0 ? (
+              <div className="bg-slate-800 rounded-xl p-8 text-center">
+                <Activity className="h-16 w-16 mx-auto mb-4 text-slate-600" />
+                <h3 className="text-white font-medium text-lg mb-2">No Recent Injections</h3>
+                <p className="text-slate-400 mb-4">Log an injection to see your medication levels and insights</p>
+                <button onClick={() => setActiveTab('injections')} className="bg-violet-500 hover:bg-violet-600 text-white px-6 py-3 rounded-lg font-medium">
+                  Log Injection
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Active Medications Overview */}
+                {getMedicationInsights().map(insight => (
+                  <div key={insight.medication} className="bg-slate-800 rounded-xl p-4">
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: insight.color }}></div>
+                          <h3 className="text-white font-semibold text-lg">{insight.medication}</h3>
+                        </div>
+                        <p className="text-slate-400 text-sm">{insight.category}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-3xl font-bold text-white">{insight.currentLevel}%</div>
+                        <div className="text-slate-400 text-xs">Current Level</div>
+                      </div>
+                    </div>
+
+                    {/* Phase Status */}
+                    <div className="mb-4 p-3 rounded-lg bg-slate-700/50">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className={`text-sm font-medium ${insight.phaseColor}`}>● {insight.phase}</div>
+                          <div className="text-slate-400 text-xs mt-1">
+                            {insight.hoursAgo < 24 ? `${insight.hoursAgo}h ago` : `${(insight.hoursAgo / 24).toFixed(1)} days ago`}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-white text-sm">{insight.lastDose}{insight.lastUnit}</div>
+                          <div className="text-slate-400 text-xs">Last dose</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Medication Level Chart */}
+                    {getMedicationLevelChartData(insight.medication).length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-white text-sm font-medium mb-2">Medication Level (Last 14 Days)</h4>
+                        <ResponsiveContainer width="100%" height={150}>
+                          <LineChart data={getMedicationLevelChartData(insight.medication)}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} />
+                            <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => `${v}%`} />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                              formatter={(value) => [`${value}%`, 'Level']}
+                            />
+                            <Line type="monotone" dataKey="level" stroke={insight.color} strokeWidth={3} dot={{ fill: insight.color, r: 4 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Effects Information */}
+                    {insight.effectProfile && (
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                          <h4 className="text-emerald-400 text-xs font-medium mb-2 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />Expected Effects
+                          </h4>
+                          <ul className="space-y-1">
+                            {insight.effectProfile.effects.slice(0, 3).map((effect, i) => (
+                              <li key={i} className="text-white text-xs">• {effect}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                          <h4 className="text-amber-400 text-xs font-medium mb-2 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />Possible Side Effects
+                          </h4>
+                          <ul className="space-y-1">
+                            {insight.effectProfile.sideEffects.slice(0, 3).map((effect, i) => (
+                              <li key={i} className="text-white text-xs">• {effect}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timeline Info */}
+                    <div className="flex gap-2 text-xs">
+                      <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
+                        <div className="text-slate-400">Peak Effects</div>
+                        <div className="text-white font-medium mt-1">{insight.effectProfile?.peakEffects || 'Varies'}</div>
+                      </div>
+                      {insight.nextInjection && (
+                        <div className="flex-1 bg-violet-500/10 border border-violet-500/30 rounded-lg p-2 text-center">
+                          <div className="text-slate-400">Next Dose</div>
+                          <div className="text-white font-medium mt-1">
+                            {new Date(insight.nextInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* General Guidance */}
+                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+                  <h3 className="text-cyan-400 font-medium mb-2 flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Insights & Recommendations
+                  </h3>
+                  <ul className="space-y-2 text-sm text-white">
+                    {getMedicationInsights().some(i => i.phase === 'Peak Effect') && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-400 mt-0.5">●</span>
+                        <span>You're currently in the peak effect window. This is when medication effectiveness is highest.</span>
+                      </li>
+                    )}
+                    {getMedicationInsights().some(i => parseFloat(i.currentLevel) < 30) && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-amber-400 mt-0.5">●</span>
+                        <span>Some medication levels are declining. Consider timing your next dose to maintain therapeutic levels.</span>
+                      </li>
+                    )}
+                    <li className="flex items-start gap-2">
+                      <span className="text-cyan-400 mt-0.5">●</span>
+                      <span>Track your side effects in the Journal tab to identify patterns with medication levels.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-cyan-400 mt-0.5">●</span>
+                      <span>Consistent injection timing helps maintain stable medication levels and improves results.</span>
+                    </li>
+                  </ul>
+                </div>
+              </>
             )}
           </div>
         )}
