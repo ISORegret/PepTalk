@@ -59,6 +59,730 @@ const EFFECT_PROFILES = {
   }
 };
 
+// Phase timelines for each medication category (like glapp.io)
+const PHASE_TIMELINES = {
+  'GLP-1': {
+    phases: [
+      {
+        name: 'Absorption',
+        hours: [0, 24],
+        icon: '⬆️',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/30',
+        description: 'Medication entering your bloodstream',
+        whatsHappening: [
+          'Subcutaneous absorption beginning',
+          'Medication reaching circulation',
+          'Initial receptor binding starting'
+        ],
+        whatToExpect: [
+          'Minimal effects yet',
+          'Some people feel slight appetite reduction',
+          'Side effects unlikely'
+        ],
+        tips: [
+          'Stay hydrated',
+          'Eat normally today',
+          'Note injection site for rotation'
+        ]
+      },
+      {
+        name: 'Rising Effect',
+        hours: [24, 48],
+        icon: '📈',
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/10',
+        borderColor: 'border-yellow-500/30',
+        description: 'Effects building as levels increase',
+        whatsHappening: [
+          'GLP-1 receptors activating',
+          'Gastric emptying slowing',
+          'Appetite signals decreasing'
+        ],
+        whatToExpect: [
+          'Appetite reduction becoming noticeable',
+          'Feeling fuller on less food',
+          'Nausea may begin (usually mild)'
+        ],
+        tips: [
+          'Eat smaller portions',
+          'Choose bland foods if nauseated',
+          'Sip water throughout day'
+        ]
+      },
+      {
+        name: 'Peak Effect',
+        hours: [48, 96],
+        icon: '🎯',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/30',
+        description: 'Maximum medication concentration and effectiveness',
+        whatsHappening: [
+          'Peak blood concentration reached',
+          'Maximum appetite suppression',
+          'Strongest therapeutic effects'
+        ],
+        whatToExpect: [
+          'Significant reduction in hunger',
+          '"Food noise" at minimum',
+          'Highest nausea risk (if occurs)'
+        ],
+        tips: [
+          'Focus on protein intake',
+          'Small, frequent meals work best',
+          'Ginger or bland foods for nausea',
+          'This is prime weight loss window'
+        ]
+      },
+      {
+        name: 'Cruise Phase',
+        hours: [96, 144],
+        icon: '⚡',
+        color: 'text-cyan-400',
+        bgColor: 'bg-cyan-500/10',
+        borderColor: 'border-cyan-500/30',
+        description: 'Optimal therapeutic window with stable effects',
+        whatsHappening: [
+          'Stable medication levels',
+          'Consistent appetite control',
+          'Fat oxidation elevated'
+        ],
+        whatToExpect: [
+          'Steady, comfortable appetite suppression',
+          'Side effects minimal or resolved',
+          'Best overall feeling of the week'
+        ],
+        tips: [
+          'Exercise most effective now',
+          'Maintain consistent eating schedule',
+          'Enjoy the stable energy',
+          'Track your weight - best time to see loss'
+        ]
+      },
+      {
+        name: 'Declining',
+        hours: [144, 168],
+        icon: '📉',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/30',
+        description: 'Medication levels dropping, effects fading',
+        whatsHappening: [
+          'Blood concentration decreasing',
+          'Receptor activity reducing',
+          'Effects gradually waning'
+        ],
+        whatToExpect: [
+          'Appetite slowly returning',
+          'Food thoughts more frequent',
+          'Still have appetite control, but less'
+        ],
+        tips: [
+          'Prepare for next injection',
+          'Stay mindful of portions',
+          'Normal to feel hungrier',
+          'Next dose coming soon'
+        ]
+      },
+      {
+        name: 'Trough',
+        hours: [168, 999],
+        icon: '💉',
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/10',
+        borderColor: 'border-red-500/30',
+        description: 'Time for next injection',
+        whatsHappening: [
+          'Medication mostly cleared',
+          'Baseline appetite returning',
+          'Ready for next dose'
+        ],
+        whatToExpect: [
+          'Hunger similar to pre-medication',
+          'Food noise may return',
+          'Effects minimal'
+        ],
+        tips: [
+          'Inject your next dose today',
+          'Plan your injection timing',
+          'Cycle starts over tomorrow',
+          'Consider injection site rotation'
+        ]
+      }
+    ]
+  },
+  'GLP-1/GIP': {
+    phases: [
+      {
+        name: 'Absorption',
+        hours: [0, 24],
+        icon: '⬆️',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/30',
+        description: 'Dual agonist entering system',
+        whatsHappening: [
+          'GLP-1 and GIP receptors being activated',
+          'Medication absorbing from injection site',
+          'Initial metabolic changes starting'
+        ],
+        whatToExpect: [
+          'Minimal effects in first hours',
+          'Some energy changes possible',
+          'Side effects rare this early'
+        ],
+        tips: [
+          'Eat a balanced meal today',
+          'Stay well hydrated',
+          'Normal activity fine'
+        ]
+      },
+      {
+        name: 'Rising Effect',
+        hours: [24, 48],
+        icon: '📈',
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/10',
+        borderColor: 'border-yellow-500/30',
+        description: 'Dual action ramping up',
+        whatsHappening: [
+          'GLP-1 reducing appetite',
+          'GIP improving insulin sensitivity',
+          'Metabolic rate increasing'
+        ],
+        whatToExpect: [
+          'Appetite reduction starting',
+          'Possible energy increase',
+          'Mild GI effects may begin'
+        ],
+        tips: [
+          'Notice how you feel with food',
+          'Smaller portions work better',
+          'Stay hydrated'
+        ]
+      },
+      {
+        name: 'Peak Effect',
+        hours: [48, 96],
+        icon: '🎯',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/30',
+        description: 'Maximum dual-agonist effect',
+        whatsHappening: [
+          'Peak concentration achieved',
+          'Both GLP-1 and GIP maximally active',
+          'Strongest appetite suppression',
+          'Maximum metabolic effects'
+        ],
+        whatToExpect: [
+          'Significant hunger reduction',
+          'Enhanced fat burning',
+          'Possible nausea or GI effects',
+          'Steady energy levels'
+        ],
+        tips: [
+          'High protein meals critical',
+          'Eat slowly and mindfully',
+          'Best weight loss window - stay active',
+          'Manage any GI symptoms'
+        ]
+      },
+      {
+        name: 'Cruise Phase',
+        hours: [96, 144],
+        icon: '⚡',
+        color: 'text-cyan-400',
+        bgColor: 'bg-cyan-500/10',
+        borderColor: 'border-cyan-500/30',
+        description: 'Sweet spot - stable powerful effects',
+        whatsHappening: [
+          'Optimal therapeutic range',
+          'Sustained appetite control',
+          'Consistent metabolic boost',
+          'Best insulin sensitivity'
+        ],
+        whatToExpect: [
+          'Comfortable appetite suppression',
+          'Stable energy all day',
+          'Side effects usually minimal',
+          'Feel your best this phase'
+        ],
+        tips: [
+          'Great time for exercise',
+          'Body composition changes most visible',
+          'Maintain protein goals',
+          'Enjoy the smooth effects'
+        ]
+      },
+      {
+        name: 'Declining',
+        hours: [144, 168],
+        icon: '📉',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/30',
+        description: 'Effects gradually fading',
+        whatsHappening: [
+          'Medication levels dropping',
+          'Appetite control lessening',
+          'Still therapeutic but reduced'
+        ],
+        whatToExpect: [
+          'Hunger slowly returning',
+          'Still have control, just less',
+          'Energy remains good'
+        ],
+        tips: [
+          'Stay mindful of portions',
+          'Plan for next injection',
+          'Normal to notice changes'
+        ]
+      },
+      {
+        name: 'Trough',
+        hours: [168, 999],
+        icon: '💉',
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/10',
+        borderColor: 'border-red-500/30',
+        description: 'Next injection due',
+        whatsHappening: [
+          'Low medication levels',
+          'Baseline returning',
+          'Time to re-dose'
+        ],
+        whatToExpect: [
+          'Appetite more normal',
+          'Ready for next dose',
+          'Effects mostly gone'
+        ],
+        tips: [
+          'Inject today for best results',
+          'Consistent timing matters',
+          'Rotate injection sites'
+        ]
+      }
+    ]
+  },
+  'Triple Agonist': {
+    phases: [
+      {
+        name: 'Absorption',
+        hours: [0, 24],
+        icon: '⬆️',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/30',
+        description: 'Triple-action medication loading',
+        whatsHappening: [
+          'GLP-1, GIP, and Glucagon receptors activating',
+          'Complex metabolic changes initiating',
+          'Medication entering circulation'
+        ],
+        whatToExpect: [
+          'Minimal effects first hours',
+          'Possible energy changes',
+          'Side effects unlikely yet'
+        ],
+        tips: [
+          'Eat normally today',
+          'Stay hydrated',
+          'Monitor how you feel'
+        ]
+      },
+      {
+        name: 'Rising Effect',
+        hours: [24, 48],
+        icon: '📈',
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/10',
+        borderColor: 'border-yellow-500/30',
+        description: 'Triple receptor activation building',
+        whatsHappening: [
+          'All three receptors becoming active',
+          'Appetite suppression starting',
+          'Metabolic rate increasing',
+          'Energy expenditure rising'
+        ],
+        whatToExpect: [
+          'Noticeable appetite reduction',
+          'Possible energy boost',
+          'Mild GI effects may start'
+        ],
+        tips: [
+          'Reduce portion sizes',
+          'High protein priority',
+          'Normal activity encouraged'
+        ]
+      },
+      {
+        name: 'Peak Power',
+        hours: [48, 96],
+        icon: '🔥',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/30',
+        description: 'Maximum triple-agonist effect',
+        whatsHappening: [
+          'Peak blood levels achieved',
+          'All three pathways maximally active',
+          'Strongest appetite suppression',
+          'Maximum fat burning',
+          'Highest energy expenditure'
+        ],
+        whatToExpect: [
+          'Dramatic hunger reduction',
+          'Increased heart rate possible',
+          'Enhanced thermogenesis',
+          'Strongest effects of the week'
+        ],
+        tips: [
+          'Monitor heart rate if concerned',
+          'Prioritize protein intake',
+          'Prime fat loss window',
+          'Stay well hydrated',
+          'Listen to your body'
+        ]
+      },
+      {
+        name: 'Cruise Phase',
+        hours: [96, 144],
+        icon: '⚡',
+        color: 'text-cyan-400',
+        bgColor: 'bg-cyan-500/10',
+        borderColor: 'border-cyan-500/30',
+        description: 'Sustained triple action',
+        whatsHappening: [
+          'Stable therapeutic levels',
+          'Consistent multi-pathway effects',
+          'Optimal metabolic state'
+        ],
+        whatToExpect: [
+          'Excellent appetite control',
+          'Steady elevated energy',
+          'Side effects usually minimal',
+          'Best overall feeling'
+        ],
+        tips: [
+          'Great time for intense workouts',
+          'Body recomposition most effective',
+          'Maintain hydration and electrolytes',
+          'Enjoy the powerful effects'
+        ]
+      },
+      {
+        name: 'Declining',
+        hours: [144, 168],
+        icon: '📉',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/30',
+        description: 'Effects tapering off',
+        whatsHappening: [
+          'Medication levels dropping',
+          'Receptor activity decreasing',
+          'Effects gradually fading'
+        ],
+        whatToExpect: [
+          'Appetite slowly returning',
+          'Energy normalizing',
+          'Still effective, but less'
+        ],
+        tips: [
+          'Stay mindful with food',
+          'Prepare for next dose',
+          'Normal transition'
+        ]
+      },
+      {
+        name: 'Trough',
+        hours: [168, 999],
+        icon: '💉',
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/10',
+        borderColor: 'border-red-500/30',
+        description: 'Re-dose needed',
+        whatsHappening: [
+          'Low medication levels',
+          'Baseline state returning',
+          'Time for next injection'
+        ],
+        whatToExpect: [
+          'Hunger more normal',
+          'Energy baseline',
+          'Ready for next cycle'
+        ],
+        tips: [
+          'Inject today',
+          'Rotate injection site',
+          'Cycle restarts tomorrow'
+        ]
+      }
+    ]
+  },
+  'Hormone': {
+    phases: [
+      {
+        name: 'Loading',
+        hours: [0, 24],
+        icon: '⬆️',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/30',
+        description: 'Testosterone entering system',
+        whatsHappening: [
+          'Ester slowly releasing hormone',
+          'Initial absorption from injection site',
+          'Blood levels beginning to rise'
+        ],
+        whatToExpect: [
+          'No immediate effects',
+          'Possible injection site soreness',
+          'Normal energy levels'
+        ],
+        tips: [
+          'Massage injection site gently',
+          'Stay active - promotes absorption',
+          'Expect effects tomorrow onward'
+        ]
+      },
+      {
+        name: 'Rising',
+        hours: [24, 72],
+        icon: '📈',
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/10',
+        borderColor: 'border-yellow-500/30',
+        description: 'Testosterone levels climbing',
+        whatsHappening: [
+          'Blood testosterone increasing',
+          'Androgen receptors activating',
+          'Protein synthesis ramping up'
+        ],
+        whatToExpect: [
+          'Energy levels improving',
+          'Mood enhancement starting',
+          'Libido may increase',
+          'Motivation improving'
+        ],
+        tips: [
+          'Great time to start workouts',
+          'Increased protein synthesis - eat more protein',
+          'Notice mood and energy improvements'
+        ]
+      },
+      {
+        name: 'Peak',
+        hours: [72, 96],
+        icon: '💪',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/30',
+        description: 'Maximum testosterone levels',
+        whatsHappening: [
+          'Peak blood concentration',
+          'Maximum anabolic effects',
+          'Optimal androgen receptor activation',
+          'Strongest muscle-building window'
+        ],
+        whatToExpect: [
+          'Peak energy and motivation',
+          'Best gym performance',
+          'Heightened libido',
+          'Confident, focused mood',
+          'Possible oily skin/acne'
+        ],
+        tips: [
+          'Schedule heavy workouts now',
+          'Maximum muscle growth potential',
+          'High protein intake critical',
+          'Manage skin if needed',
+          'Leverage the peak performance'
+        ]
+      },
+      {
+        name: 'Cruise',
+        hours: [96, 144],
+        icon: '⚡',
+        color: 'text-cyan-400',
+        bgColor: 'bg-cyan-500/10',
+        borderColor: 'border-cyan-500/30',
+        description: 'Optimal therapeutic range',
+        whatsHappening: [
+          'Stable elevated testosterone',
+          'Consistent anabolic effects',
+          'Sustained energy and recovery'
+        ],
+        whatToExpect: [
+          'Excellent overall feeling',
+          'Stable high energy',
+          'Good recovery between workouts',
+          'Consistent mood'
+        ],
+        tips: [
+          'Maintain training intensity',
+          'Focus on progressive overload',
+          'Best time for consistent gains',
+          'Enjoy the stable effects'
+        ]
+      },
+      {
+        name: 'Declining',
+        hours: [144, 168],
+        icon: '📉',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/30',
+        description: 'Levels dropping toward baseline',
+        whatsHappening: [
+          'Testosterone levels falling',
+          'Still above baseline',
+          'Effects gradually reducing'
+        ],
+        whatToExpect: [
+          'Energy still good but declining',
+          'Still have therapeutic effects',
+          'Approaching next dose time'
+        ],
+        tips: [
+          'Training still productive',
+          'Normal to feel slight changes',
+          'Next injection coming soon'
+        ]
+      },
+      {
+        name: 'Trough',
+        hours: [168, 999],
+        icon: '💉',
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/10',
+        borderColor: 'border-red-500/30',
+        description: 'Next injection needed',
+        whatsHappening: [
+          'Levels at or approaching baseline',
+          'Time to re-dose for stability',
+          'Avoid prolonged trough'
+        ],
+        whatToExpect: [
+          'Energy returning to baseline',
+          'Ready for next injection',
+          'May notice slight mood dip if delayed'
+        ],
+        tips: [
+          'Inject today for consistency',
+          'Don\'t let levels drop too long',
+          'Stable levels = better results'
+        ]
+      }
+    ]
+  },
+  'Peptide': {
+    phases: [
+      {
+        name: 'Rapid Absorption',
+        hours: [0, 2],
+        icon: '⚡',
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/10',
+        borderColor: 'border-yellow-500/30',
+        description: 'Fast-acting peptide entering system',
+        whatsHappening: [
+          'Rapid peptide absorption',
+          'Quick circulation',
+          'Immediate receptor binding'
+        ],
+        whatToExpect: [
+          'Effects starting within minutes to hours',
+          'Depending on peptide type',
+          'Minimal side effects'
+        ],
+        tips: [
+          'Effects begin quickly',
+          'Stay hydrated',
+          'Monitor how you respond'
+        ]
+      },
+      {
+        name: 'Peak Effect',
+        hours: [2, 8],
+        icon: '🎯',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/30',
+        description: 'Maximum peptide activity',
+        whatsHappening: [
+          'Peak blood concentration',
+          'Maximum receptor activation',
+          'Strongest therapeutic effects'
+        ],
+        whatToExpect: [
+          'Full peptide effects active',
+          'Healing/recovery processes enhanced',
+          'Optimal therapeutic window'
+        ],
+        tips: [
+          'Best time for targeted activity',
+          'Healing peptides: rest/recovery',
+          'GH peptides: fasted state ideal',
+          'Effects are strongest now'
+        ]
+      },
+      {
+        name: 'Active Phase',
+        hours: [8, 24],
+        icon: '⚡',
+        color: 'text-cyan-400',
+        bgColor: 'bg-cyan-500/10',
+        borderColor: 'border-cyan-500/30',
+        description: 'Continued therapeutic activity',
+        whatsHappening: [
+          'Sustained beneficial effects',
+          'Ongoing repair processes',
+          'Gradual clearance beginning'
+        ],
+        whatToExpect: [
+          'Effects still present',
+          'Recovery processes continuing',
+          'Gradually diminishing'
+        ],
+        tips: [
+          'Continue normal activities',
+          'Multiple daily doses often used',
+          'Next dose timing depends on peptide'
+        ]
+      },
+      {
+        name: 'Next Dose',
+        hours: [24, 999],
+        icon: '💉',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/30',
+        description: 'Ready for next injection',
+        whatsHappening: [
+          'Peptide mostly cleared',
+          'Effects resolved',
+          'Time for next dose if scheduled'
+        ],
+        whatToExpect: [
+          'Back to baseline',
+          'Ready for next injection',
+          'Frequency depends on protocol'
+        ],
+        tips: [
+          'BPC-157/TB-500: Often daily or EOD',
+          'GH peptides: Often multiple times daily',
+          'Follow your protocol',
+          'Consistency matters for results'
+        ]
+      }
+    ]
+  }
+};
+
 const INJECTION_SITES = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)', 'Arm (Right)', 'Glute (Left)', 'Glute (Right)', 'Subcutaneous', 'Intramuscular'];
 const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
 const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
@@ -608,6 +1332,28 @@ const HealthTracker = () => {
     return Math.max(0, remainingPercentage);
   };
 
+  // Get current phase based on hours since injection
+  const getCurrentPhase = (hoursAgo, category) => {
+    const timeline = PHASE_TIMELINES[category];
+    if (!timeline) return null;
+    
+    // Find which phase we're in based on hours elapsed
+    for (let i = 0; i < timeline.phases.length; i++) {
+      const phase = timeline.phases[i];
+      const [minHours, maxHours] = phase.hours;
+      if (hoursAgo >= minHours && (hoursAgo < maxHours || maxHours === 999)) {
+        return {
+          ...phase,
+          phaseIndex: i,
+          totalPhases: timeline.phases.length,
+          hoursIntoPhase: hoursAgo - minHours,
+          hoursRemainingInPhase: maxHours === 999 ? null : maxHours - hoursAgo
+        };
+      }
+    }
+    return null;
+  };
+
   const getMedicationInsights = () => {
     const insights = [];
     const now = new Date();
@@ -650,19 +1396,12 @@ const HealthTracker = () => {
       });
       const currentLevel = totalLevel;
       
-      // Determine phase
-      let phase = 'Declining';
-      let phaseColor = 'text-red-400';
-      if (hoursAgo <= medication.peakHours) {
-        phase = 'Absorption';
-        phaseColor = 'text-yellow-400';
-      } else if (hoursAgo <= medication.peakHours * 2) {
-        phase = 'Peak Effect';
-        phaseColor = 'text-emerald-400';
-      } else if (currentLevel > 50) {
-        phase = 'Active';
-        phaseColor = 'text-cyan-400';
-      }
+      // Get current phase from timeline
+      const currentPhase = getCurrentPhase(hoursAgo, medication.category);
+      
+      // Fallback to simple phase if timeline not available
+      let phase = currentPhase ? currentPhase.name : 'Active';
+      let phaseColor = currentPhase ? currentPhase.color : 'text-cyan-400';
       
       // Calculate next injection time
       const schedule = schedules.find(s => s.medication === medName);
@@ -680,6 +1419,7 @@ const HealthTracker = () => {
         currentLevel: Math.round(currentLevel), // Round to whole number
         phase,
         phaseColor,
+        currentPhase, // Full phase object with details
         lastInjection: lastInjection.date,
         lastDose: lastInjection.dose,
         lastUnit: lastInjection.unit,
@@ -1069,28 +1809,91 @@ const HealthTracker = () => {
                       </div>
                     )}
 
-                    {/* Effects Information */}
-                    {insight.effectProfile && (
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-                          <h4 className="text-emerald-400 text-xs font-medium mb-2 flex items-center gap-1">
-                            <CheckCircle className="h-3 w-3" />Expected Effects
-                          </h4>
-                          <ul className="space-y-1">
-                            {insight.effectProfile.effects.slice(0, 3).map((effect, i) => (
-                              <li key={i} className="text-white text-xs">• {effect}</li>
+                    {/* Phase Timeline */}
+                    {insight.currentPhase && PHASE_TIMELINES[insight.category] && (
+                      <div className="mb-4">
+                        <h4 className="text-white text-sm font-medium mb-3">Medication Phase Timeline</h4>
+                        
+                        {/* Visual Phase Progress Bar */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-2">
+                            {PHASE_TIMELINES[insight.category].phases.map((phase, idx) => (
+                              <div key={idx} className="flex-1 flex flex-col items-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${
+                                  idx === insight.currentPhase.phaseIndex 
+                                    ? `${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border-2 scale-110` 
+                                    : idx < insight.currentPhase.phaseIndex 
+                                    ? 'bg-slate-600 border-2 border-slate-500' 
+                                    : 'bg-slate-800 border-2 border-slate-700'
+                                }`}>
+                                  {idx === insight.currentPhase.phaseIndex ? insight.currentPhase.icon : idx < insight.currentPhase.phaseIndex ? '✓' : phase.icon}
+                                </div>
+                                <div className={`text-[10px] mt-1 text-center ${
+                                  idx === insight.currentPhase.phaseIndex ? insight.currentPhase.color : 'text-slate-500'
+                                }`}>
+                                  {phase.name}
+                                </div>
+                              </div>
                             ))}
-                          </ul>
+                          </div>
+                          <div className="relative h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`absolute h-full ${insight.currentPhase.bgColor} transition-all`}
+                              style={{ 
+                                width: `${((insight.currentPhase.phaseIndex + 1) / insight.currentPhase.totalPhases) * 100}%` 
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-                          <h4 className="text-amber-400 text-xs font-medium mb-2 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" />Possible Side Effects
-                          </h4>
-                          <ul className="space-y-1">
-                            {insight.effectProfile.sideEffects.slice(0, 3).map((effect, i) => (
-                              <li key={i} className="text-white text-xs">• {effect}</li>
-                            ))}
-                          </ul>
+
+                        {/* Current Phase Detail Card */}
+                        <div className={`${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border rounded-xl p-4`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-2xl">{insight.currentPhase.icon}</span>
+                            <div>
+                              <h5 className={`${insight.currentPhase.color} font-semibold text-lg`}>{insight.currentPhase.name}</h5>
+                              <p className="text-slate-400 text-xs">{insight.currentPhase.description}</p>
+                            </div>
+                          </div>
+
+                          {/* What's Happening */}
+                          <div className="mb-3">
+                            <h6 className="text-white text-xs font-medium mb-1.5">🔬 What's Happening:</h6>
+                            <ul className="space-y-1">
+                              {insight.currentPhase.whatsHappening.map((item, i) => (
+                                <li key={i} className="text-slate-300 text-xs flex items-start gap-1.5">
+                                  <span className="text-slate-500 mt-0.5">•</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* What to Expect */}
+                          <div className="mb-3">
+                            <h6 className="text-white text-xs font-medium mb-1.5">👁️ What to Expect:</h6>
+                            <ul className="space-y-1">
+                              {insight.currentPhase.whatToExpect.map((item, i) => (
+                                <li key={i} className="text-slate-300 text-xs flex items-start gap-1.5">
+                                  <span className="text-slate-500 mt-0.5">•</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* Tips */}
+                          <div>
+                            <h6 className="text-white text-xs font-medium mb-1.5">💡 Tips for This Phase:</h6>
+                            <ul className="space-y-1">
+                              {insight.currentPhase.tips.map((tip, i) => (
+                                <li key={i} className="text-slate-300 text-xs flex items-start gap-1.5">
+                                  <span className="text-slate-500 mt-0.5">•</span>
+                                  <span>{tip}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1110,38 +1913,46 @@ const HealthTracker = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* Medication-Specific Insights */}
+                    <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3 mt-3">
+                      <h5 className="text-cyan-400 text-xs font-medium mb-2 flex items-center gap-1">
+                        <Activity className="h-3 w-3" />
+                        Personalized Insights
+                      </h5>
+                      <ul className="space-y-1.5 text-xs text-white">
+                        {parseFloat(insight.currentLevel) >= 150 && (
+                          <li className="flex items-start gap-1.5">
+                            <span className="text-emerald-400 mt-0.5">●</span>
+                            <span>You're at steady state ({insight.currentLevel}%) - optimal therapeutic level for consistent results</span>
+                          </li>
+                        )}
+                        {parseFloat(insight.currentLevel) >= 100 && parseFloat(insight.currentLevel) < 150 && (
+                          <li className="flex items-start gap-1.5">
+                            <span className="text-yellow-400 mt-0.5">●</span>
+                            <span>Building to steady state ({insight.currentLevel}%) - effects stabilizing over next doses</span>
+                          </li>
+                        )}
+                        {parseFloat(insight.currentLevel) < 50 && (
+                          <li className="flex items-start gap-1.5">
+                            <span className="text-orange-400 mt-0.5">●</span>
+                            <span>Levels declining ({insight.currentLevel}%) - plan your next injection to maintain benefits</span>
+                          </li>
+                        )}
+                        {insight.currentPhase && (
+                          <li className="flex items-start gap-1.5">
+                            <span className="text-cyan-400 mt-0.5">●</span>
+                            <span>Currently {parseFloat(insight.currentPhase.hoursIntoPhase).toFixed(0)}h into {insight.currentPhase.name} phase</span>
+                          </li>
+                        )}
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-cyan-400 mt-0.5">●</span>
+                          <span>Track side effects in Journal tab to identify patterns with {insight.medication} timing</span>
+                        </li>
+                      </ul>
+                    </div>
                   </div>
                 ))}
-
-                {/* General Guidance */}
-                <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
-                  <h3 className="text-cyan-400 font-medium mb-2 flex items-center gap-2">
-                    <Activity className="h-5 w-5" />
-                    Insights & Recommendations
-                  </h3>
-                  <ul className="space-y-2 text-sm text-white">
-                    {getMedicationInsights().some(i => i.phase === 'Peak Effect') && (
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-400 mt-0.5">●</span>
-                        <span>You're currently in the peak effect window. This is when medication effectiveness is highest.</span>
-                      </li>
-                    )}
-                    {getMedicationInsights().some(i => parseFloat(i.currentLevel) < 30) && (
-                      <li className="flex items-start gap-2">
-                        <span className="text-amber-400 mt-0.5">●</span>
-                        <span>Some medication levels are declining. Consider timing your next dose to maintain therapeutic levels.</span>
-                      </li>
-                    )}
-                    <li className="flex items-start gap-2">
-                      <span className="text-cyan-400 mt-0.5">●</span>
-                      <span>Track your side effects in the Journal tab to identify patterns with medication levels.</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-cyan-400 mt-0.5">●</span>
-                      <span>Consistent injection timing helps maintain stable medication levels and improves results.</span>
-                    </li>
-                  </ul>
-                </div>
               </>
             )}
           </div>
