@@ -29,6 +29,12 @@ const INJECTION_SITES = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)
 const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
 const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
 
+// Helper function to parse dates in local timezone (fixes off-by-one day bug)
+const parseLocalDate = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 const HealthTracker = () => {
   const [activeTab, setActiveTab] = useState('summary');
   const [weightEntries, setWeightEntries] = useState([]);
@@ -144,7 +150,7 @@ const HealthTracker = () => {
     let updated = editingWeight 
       ? weightEntries.map(e => e.id === editingWeight.id ? { ...e, weight: parseFloat(weight), date: weightDate } : e)
       : [...weightEntries, { id: Date.now(), weight: parseFloat(weight), date: weightDate }];
-    updated.sort((a, b) => new Date(a.date) - new Date(b.date));
+    updated.sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
     setWeightEntries(updated);
     saveData('health-weight-entries', updated);
     resetWeightForm();
@@ -162,7 +168,7 @@ const HealthTracker = () => {
     let updated = editingInjection 
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
       : [...injectionEntries, { id: Date.now(), ...entryData }];
-    updated.sort((a, b) => new Date(b.date) - new Date(a.date));
+    updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
     setInjectionEntries(updated);
     saveData('health-injection-entries', updated);
     resetInjectionForm();
@@ -177,7 +183,7 @@ const HealthTracker = () => {
   const addMeasurement = () => {
     if (!measurementValue || isNaN(parseFloat(measurementValue))) return;
     const updated = [...measurementEntries, { id: Date.now(), type: measurementType, value: parseFloat(measurementValue), date: measurementDate }];
-    updated.sort((a, b) => new Date(b.date) - new Date(a.date));
+    updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
     setMeasurementEntries(updated);
     saveData('health-measurements', updated);
     resetMeasurementForm();
@@ -283,7 +289,7 @@ const HealthTracker = () => {
   const getDateRangeLabel = () => {
     const filtered = getFilteredData(weightEntries);
     if (filtered.length === 0) return '';
-    const sorted = [...filtered].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sorted = [...filtered].sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
     const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     return `${formatDate(sorted[0].date)} – ${formatDate(sorted[sorted.length - 1].date)}`;
   };
@@ -300,7 +306,7 @@ const HealthTracker = () => {
   const getWeightStats = () => {
     const filtered = getFilteredData(weightEntries);
     if (filtered.length === 0) return { current: '-', change: 0, trend: 'neutral', bmi: null, percentChange: 0, weeklyAvg: 0, toGoal: 0, estimatedGoalDate: null };
-    const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sorted = [...filtered].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
     const current = sorted[0].weight;
     const first = sorted[sorted.length - 1].weight;
     const change = current - first;
@@ -374,12 +380,18 @@ const HealthTracker = () => {
       const weightEntry = filteredWeights.find(e => e.date === date);
       const dayInjections = filteredInjections.filter(e => e.date === date);
       const doseData = {};
+      const unitData = {};
       dayInjections.forEach(inj => {
-        let doseInMg = inj.dose;
+        // Convert everything to mg for y-axis scaling
+        let doseInMg = parseFloat(inj.dose);
         if (inj.unit === 'mcg') doseInMg = inj.dose / 1000;
+        if (inj.unit === 'ml') doseInMg = inj.dose; // Keep ml as-is for display
+        if (inj.unit === 'units') doseInMg = inj.dose / 100; // Scale down for display
+        if (inj.unit === 'IU') doseInMg = inj.dose / 1000; // Scale down for display
         doseData[inj.type] = doseInMg;
+        unitData[inj.type] = inj.unit; // Store the original unit
       });
-      return { date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight || null, ...doseData };
+      return { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight || null, units: unitData, ...doseData };
     });
   };
 
@@ -391,7 +403,7 @@ const HealthTracker = () => {
   const getMeasurementStats = () => {
     const stats = {};
     MEASUREMENT_TYPES.forEach(type => {
-      const typeEntries = measurementEntries.filter(e => e.type === type).sort((a, b) => new Date(b.date) - new Date(a.date));
+      const typeEntries = measurementEntries.filter(e => e.type === type).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
       if (typeEntries.length > 0) {
         const current = typeEntries[0].value;
         const first = typeEntries[typeEntries.length - 1].value;
@@ -404,7 +416,7 @@ const HealthTracker = () => {
   const getMeasurementChartData = () => {
     const dates = [...new Set(measurementEntries.map(e => e.date))].sort();
     return dates.map(date => {
-      const dataPoint = { date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+      const dataPoint = { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
       MEASUREMENT_TYPES.forEach(type => {
         const entry = measurementEntries.find(e => e.date === date && e.type === type);
         if (entry) dataPoint[type] = parseFloat(entry.value);
@@ -634,12 +646,22 @@ const HealthTracker = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={Math.max(0, Math.floor(getSummaryChartData().length / 6))} />
                     <YAxis yAxisId="left" stroke="#94a3b8" fontSize={10} domain={['dataMin - 2', 'dataMax + 2']} orientation="right" tickFormatter={(v) => `${v} lbs`} />
-                    <YAxis yAxisId="right" orientation="left" stroke="#94a3b8" fontSize={10} tickFormatter={(v) => `${v}mg`} hide={getLoggedMedications().length === 0} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} formatter={(value, name) => { if (!value) return null; return name === 'Weight' ? [`${value} lbs`, 'Weight'] : [`${value} mg`, name]; }} />
+                    <YAxis yAxisId="right" orientation="left" stroke="#94a3b8" fontSize={10} hide={getLoggedMedications().length === 0} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} 
+                      formatter={(value, name, props) => { 
+                        if (!value) return null; 
+                        if (name === 'Weight') return [`${value} lbs`, 'Weight'];
+                        const unit = props.payload?.units?.[name] || 'mg';
+                        return [`${value} ${unit}`, name]; 
+                      }} />
                     <Line yAxisId="left" type="monotone" dataKey="weight" stroke="#f472b6" strokeWidth={3} dot={{ fill: '#f472b6', r: 5 }} connectNulls name="Weight" />
                     {getLoggedMedications().map(med => (
                       <Line key={med} yAxisId="right" type="monotone" dataKey={med} stroke={getMedicationColor(med)} strokeWidth={2} dot={{ fill: getMedicationColor(med), r: 4 }} connectNulls name={med}
-                        label={({ x, y, value }) => value ? <g><rect x={x - 20} y={y - 25} width={40} height={18} rx={4} fill={getMedicationColor(med)} opacity={0.9} /><text x={x} y={y - 12} textAnchor="middle" fill="#000" fontSize={10} fontWeight="bold">{value}mg</text></g> : null} />
+                        label={({ x, y, value, payload }) => {
+                          if (!value) return null;
+                          const unit = payload?.units?.[med] || 'mg';
+                          return <g><rect x={x - 20} y={y - 25} width={40} height={18} rx={4} fill={getMedicationColor(med)} opacity={0.9} /><text x={x} y={y - 12} textAnchor="middle" fill="#000" fontSize={10} fontWeight="bold">{value}{unit}</text></g>;
+                        }} />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
@@ -707,13 +729,13 @@ const HealthTracker = () => {
                 <div className="text-center py-8 text-slate-400"><Scale className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No weight entries yet</p></div>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {[...weightEntries].sort((a, b) => new Date(b.date) - new Date(a.date)).map((entry) => (
+                  {[...weightEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
                     <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
                       <div className="flex items-center gap-3">
                         <div className="bg-pink-500/20 p-2 rounded-lg"><Scale className="h-5 w-5 text-pink-400" /></div>
                         <div>
                           <div className="text-white font-medium">{entry.weight} lbs</div>
-                          <div className="text-slate-400 text-sm">{new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                          <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                         </div>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -813,7 +835,7 @@ const HealthTracker = () => {
                           <div className="p-2 rounded-lg mt-1" style={{ backgroundColor: `${getMedicationColor(entry.type)}20` }}><Syringe className="h-5 w-5" style={{ color: getMedicationColor(entry.type) }} /></div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2"><span className="text-white font-medium">{entry.type}</span><span className="text-slate-300">{entry.dose} {entry.unit}</span></div>
-                            <div className="text-slate-400 text-sm">{new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{entry.site && <span className="ml-2">• {entry.site}</span>}</div>
+                            <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{entry.site && <span className="ml-2">• {entry.site}</span>}</div>
                             {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{entry.sideEffects.map(effect => <span key={effect} className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">{effect}</span>)}</div>}
                             {entry.notes && <div className="text-sm text-slate-400 mt-2 italic">{entry.notes}</div>}
                           </div>
@@ -907,10 +929,10 @@ const HealthTracker = () => {
                 <div className="text-center py-8 text-slate-400"><Camera className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No progress photos yet</p><p className="text-sm">Tap + to add your first photo</p></div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {progressPhotos.sort((a, b) => new Date(b.date) - new Date(a.date)).map(photo => (
+                  {progressPhotos.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map(photo => (
                     <div key={photo.id} className="relative group">
                       <img src={photo.data} alt="Progress" className="w-full h-24 object-cover rounded-lg" />
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg">{new Date(photo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg">{parseLocalDate(photo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                       <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3 w-3 text-white" /></button>
                     </div>
                   ))}
@@ -934,7 +956,7 @@ const HealthTracker = () => {
                         <div className="bg-cyan-500/20 p-2 rounded-lg"><Ruler className="h-5 w-5 text-cyan-400" /></div>
                         <div>
                           <div className="text-white font-medium">{entry.type}: {entry.value}"</div>
-                          <div className="text-slate-400 text-sm">{new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                          <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                         </div>
                       </div>
                       <button onClick={() => deleteMeasurement(entry.id)} className="p-2 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-4 w-4" /></button>
@@ -1206,14 +1228,14 @@ const HealthTracker = () => {
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {[...journalEntries].sort((a, b) => new Date(b.date) - new Date(a.date)).map((entry) => (
+                  {[...journalEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
                     <div key={entry.id} className="bg-slate-700/50 rounded-lg p-4 group">
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
                           {entry.mood === 'happy' && <Smile className="h-5 w-5 text-emerald-400" />}
                           {entry.mood === 'neutral' && <Meh className="h-5 w-5 text-slate-400" />}
                           {entry.mood === 'sad' && <Frown className="h-5 w-5 text-amber-400" />}
-                          <span className="text-white font-medium">{new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          <span className="text-white font-medium">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setEditingJournal(entry); setJournalDate(entry.date); setJournalContent(entry.content); setJournalMood(entry.mood); setJournalEnergy(entry.energy); setJournalHunger(entry.hunger); setShowAddForm(true); }}
@@ -1282,7 +1304,7 @@ const HealthTracker = () => {
               <div className="grid grid-cols-2 gap-3">
                 {schedules.map(schedule => {
                   const scheduledDays = schedules.filter(s => s.medication === schedule.medication).length;
-                  const actualInjections = injectionEntries.filter(inj => inj.type === schedule.medication && new Date(inj.date).getMonth() === calendarMonth.getMonth()).length;
+                  const actualInjections = injectionEntries.filter(inj => inj.type === schedule.medication && parseLocalDate(inj.date).getMonth() === calendarMonth.getMonth()).length;
                   const expectedInjections = Math.ceil(30 / schedule.frequencyDays);
                   const adherence = expectedInjections > 0 ? Math.min(100, Math.round((actualInjections / expectedInjections) * 100)) : 0;
                   return (
