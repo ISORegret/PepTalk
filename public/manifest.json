@@ -1,32 +1,30 @@
 {
-  "name": "Health Tracker - Medication & Weight Log",
+  "name": "Health Tracker - Peptide & Weight Management",
   "short_name": "Health Tracker",
-  "description": "Track weight, medications, body measurements, and progress photos for your health journey",
-  "start_url": "./",
+  "description": "Track weight, medications, body measurements, and progress for your health journey",
+  "id": "/health-tracker-app/",
+  "scope": "/health-tracker-app/",
+  "start_url": "/health-tracker-app/",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
+  "orientation": "portrait-primary",
   "background_color": "#0f172a",
   "theme_color": "#8b5cf6",
-  "orientation": "portrait-primary",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["health", "lifestyle", "medical"],
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/health-tracker-app/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/health-tracker-app/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    }
-  ],
-  "categories": ["health", "medical", "lifestyle"],
-  "screenshots": [
-    {
-      "src": "/screenshot1.png",
-      "sizes": "540x720",
-      "type": "image/png"
     }
   ]
 }
