@@ -268,6 +268,101 @@ const HealthTracker = () => {
     reader.readAsDataURL(file);
   };
 
+  // Export all data to JSON file
+  const exportData = () => {
+    const allData = {
+      exportDate: new Date().toISOString(),
+      version: '1.0',
+      weightEntries,
+      injectionEntries,
+      measurementEntries,
+      progressPhotos,
+      schedules,
+      titrationPlans,
+      journalEntries,
+      userProfile
+    };
+    
+    const dataStr = JSON.stringify(allData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `health-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import data from JSON file
+  const importData = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target.result);
+        
+        // Validate the data structure
+        if (!imported.version || !imported.exportDate) {
+          alert('Invalid backup file format');
+          return;
+        }
+        
+        // Confirm before overwriting
+        const confirmImport = window.confirm(
+          `This will replace all current data with backup from ${new Date(imported.exportDate).toLocaleDateString()}. Continue?`
+        );
+        
+        if (!confirmImport) return;
+        
+        // Import all data
+        if (imported.weightEntries) {
+          setWeightEntries(imported.weightEntries);
+          saveData('health-weight-entries', imported.weightEntries);
+        }
+        if (imported.injectionEntries) {
+          setInjectionEntries(imported.injectionEntries);
+          saveData('health-injection-entries', imported.injectionEntries);
+        }
+        if (imported.measurementEntries) {
+          setMeasurementEntries(imported.measurementEntries);
+          saveData('health-measurements', imported.measurementEntries);
+        }
+        if (imported.progressPhotos) {
+          setProgressPhotos(imported.progressPhotos);
+          saveData('health-photos', imported.progressPhotos);
+        }
+        if (imported.schedules) {
+          setSchedules(imported.schedules);
+          saveData('health-schedules', imported.schedules);
+        }
+        if (imported.titrationPlans) {
+          setTitrationPlans(imported.titrationPlans);
+          saveData('health-titration', imported.titrationPlans);
+        }
+        if (imported.journalEntries) {
+          setJournalEntries(imported.journalEntries);
+          saveData('health-journal', imported.journalEntries);
+        }
+        if (imported.userProfile) {
+          setUserProfile(imported.userProfile);
+          saveData('health-user-profile', imported.userProfile);
+        }
+        
+        alert('Data imported successfully!');
+        e.target.value = ''; // Reset file input
+      } catch (error) {
+        alert('Error importing data. Please check the file format.');
+        console.error('Import error:', error);
+      }
+    };
+    
+    reader.readAsText(file);
+  };
+
   const deletePhoto = (id) => {
     const updated = progressPhotos.filter(p => p.id !== id);
     setProgressPhotos(updated);
@@ -655,14 +750,18 @@ const HealthTracker = () => {
                         return [`${value} ${unit}`, name]; 
                       }} />
                     <Line yAxisId="left" type="monotone" dataKey="weight" stroke="#f472b6" strokeWidth={3} dot={{ fill: '#f472b6', r: 5 }} connectNulls name="Weight" />
-                    {getLoggedMedications().map(med => (
-                      <Line key={med} yAxisId="right" type="monotone" dataKey={med} stroke={getMedicationColor(med)} strokeWidth={2} dot={{ fill: getMedicationColor(med), r: 4 }} connectNulls name={med}
-                        label={({ x, y, value, payload }) => {
-                          if (!value) return null;
-                          const unit = payload?.units?.[med] || 'mg';
-                          return <g><rect x={x - 20} y={y - 25} width={40} height={18} rx={4} fill={getMedicationColor(med)} opacity={0.9} /><text x={x} y={y - 12} textAnchor="middle" fill="#000" fontSize={10} fontWeight="bold">{value}{unit}</text></g>;
-                        }} />
-                    ))}
+                    {getLoggedMedications().map(med => {
+                      // Get the most recent unit used for this medication
+                      const recentInjection = injectionEntries.filter(inj => inj.type === med).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
+                      const displayUnit = recentInjection?.unit || 'mg';
+                      return (
+                        <Line key={med} yAxisId="right" type="monotone" dataKey={med} stroke={getMedicationColor(med)} strokeWidth={2} dot={{ fill: getMedicationColor(med), r: 4 }} connectNulls name={med}
+                          label={({ x, y, value }) => {
+                            if (!value) return null;
+                            return <g><rect x={x - 22} y={y - 25} width={44} height={18} rx={4} fill={getMedicationColor(med)} opacity={0.9} /><text x={x} y={y - 12} textAnchor="middle" fill="#000" fontSize={10} fontWeight="bold">{value}{displayUnit}</text></g>;
+                          }} />
+                      );
+                    })}
                   </LineChart>
                 </ResponsiveContainer>
                 <div className="flex flex-wrap gap-4 mt-3 justify-center">
@@ -973,7 +1072,7 @@ const HealthTracker = () => {
           <div className="space-y-4">
             {/* Tool Section Selector */}
             <div className="flex bg-slate-800 rounded-xl p-1">
-              {[{ id: 'calculator', label: 'Calculators' }, { id: 'schedule', label: 'Schedules' }, { id: 'titration', label: 'Titration' }].map(section => (
+              {[{ id: 'calculator', label: 'Calculators' }, { id: 'schedule', label: 'Schedules' }, { id: 'titration', label: 'Titration' }, { id: 'data', label: 'Data' }].map(section => (
                 <button key={section.id} onClick={() => setActiveToolSection(section.id)}
                   className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'bg-violet-500 text-white' : 'text-slate-400 hover:text-white'}`}>
                   {section.label}
@@ -1147,6 +1246,87 @@ const HealthTracker = () => {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Data Management Section */}
+            {activeToolSection === 'data' && (
+              <div className="space-y-4">
+                <div className="bg-slate-800 rounded-xl p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-cyan-400" />
+                    Export & Import Data
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    {/* Export Section */}
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <h4 className="text-white font-medium mb-2">Export Data</h4>
+                      <p className="text-slate-400 text-sm mb-3">
+                        Download all your data as a backup file. Use this to:
+                      </p>
+                      <ul className="text-slate-400 text-sm space-y-1 mb-4 ml-4">
+                        <li>• Backup your data</li>
+                        <li>• Transfer to another device</li>
+                        <li>• Share with your doctor</li>
+                      </ul>
+                      <button onClick={exportData} className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2">
+                        <Activity className="h-5 w-5" />
+                        Export All Data
+                      </button>
+                    </div>
+
+                    {/* Import Section */}
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <h4 className="text-white font-medium mb-2">Import Data</h4>
+                      <p className="text-slate-400 text-sm mb-3">
+                        Restore data from a backup file.
+                      </p>
+                      <div className="bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 mb-3">
+                        <p className="text-amber-400 text-sm flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Warning: This will replace all current data!</span>
+                        </p>
+                      </div>
+                      <label className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 cursor-pointer">
+                        <Plus className="h-5 w-5" />
+                        Import Data File
+                        <input type="file" accept=".json" onChange={importData} className="hidden" />
+                      </label>
+                    </div>
+
+                    {/* Data Summary */}
+                    <div className="bg-slate-700/50 rounded-lg p-4">
+                      <h4 className="text-white font-medium mb-3">Current Data Summary</h4>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Weight entries:</span>
+                          <span className="text-white font-medium">{weightEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Injections:</span>
+                          <span className="text-white font-medium">{injectionEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Measurements:</span>
+                          <span className="text-white font-medium">{measurementEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Progress photos:</span>
+                          <span className="text-white font-medium">{progressPhotos.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Journal entries:</span>
+                          <span className="text-white font-medium">{journalEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Schedules:</span>
+                          <span className="text-white font-medium">{schedules.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
