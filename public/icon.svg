@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="115" fill="#8b5cf6"/>
+  
+  <!-- Medical Cross / Plus -->
+  <g transform="translate(256, 180)">
+    <rect x="-25" y="-80" width="50" height="160" rx="10" fill="white"/>
+    <rect x="-80" y="-25" width="160" height="50" rx="10" fill="white"/>
+  </g>
+  
+  <!-- Heartbeat Line -->
+  <path d="M 100 320 L 160 320 L 180 280 L 200 360 L 220 320 L 412 320" 
+        stroke="white" 
+        stroke-width="12" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"
+        fill="none"/>
+  
+  <!-- Small circles (data points) -->
+  <circle cx="160" cy="320" r="8" fill="#10b981"/>
+  <circle cx="200" cy="360" r="8" fill="#10b981"/>
+  <circle cx="220" cy="320" r="8" fill="#10b981"/>
+</svg>
