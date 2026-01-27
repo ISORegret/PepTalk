@@ -31,10 +31,16 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Use relative path for service worker
-          navigator.serviceWorker.register('/service-worker.js', {
-            scope: '/'
-          })
+          // Register service worker with full base path
+          const swPath = window.location.pathname.includes('/health-tracker-app') 
+            ? '/health-tracker-app/service-worker.js' 
+            : '/service-worker.js';
+          
+          const scope = window.location.pathname.includes('/health-tracker-app')
+            ? '/health-tracker-app/'
+            : '/';
+          
+          navigator.serviceWorker.register(swPath, { scope })
             .then((registration) => {
               console.log('SW registered: ', registration);
               
