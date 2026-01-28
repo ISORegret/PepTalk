@@ -808,6 +808,9 @@ const HealthTracker = () => {
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
   
+  // Graph visibility state
+  const [visibleLines, setVisibleLines] = useState({ weight: true }); // Start with weight visible, meds added dynamically
+  
   // Weight form states
   const [weight, setWeight] = useState('');
   const [weightDate, setWeightDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1652,7 +1655,7 @@ const HealthTracker = () => {
             {(weightEntries.length > 0 || injectionEntries.length > 0) && (
               <div className="bg-slate-800/50 rounded-xl p-4">
                 <ResponsiveContainer width="100%" height={450}>
-                  <LineChart data={getSummaryChartData()} margin={{ top: 30, right: 5, left: 5, bottom: 5 }}>
+                  <LineChart data={getSummaryChartData()} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={Math.max(0, Math.floor(getSummaryChartData().length / 6))} />
                     <YAxis yAxisId="left" stroke="#94a3b8" fontSize={10} domain={['dataMin - 2', 'dataMax + 2']} orientation="right" tickFormatter={(v) => `${v} lbs`} />
@@ -1664,9 +1667,11 @@ const HealthTracker = () => {
                         const unit = props.payload?.units?.[name] || 'mg';
                         return [`${value} ${unit}`, name]; 
                       }} />
-                    <Line yAxisId="left" type="monotone" dataKey="weight" stroke="#f472b6" strokeWidth={3} dot={{ fill: '#f472b6', r: 5 }} connectNulls name="Weight" />
+                    {visibleLines.weight && (
+                      <Line yAxisId="left" type="monotone" dataKey="weight" stroke="#f472b6" strokeWidth={3} dot={{ fill: '#f472b6', r: 5 }} connectNulls name="Weight" />
+                    )}
                     {getLoggedMedications().map(med => {
-                      // Get the most recent unit used for this medication
+                      if (!visibleLines[med]) return null; // Hide if toggled off
                       const recentInjection = injectionEntries.filter(inj => inj.type === med).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
                       const displayUnit = recentInjection?.unit || 'mg';
                       return (
@@ -1679,9 +1684,31 @@ const HealthTracker = () => {
                     })}
                   </LineChart>
                 </ResponsiveContainer>
+                {/* Interactive Legend */}
                 <div className="flex flex-wrap gap-4 mt-3 justify-center">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-pink-400"></div><span className="text-xs text-slate-400">Weight</span></div>
-                  {getLoggedMedications().map(med => <div key={med} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: getMedicationColor(med) }}></div><span className="text-xs text-slate-400">{med}</span></div>)}
+                  <button 
+                    onClick={() => setVisibleLines(prev => ({ ...prev, weight: !prev.weight }))}
+                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all ${visibleLines.weight ? 'opacity-100' : 'opacity-40'}`}
+                  >
+                    <div className={`w-3 h-3 rounded-full ${visibleLines.weight ? 'bg-pink-400' : 'bg-slate-600'}`}></div>
+                    <span className={`text-xs ${visibleLines.weight ? 'text-slate-200' : 'text-slate-500'}`}>Weight</span>
+                  </button>
+                  {getLoggedMedications().map(med => {
+                    // Initialize visibility for new medications
+                    if (visibleLines[med] === undefined) {
+                      setVisibleLines(prev => ({ ...prev, [med]: true }));
+                    }
+                    return (
+                      <button 
+                        key={med}
+                        onClick={() => setVisibleLines(prev => ({ ...prev, [med]: !prev[med] }))}
+                        className={`flex items-center gap-2 px-2 py-1 rounded transition-all ${visibleLines[med] ? 'opacity-100' : 'opacity-40'}`}
+                      >
+                        <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: visibleLines[med] ? getMedicationColor(med) : '#475569' }}></div>
+                        <span className={`text-xs ${visibleLines[med] ? 'text-slate-200' : 'text-slate-500'}`}>{med}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
