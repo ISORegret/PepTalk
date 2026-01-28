@@ -823,6 +823,16 @@ const HealthTracker = () => {
   const [showFastingForm, setShowFastingForm] = useState(false);
   const [editingFasting, setEditingFasting] = useState(null);
   
+  // Notification states
+  const [notificationPermission, setNotificationPermission] = useState('default');
+  const [notificationSettings, setNotificationSettings] = useState({
+    injectionReminders: true,
+    reminderTime: '09:00',
+    overdueAlerts: true,
+    weightReminders: false,
+    weightReminderTime: '07:00'
+  });
+  
   // Injection form states
   const [injectionType, setInjectionType] = useState('Semaglutide');
   const [injectionDose, setInjectionDose] = useState('');
@@ -891,6 +901,7 @@ const HealthTracker = () => {
       const titrationData = localStorage.getItem('health-titration');
       const journalData = localStorage.getItem('health-journal');
       const fastingData = localStorage.getItem('health-fasting-entries');
+      const notificationSettingsData = localStorage.getItem('health-notification-settings');
       
       if (weightData) setWeightEntries(JSON.parse(weightData));
       if (injectionData) setInjectionEntries(JSON.parse(injectionData));
@@ -901,6 +912,12 @@ const HealthTracker = () => {
       if (titrationData) setTitrationPlans(JSON.parse(titrationData));
       if (journalData) setJournalEntries(JSON.parse(journalData));
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
+      if (notificationSettingsData) setNotificationSettings(JSON.parse(notificationSettingsData));
+      
+      // Check notification permission status
+      if ('Notification' in window) {
+        setNotificationPermission(Notification.permission);
+      }
     } catch (error) {
       console.log('Loading data:', error);
     }
@@ -954,6 +971,70 @@ const HealthTracker = () => {
     const updated = fastingEntries.filter(e => e.id !== id);
     setFastingEntries(updated);
     saveData('health-fasting-entries', updated);
+  };
+
+  // Notification functions
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support notifications');
+      return false;
+    }
+    
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === 'granted') {
+        // Schedule initial notifications
+        scheduleInjectionNotifications();
+      }
+      return permission === 'granted';
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      return false;
+    }
+  };
+
+  const scheduleInjectionNotifications = () => {
+    if (notificationPermission !== 'granted' || !notificationSettings.injectionReminders) return;
+    
+    const upcoming = getNextInjections();
+    upcoming.forEach(injection => {
+      if (injection.isDueToday && !injection.isOverdue) {
+        // Schedule notification for today
+        showNotification({
+          title: '💉 Injection Reminder',
+          body: `Time to inject ${injection.medication}!`,
+          tag: `injection-${injection.medication}`,
+          requireInteraction: true
+        });
+      } else if (injection.isOverdue && notificationSettings.overdueAlerts) {
+        // Show overdue notification
+        showNotification({
+          title: '⚠️ Injection Overdue',
+          body: `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`,
+          tag: `injection-overdue-${injection.medication}`,
+          requireInteraction: true
+        });
+      }
+    });
+  };
+
+  const showNotification = (options) => {
+    if (notificationPermission !== 'granted') return;
+    
+    const defaultOptions = {
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200]
+    };
+    
+    new Notification(options.title, { ...defaultOptions, ...options });
+  };
+
+  const updateNotificationSettings = (newSettings) => {
+    const updated = { ...notificationSettings, ...newSettings };
+    setNotificationSettings(updated);
+    saveData('health-notification-settings', updated);
   };
 
   const addOrUpdateInjection = () => {
@@ -1543,18 +1624,21 @@ const HealthTracker = () => {
           <p className="text-slate-400 text-sm">Weight • Injections • Measurements • Tools</p>
         </div>
 
-        {/* Upcoming Injections Alert */}
-        {upcomingInjections.length > 0 && (upcomingInjections[0].isDueToday || upcomingInjections[0].isOverdue) && (
-          <div className={`mb-4 p-3 rounded-xl flex items-center gap-3 ${upcomingInjections[0].isOverdue ? 'bg-red-500/20 border border-red-500/50' : 'bg-amber-500/20 border border-amber-500/50'}`}>
-            <Bell className={`h-5 w-5 ${upcomingInjections[0].isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
+        {/* Upcoming Injections Alert - Shows ALL overdue/due medications */}
+        {upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue).map((injection, idx) => (
+          <div key={injection.medication} className={`mb-4 p-3 rounded-xl flex items-center gap-3 ${injection.isOverdue ? 'bg-red-500/20 border border-red-500/50' : 'bg-amber-500/20 border border-amber-500/50'}`}>
+            <Bell className={`h-5 w-5 ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
             <div className="flex-1">
-              <div className={`font-medium ${upcomingInjections[0].isOverdue ? 'text-red-400' : 'text-amber-400'}`}>
-                {upcomingInjections[0].isOverdue ? 'Injection Overdue' : 'Injection Due Today'}
+              <div className={`font-medium ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`}>
+                {injection.isOverdue ? 'Injection Overdue' : 'Injection Due Today'}
               </div>
-              <div className="text-white text-sm">{upcomingInjections[0].medication}</div>
+              <div className="text-white text-sm">{injection.medication}</div>
+              {injection.isOverdue && (
+                <div className="text-slate-400 text-xs">{Math.abs(injection.daysUntil)} {Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue</div>
+              )}
             </div>
           </div>
-        )}
+        ))}
 
         {/* Tab Navigation */}
         <div className="flex bg-slate-800 rounded-xl p-1 mb-6 overflow-x-auto">
@@ -2692,10 +2776,16 @@ const HealthTracker = () => {
         {activeTab === 'tools' && (
           <div className="space-y-4">
             {/* Tool Section Selector */}
-            <div className="flex bg-slate-800 rounded-xl p-1">
-              {[{ id: 'calculator', label: 'Calculators' }, { id: 'schedule', label: 'Schedules' }, { id: 'titration', label: 'Titration' }, { id: 'data', label: 'Data' }].map(section => (
+            <div className="flex bg-slate-800 rounded-xl p-1 overflow-x-auto">
+              {[
+                { id: 'calculator', label: 'Calculators' }, 
+                { id: 'schedule', label: 'Schedules' }, 
+                { id: 'titration', label: 'Titration' }, 
+                { id: 'notifications', label: 'Notifications' }, 
+                { id: 'data', label: 'Data' }
+              ].map(section => (
                 <button key={section.id} onClick={() => setActiveToolSection(section.id)}
-                  className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'bg-violet-500 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  className={`flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'bg-violet-500 text-white' : 'text-slate-400 hover:text-white'}`}>
                   {section.label}
                 </button>
               ))}
@@ -2938,6 +3028,150 @@ const HealthTracker = () => {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Notifications Section */}
+            {activeToolSection === 'notifications' && (
+              <div className="space-y-4">
+                <div className="bg-slate-800 rounded-xl p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-amber-400" />
+                    Push Notifications
+                  </h3>
+
+                  {/* Permission Status */}
+                  <div className={`rounded-lg p-4 mb-4 ${
+                    notificationPermission === 'granted' ? 'bg-emerald-500/20 border border-emerald-500/30' :
+                    notificationPermission === 'denied' ? 'bg-red-500/20 border border-red-500/30' :
+                    'bg-slate-700/50 border border-slate-600'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="text-white font-medium">Notification Permission</div>
+                        <div className="text-slate-400 text-sm">
+                          {notificationPermission === 'granted' && 'Notifications enabled! You\'ll receive injection reminders.'}
+                          {notificationPermission === 'denied' && 'Notifications blocked. Enable in browser settings.'}
+                          {notificationPermission === 'default' && 'Allow notifications to get injection reminders.'}
+                        </div>
+                      </div>
+                      {notificationPermission !== 'granted' && notificationPermission !== 'denied' && (
+                        <button 
+                          onClick={requestNotificationPermission}
+                          className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap"
+                        >
+                          Enable
+                        </button>
+                      )}
+                    </div>
+                    {notificationPermission === 'denied' && (
+                      <div className="text-xs text-slate-400 mt-2">
+                        To enable: Open browser settings → Permissions → Notifications → Allow for this site
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notification Settings */}
+                  {notificationPermission === 'granted' && (
+                    <div className="space-y-4">
+                      {/* Injection Reminders */}
+                      <div className="bg-slate-700/50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="text-white font-medium">Injection Reminders</div>
+                            <div className="text-slate-400 text-sm">Get notified when injections are due</div>
+                          </div>
+                          <button
+                            onClick={() => updateNotificationSettings({ injectionReminders: !notificationSettings.injectionReminders })}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                              notificationSettings.injectionReminders ? 'bg-amber-500' : 'bg-slate-600'
+                            }`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              notificationSettings.injectionReminders ? 'right-1' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {notificationSettings.injectionReminders && (
+                          <div>
+                            <label className="text-slate-400 text-sm block mb-1">Reminder Time</label>
+                            <input
+                              type="time"
+                              value={notificationSettings.reminderTime}
+                              onChange={(e) => updateNotificationSettings({ reminderTime: e.target.value })}
+                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
+                            />
+                            <p className="text-slate-500 text-xs mt-1">You'll be notified at this time on injection days</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Overdue Alerts */}
+                      <div className="bg-slate-700/50 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-white font-medium">Overdue Alerts</div>
+                            <div className="text-slate-400 text-sm">Get alerted when injections are overdue</div>
+                          </div>
+                          <button
+                            onClick={() => updateNotificationSettings({ overdueAlerts: !notificationSettings.overdueAlerts })}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                              notificationSettings.overdueAlerts ? 'bg-red-500' : 'bg-slate-600'
+                            }`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              notificationSettings.overdueAlerts ? 'right-1' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Weight Log Reminders */}
+                      <div className="bg-slate-700/50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="text-white font-medium">Weight Log Reminders</div>
+                            <div className="text-slate-400 text-sm">Daily reminder to log your weight</div>
+                          </div>
+                          <button
+                            onClick={() => updateNotificationSettings({ weightReminders: !notificationSettings.weightReminders })}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                              notificationSettings.weightReminders ? 'bg-pink-500' : 'bg-slate-600'
+                            }`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              notificationSettings.weightReminders ? 'right-1' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {notificationSettings.weightReminders && (
+                          <div>
+                            <label className="text-slate-400 text-sm block mb-1">Reminder Time</label>
+                            <input
+                              type="time"
+                              value={notificationSettings.weightReminderTime}
+                              onChange={(e) => updateNotificationSettings({ weightReminderTime: e.target.value })}
+                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
+                            />
+                            <p className="text-slate-500 text-xs mt-1">Daily reminder to log your morning weight</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Test Notification */}
+                      <button
+                        onClick={() => showNotification({
+                          title: '🎉 Test Notification',
+                          body: 'Notifications are working! You\'ll receive injection reminders like this.',
+                          tag: 'test'
+                        })}
+                        className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg"
+                      >
+                        Send Test Notification
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
