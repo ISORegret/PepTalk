@@ -832,6 +832,7 @@ const HealthTracker = () => {
     weightReminders: false,
     weightReminderTime: '07:00'
   });
+  const [dismissedAlerts, setDismissedAlerts] = useState([]); // Track dismissed alert IDs
   
   // Injection form states
   const [injectionType, setInjectionType] = useState('Semaglutide');
@@ -1020,15 +1021,36 @@ const HealthTracker = () => {
   };
 
   const showNotification = (options) => {
-    if (notificationPermission !== 'granted') return;
+    if (!('Notification' in window)) {
+      console.log('Notifications not supported');
+      return;
+    }
     
-    const defaultOptions = {
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [200, 100, 200]
-    };
+    if (Notification.permission !== 'granted') {
+      console.log('Notification permission not granted');
+      return;
+    }
     
-    new Notification(options.title, { ...defaultOptions, ...options });
+    try {
+      const defaultOptions = {
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        vibrate: [200, 100, 200],
+        requireInteraction: false
+      };
+      
+      const notification = new Notification(options.title, { ...defaultOptions, ...options });
+      
+      // Auto-close after 5 seconds if not requiring interaction
+      if (!options.requireInteraction) {
+        setTimeout(() => notification.close(), 5000);
+      }
+      
+      return notification;
+    } catch (error) {
+      console.error('Error showing notification:', error);
+      alert(`Notification: ${options.title}\n${options.body}`);
+    }
   };
 
   const updateNotificationSettings = (newSettings) => {
@@ -1318,21 +1340,39 @@ const HealthTracker = () => {
 
   const getNextInjections = () => {
     const upcoming = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     schedules.forEach(schedule => {
-      const lastInjection = injectionEntries.find(e => e.type === schedule.medication);
+      // Find the MOST RECENT injection for this medication
+      const medicationInjections = injectionEntries
+        .filter(e => e.type === schedule.medication)
+        .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+      
+      const lastInjection = medicationInjections[0];
       let nextDate;
+      
       if (lastInjection) {
-        nextDate = new Date(lastInjection.date);
+        nextDate = parseLocalDate(lastInjection.date);
         nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
       } else {
-        nextDate = new Date();
+        nextDate = new Date(today);
       }
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      
       nextDate.setHours(0, 0, 0, 0);
-      const daysUntil = Math.ceil((nextDate - today) / (24 * 60 * 60 * 1000));
-      upcoming.push({ medication: schedule.medication, nextDate, daysUntil, isOverdue: daysUntil < 0, isDueToday: daysUntil === 0 });
+      
+      // Calculate days until next injection
+      const daysUntil = Math.round((nextDate - today) / (24 * 60 * 60 * 1000));
+      
+      upcoming.push({ 
+        medication: schedule.medication, 
+        nextDate, 
+        daysUntil, 
+        isOverdue: daysUntil < 0, 
+        isDueToday: daysUntil === 0 
+      });
     });
+    
     return upcoming.sort((a, b) => a.daysUntil - b.daysUntil);
   };
 
@@ -1624,8 +1664,10 @@ const HealthTracker = () => {
           <p className="text-slate-400 text-sm">Weight • Injections • Measurements • Tools</p>
         </div>
 
-        {/* Upcoming Injections Alert - Shows ALL overdue/due medications */}
-        {upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue).map((injection, idx) => (
+        {/* Upcoming Injections Alert - Shows ALL overdue/due medications with dismiss */}
+        {upcomingInjections
+          .filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`))
+          .map((injection, idx) => (
           <div key={injection.medication} className={`mb-4 p-3 rounded-xl flex items-center gap-3 ${injection.isOverdue ? 'bg-red-500/20 border border-red-500/50' : 'bg-amber-500/20 border border-amber-500/50'}`}>
             <Bell className={`h-5 w-5 ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
             <div className="flex-1">
@@ -1637,6 +1679,12 @@ const HealthTracker = () => {
                 <div className="text-slate-400 text-xs">{Math.abs(injection.daysUntil)} {Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue</div>
               )}
             </div>
+            <button
+              onClick={() => setDismissedAlerts([...dismissedAlerts, `${injection.medication}-${injection.daysUntil}`])}
+              className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
+            >
+              <X className={`h-4 w-4 ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
+            </button>
           </div>
         ))}
 
@@ -1803,16 +1851,28 @@ const HealthTracker = () => {
                         </div>
                       </div>
                       
-                      {/* Status */}
-                      <div className={`rounded-lg p-2 text-center text-sm ${
-                        isOnTrack ? 'bg-emerald-500/20 text-emerald-400' : 
-                        isBehind ? 'bg-amber-500/20 text-amber-400' : 
-                        'bg-cyan-500/20 text-cyan-400'
-                      }`}>
-                        {isOnTrack && '✓ On Track - Taking recommended dose'}
-                        {isBehind && `Ready to increase? Plan next dose at ${current.dose}${current.unit}`}
-                        {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
-                      </div>
+                      {/* Status - Clickable when behind schedule */}
+                      {isBehind ? (
+                        <button
+                          onClick={() => {
+                            setActiveTab('tools');
+                            setActiveToolSection('titration');
+                          }}
+                          className="w-full rounded-lg p-3 text-center text-sm bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30"
+                        >
+                          <div className="font-medium">Ready to increase?</div>
+                          <div className="text-xs mt-1">Plan next dose at {current.dose}{current.unit}</div>
+                          <div className="text-xs text-amber-400/70 mt-1">Tap to view titration plan →</div>
+                        </button>
+                      ) : (
+                        <div className={`rounded-lg p-2 text-center text-sm ${
+                          isOnTrack ? 'bg-emerald-500/20 text-emerald-400' : 
+                          'bg-cyan-500/20 text-cyan-400'
+                        }`}>
+                          {isOnTrack && '✓ On Track - Taking recommended dose'}
+                          {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
+                        </div>
+                      )}
                       
                       {/* Next Step Preview */}
                       {current.nextDose && !current.completed && (
@@ -2973,6 +3033,56 @@ const HealthTracker = () => {
             {/* Titration Section */}
             {activeToolSection === 'titration' && (
               <div className="space-y-4">
+                {/* Titration Guidance */}
+                <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/30 rounded-xl p-4">
+                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-violet-400" />
+                    Titration Guidelines
+                  </h3>
+                  
+                  <div className="space-y-3 text-sm">
+                    {/* GLP-1 Guidance */}
+                    <div className="bg-slate-800/50 rounded-lg p-3">
+                      <div className="text-violet-400 font-medium mb-1">GLP-1 Medications</div>
+                      <div className="text-slate-300 text-xs space-y-1">
+                        <p><strong>Semaglutide:</strong> Start 0.25mg → 0.5mg → 1mg → 1.7mg → 2.4mg (4 weeks each)</p>
+                        <p><strong>Tirzepatide:</strong> Start 2.5mg → 5mg → 7.5mg → 10mg → 12.5mg → 15mg (4 weeks each)</p>
+                        <p><strong>Retatrutide:</strong> Start 1mg → 2mg → 4mg → 8mg → 12mg (4-8 weeks each)</p>
+                        <p className="text-slate-400 mt-2">💡 Increase only if tolerating well with minimal side effects</p>
+                      </div>
+                    </div>
+
+                    {/* Hormone Guidance */}
+                    <div className="bg-slate-800/50 rounded-lg p-3">
+                      <div className="text-cyan-400 font-medium mb-1">Testosterone (TRT)</div>
+                      <div className="text-slate-300 text-xs space-y-1">
+                        <p><strong>Typical Start:</strong> 100-150mg/week split into 2 doses</p>
+                        <p><strong>Titration:</strong> Adjust by 25-50mg based on blood work every 6-8 weeks</p>
+                        <p><strong>Target:</strong> Mid-normal testosterone levels (500-800 ng/dL)</p>
+                        <p className="text-slate-400 mt-2">⚠️ Requires regular blood work - adjust based on labs!</p>
+                      </div>
+                    </div>
+
+                    {/* Peptide Guidance */}
+                    <div className="bg-slate-800/50 rounded-lg p-3">
+                      <div className="text-emerald-400 font-medium mb-1">Peptides (BPC-157, TB-500)</div>
+                      <div className="text-slate-300 text-xs space-y-1">
+                        <p><strong>BPC-157:</strong> Typically 250-500mcg daily, no titration needed</p>
+                        <p><strong>TB-500:</strong> 2-5mg twice weekly, can increase if needed</p>
+                        <p className="text-slate-400 mt-2">💡 Most peptides don't require gradual titration</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-xs">
+                      <p className="text-amber-400 font-medium">⚠️ Important</p>
+                      <p className="text-slate-300 mt-1">
+                        These are general guidelines. Always follow your healthcare provider's specific titration protocol.
+                        Monitor for side effects and adjust pace accordingly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="bg-slate-800 rounded-xl p-4">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-violet-400" />Create Titration Plan</h3>
                   <div className="space-y-3">
