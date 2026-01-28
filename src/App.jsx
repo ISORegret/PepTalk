@@ -837,6 +837,9 @@ const HealthTracker = () => {
   const [scheduleMed, setScheduleMed] = useState('Semaglutide');
   const [scheduleFrequency, setScheduleFrequency] = useState(7);
   const [scheduleDay, setScheduleDay] = useState(0);
+  const [scheduleStartDate, setScheduleStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scheduleType, setScheduleType] = useState('recurring'); // 'recurring' or 'specific_days'
+  const [selectedDays, setSelectedDays] = useState([]); // [0,1,2,3,4,5,6] for Sun-Sat
 
   // Titration form states
   const [titrationMed, setTitrationMed] = useState('Semaglutide');
@@ -960,9 +963,24 @@ const HealthTracker = () => {
     const existing = schedules.find(s => s.medication === scheduleMed);
     let updated;
     if (existing) {
-      updated = schedules.map(s => s.medication === scheduleMed ? { ...s, frequencyDays: scheduleFrequency, preferredDay: scheduleDay } : s);
+      updated = schedules.map(s => s.medication === scheduleMed ? { 
+        ...s, 
+        frequencyDays: scheduleFrequency, 
+        preferredDay: scheduleDay,
+        startDate: scheduleStartDate,
+        scheduleType: scheduleType,
+        specificDays: selectedDays
+      } : s);
     } else {
-      updated = [...schedules, { id: Date.now(), medication: scheduleMed, frequencyDays: scheduleFrequency, preferredDay: scheduleDay }];
+      updated = [...schedules, { 
+        id: Date.now(), 
+        medication: scheduleMed, 
+        frequencyDays: scheduleFrequency, 
+        preferredDay: scheduleDay,
+        startDate: scheduleStartDate,
+        scheduleType: scheduleType,
+        specificDays: selectedDays
+      }];
     }
     setSchedules(updated);
     saveData('health-schedules', updated);
@@ -1653,9 +1671,9 @@ const HealthTracker = () => {
 
             {/* Chart */}
             {(weightEntries.length > 0 || injectionEntries.length > 0) && (
-              <div className="bg-slate-800/50 rounded-xl p-4">
+              <div className="bg-slate-800/50 rounded-xl p-2">
                 <ResponsiveContainer width="100%" height={450}>
-                  <LineChart data={getSummaryChartData()} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <LineChart data={getSummaryChartData()} margin={{ top: 15, right: 0, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={Math.max(0, Math.floor(getSummaryChartData().length / 6))} />
                     <YAxis yAxisId="left" stroke="#94a3b8" fontSize={10} domain={['dataMin - 2', 'dataMax + 2']} orientation="right" tickFormatter={(v) => `${v} lbs`} />
@@ -1941,48 +1959,68 @@ const HealthTracker = () => {
                       )}
                     </div>
 
-                    {/* Next Injection Recommendation */}
-                    {insight.nextInjection && (() => {
-                      const now = new Date();
-                      const nextDate = new Date(insight.nextInjection);
-                      const daysUntil = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
-                      const hoursUntil = Math.ceil((nextDate - now) / (1000 * 60 * 60));
+                    {/* Next Injection Recommendation - Based on Actual Data */}
+                    {(() => {
+                      const medication = MEDICATIONS.find(m => m.name === insight.medication);
+                      if (!medication) return null;
                       
-                      // Determine urgency based on phase and days remaining
-                      let urgencyLevel = 'good'; // green
+                      const hoursAgo = parseFloat(insight.hoursAgo);
+                      const expectedFrequencyHours = medication.defaultSchedule * 24; // Convert days to hours
+                      const expectedFrequencyDays = medication.defaultSchedule;
+                      
+                      // Calculate days since last injection
+                      const daysSinceInjection = hoursAgo / 24;
+                      
+                      // Calculate if overdue and by how much
+                      const hoursOverdue = hoursAgo - expectedFrequencyHours;
+                      const daysOverdue = hoursOverdue / 24;
+                      
+                      // Calculate days until typical next injection
+                      const hoursUntilTypical = expectedFrequencyHours - hoursAgo;
+                      const daysUntilTypical = hoursUntilTypical / 24;
+                      
+                      // Determine urgency based on phase, time elapsed, and typical frequency
+                      let urgencyLevel = 'good';
                       let urgencyColor = 'bg-emerald-500/10 border-emerald-500/30';
                       let urgencyTextColor = 'text-emerald-400';
                       let urgencyIcon = '✓';
                       let urgencyMessage = '';
                       
-                      if (daysUntil <= 0) {
-                        // Overdue or today
+                      if (hoursOverdue > 24) {
+                        // CRITICAL: More than 1 day overdue
                         urgencyLevel = 'critical';
                         urgencyColor = 'bg-red-500/10 border-red-500/30';
                         urgencyTextColor = 'text-red-400';
                         urgencyIcon = '⚠️';
-                        urgencyMessage = daysUntil === 0 ? 'Inject TODAY' : `OVERDUE by ${Math.abs(daysUntil)} day${Math.abs(daysUntil) > 1 ? 's' : ''}`;
-                      } else if (daysUntil === 1 || (insight.phase === 'Trough' || insight.phase === 'Declining')) {
-                        // Tomorrow or in declining/trough phase
+                        urgencyMessage = `OVERDUE by ${Math.ceil(daysOverdue)} day${Math.ceil(daysOverdue) > 1 ? 's' : ''}`;
+                      } else if (hoursOverdue > 0 || insight.phase === 'Trough') {
+                        // CRITICAL: Overdue today or in Trough phase
+                        urgencyLevel = 'critical';
+                        urgencyColor = 'bg-red-500/10 border-red-500/30';
+                        urgencyTextColor = 'text-red-400';
+                        urgencyIcon = '⚠️';
+                        urgencyMessage = hoursOverdue > 0 ? 'Inject TODAY (Overdue)' : 'Inject TODAY';
+                      } else if (daysUntilTypical <= 1 || insight.phase === 'Declining') {
+                        // SOON: Tomorrow or in Declining phase
                         urgencyLevel = 'soon';
                         urgencyColor = 'bg-yellow-500/10 border-yellow-500/30';
                         urgencyTextColor = 'text-yellow-400';
                         urgencyIcon = '📅';
-                        urgencyMessage = daysUntil === 1 ? 'Inject TOMORROW' : `Plan injection in ${daysUntil} days`;
-                      } else if (daysUntil <= 3) {
-                        // 2-3 days away
+                        urgencyMessage = daysUntilTypical < 1 ? 'Inject within 24 hours' : 'Inject TOMORROW';
+                      } else if (daysUntilTypical <= 2) {
+                        // PLAN: 2 days away
                         urgencyLevel = 'plan';
                         urgencyColor = 'bg-cyan-500/10 border-cyan-500/30';
                         urgencyTextColor = 'text-cyan-400';
                         urgencyIcon = '📝';
-                        urgencyMessage = `Plan injection in ${daysUntil} days`;
+                        urgencyMessage = `Plan injection in ${Math.ceil(daysUntilTypical)} days`;
                       } else {
-                        // 4+ days away
+                        // GOOD: 3+ days away
                         urgencyLevel = 'good';
                         urgencyColor = 'bg-emerald-500/10 border-emerald-500/30';
                         urgencyTextColor = 'text-emerald-400';
                         urgencyIcon = '✓';
-                        urgencyMessage = `Next injection in ${daysUntil} days`;
+                        urgencyMessage = `Next injection in ${Math.ceil(daysUntilTypical)} days`;
                       }
                       
                       return (
@@ -1996,26 +2034,30 @@ const HealthTracker = () => {
                               <div className="text-xs text-slate-300 space-y-1">
                                 {urgencyLevel === 'critical' && (
                                   <>
-                                    <p>You're in {insight.phase} phase. Inject as soon as possible to maintain therapeutic levels.</p>
-                                    <p className="font-medium">Consistent timing = better results!</p>
+                                    <p>You're in <strong>{insight.phase}</strong> phase. Last injection was <strong>{daysSinceInjection.toFixed(1)} days ago</strong>.</p>
+                                    <p>Typical frequency for {insight.medication}: Every {expectedFrequencyDays} days.</p>
+                                    <p className="font-medium">Inject as soon as possible to maintain therapeutic levels!</p>
                                   </>
                                 )}
                                 {urgencyLevel === 'soon' && (
                                   <>
-                                    <p>You're in {insight.phase} phase. Medication levels are declining.</p>
-                                    <p>Inject within the next {daysUntil <= 1 ? '24 hours' : `${daysUntil} days`} to maintain steady state.</p>
+                                    <p>You're in <strong>{insight.phase}</strong> phase. Last injection was <strong>{daysSinceInjection.toFixed(1)} days ago</strong>.</p>
+                                    <p>Medication levels are declining. Plan to inject within the next 24 hours.</p>
+                                    <p>Consistent timing = optimal steady state!</p>
                                   </>
                                 )}
                                 {urgencyLevel === 'plan' && (
                                   <>
-                                    <p>Currently in {insight.phase} phase. Medication still highly effective.</p>
-                                    <p>Mark your calendar for {nextDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.</p>
+                                    <p>Currently in <strong>{insight.phase}</strong> phase. Last injection: <strong>{daysSinceInjection.toFixed(1)} days ago</strong>.</p>
+                                    <p>Medication still highly effective. Typical {insight.medication} schedule: Every {expectedFrequencyDays} days.</p>
+                                    <p>Mark your calendar for {Math.ceil(daysUntilTypical)} days from now.</p>
                                   </>
                                 )}
                                 {urgencyLevel === 'good' && (
                                   <>
-                                    <p>You're in {insight.phase} phase. Optimal therapeutic range.</p>
-                                    <p>Next dose scheduled for {nextDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.</p>
+                                    <p>You're in <strong>{insight.phase}</strong> phase. Optimal therapeutic range!</p>
+                                    <p>Last injection: <strong>{daysSinceInjection.toFixed(1)} days ago</strong>. Typical frequency: Every {expectedFrequencyDays} days.</p>
+                                    <p>Next injection due in approximately {Math.ceil(daysUntilTypical)} days.</p>
                                   </>
                                 )}
                               </div>
@@ -2452,11 +2494,75 @@ const HealthTracker = () => {
                         {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
                       </select>
                     </div>
+                    
                     <div>
-                      <label className="text-slate-400 text-sm block mb-1">Frequency (days)</label>
-                      <input type="number" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(parseInt(e.target.value))} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
+                      <label className="text-slate-400 text-sm block mb-1">Start Date</label>
+                      <input type="date" value={scheduleStartDate} onChange={(e) => setScheduleStartDate(e.target.value)} 
+                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                     </div>
-                    <button onClick={addSchedule} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 rounded-lg">Save Schedule</button>
+                    
+                    <div>
+                      <label className="text-slate-400 text-sm block mb-1">Schedule Type</label>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setScheduleType('recurring')}
+                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'recurring' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'}`}
+                        >
+                          Every X Days
+                        </button>
+                        <button 
+                          onClick={() => setScheduleType('specific_days')}
+                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'specific_days' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'}`}
+                        >
+                          Specific Days
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {scheduleType === 'recurring' && (
+                      <div>
+                        <label className="text-slate-400 text-sm block mb-1">Frequency (days)</label>
+                        <input type="number" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(parseInt(e.target.value))} 
+                          className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 7" />
+                        <p className="text-slate-500 text-xs mt-1">Inject every {scheduleFrequency} day{scheduleFrequency > 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+                    
+                    {scheduleType === 'specific_days' && (
+                      <div>
+                        <label className="text-slate-400 text-sm block mb-2">Select Days of Week</label>
+                        <div className="grid grid-cols-7 gap-2">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                if (selectedDays.includes(idx)) {
+                                  setSelectedDays(selectedDays.filter(d => d !== idx));
+                                } else {
+                                  setSelectedDays([...selectedDays, idx].sort());
+                                }
+                              }}
+                              className={`py-2 px-1 rounded-lg text-xs transition-all ${
+                                selectedDays.includes(idx) 
+                                  ? 'bg-amber-500 text-white font-medium' 
+                                  : 'bg-slate-700 text-slate-400'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                        {selectedDays.length > 0 && (
+                          <p className="text-slate-400 text-xs mt-2">
+                            Selected: {selectedDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    <button onClick={addSchedule} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 rounded-lg">
+                      Save Schedule
+                    </button>
                   </div>
                 </div>
 
@@ -2472,7 +2578,14 @@ const HealthTracker = () => {
                             </div>
                             <div>
                               <div className="text-white font-medium">{schedule.medication}</div>
-                              <div className="text-slate-400 text-sm">Every {schedule.frequencyDays} days</div>
+                              <div className="text-slate-400 text-sm">
+                                {schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0 
+                                  ? `${schedule.specificDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`
+                                  : `Every ${schedule.frequencyDays} days`}
+                              </div>
+                              {schedule.startDate && (
+                                <div className="text-slate-500 text-xs">Started: {new Date(schedule.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                              )}
                             </div>
                           </div>
                           <button onClick={() => deleteSchedule(schedule.id)} className="p-2 text-slate-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
