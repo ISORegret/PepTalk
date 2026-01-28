@@ -1630,6 +1630,88 @@ const HealthTracker = () => {
               </div>
             )}
 
+            {/* Last Dose vs Recommended - GLP-1 Titration Tracking */}
+            {titrationPlans.filter(p => {
+              const med = MEDICATIONS.find(m => m.name === p.medication);
+              return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
+            }).length > 0 && (
+              <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/30 rounded-xl p-4">
+                <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-violet-400" />
+                  Dose Tracking
+                </h3>
+                {titrationPlans.filter(p => {
+                  const med = MEDICATIONS.find(m => m.name === p.medication);
+                  return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
+                }).map(plan => {
+                  const current = getCurrentTitrationDose(plan);
+                  if (!current) return null;
+                  
+                  // Get last actual injection
+                  const lastInjection = injectionEntries
+                    .filter(inj => inj.type === plan.medication)
+                    .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
+                  
+                  if (!lastInjection) return null;
+                  
+                  // Compare last injection to recommended dose
+                  const lastDose = parseFloat(lastInjection.dose);
+                  const recommendedDose = parseFloat(current.dose);
+                  const isOnTrack = lastDose === recommendedDose;
+                  const isBehind = lastDose < recommendedDose;
+                  const isAhead = lastDose > recommendedDose;
+                  
+                  return (
+                    <div key={plan.id} className="bg-slate-800/50 rounded-lg p-3 mb-2">
+                      <div className="text-white font-medium mb-3">{plan.medication}</div>
+                      
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        {/* Last Dose Taken */}
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-slate-400 text-xs mb-1">Last Dose Taken</div>
+                          <div className="text-2xl font-bold text-cyan-400">
+                            {lastInjection.dose}{lastInjection.unit}
+                          </div>
+                          <div className="text-slate-500 text-xs mt-1">
+                            {new Date(parseLocalDate(lastInjection.date)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </div>
+                        </div>
+                        
+                        {/* Recommended Dose */}
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-slate-400 text-xs mb-1">Recommended Dose</div>
+                          <div className="text-2xl font-bold text-violet-400">
+                            {current.dose}{current.unit}
+                          </div>
+                          <div className="text-slate-500 text-xs mt-1">
+                            Step {current.step} of {plan.steps.length}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Status */}
+                      <div className={`rounded-lg p-2 text-center text-sm ${
+                        isOnTrack ? 'bg-emerald-500/20 text-emerald-400' : 
+                        isBehind ? 'bg-amber-500/20 text-amber-400' : 
+                        'bg-cyan-500/20 text-cyan-400'
+                      }`}>
+                        {isOnTrack && '✓ On Track - Taking recommended dose'}
+                        {isBehind && `Ready to increase? Plan next dose at ${current.dose}${current.unit}`}
+                        {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
+                      </div>
+                      
+                      {/* Next Step Preview */}
+                      {current.nextDose && !current.completed && (
+                        <div className="mt-2 text-xs text-slate-400 text-center">
+                          Next: {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Titration Progress */}
             {titrationPlans.length > 0 && (
               <div className="bg-slate-800 rounded-xl p-4">
@@ -1671,13 +1753,17 @@ const HealthTracker = () => {
 
             {/* Chart */}
             {(weightEntries.length > 0 || injectionEntries.length > 0) && (
-              <div className="bg-slate-800/50 rounded-xl p-2">
+              <div className="bg-slate-800/50 rounded-xl p-1">
                 <ResponsiveContainer width="100%" height={450}>
-                  <LineChart data={getSummaryChartData()} margin={{ top: 15, right: 0, left: 0, bottom: 0 }}>
+                  <LineChart data={getSummaryChartData()} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={Math.max(0, Math.floor(getSummaryChartData().length / 6))} />
                     <YAxis yAxisId="left" stroke="#94a3b8" fontSize={10} domain={['dataMin - 2', 'dataMax + 2']} orientation="right" tickFormatter={(v) => `${v} lbs`} />
-                    <YAxis yAxisId="right" orientation="left" stroke="#94a3b8" fontSize={10} hide={getLoggedMedications().length === 0} />
+                    <YAxis yAxisId="right" orientation="left" stroke="#94a3b8" fontSize={10} hide={getLoggedMedications().length === 0} domain={[0, (dataMax) => {
+                      // Add 2-3 units buffer above max dose to prevent label cutoff
+                      const maxDose = Math.ceil(dataMax);
+                      return maxDose + 3;
+                    }]} />
                     <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }} 
                       formatter={(value, name, props) => { 
                         if (!value) return null; 
