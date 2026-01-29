@@ -10,11 +10,13 @@
   "orientation": "portrait-primary",
   "background_color": "#0f172a",
   "theme_color": "#8b5cf6",
-  "prefer_related_applications": false, 
+  "prefer_related_applications": false,
+  "related_applications": [],
   "lang": "en-US",
   "dir": "ltr",
   "categories": ["health", "lifestyle", "medical"],
-  "icons": [
+  "icons": [...]
+}
     {
       "src": "/health-tracker-app/icon-192.png",
       "sizes": "192x192",
