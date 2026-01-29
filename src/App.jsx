@@ -805,7 +805,8 @@ const HealthTracker = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
-  const [celebrateSuccess, setCelebrateSuccess] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationMessage, setCelebrationMessage] = useState('');
   const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200 });
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
@@ -835,11 +836,6 @@ const HealthTracker = () => {
     weightReminderTime: '07:00'
   });
   const [dismissedAlerts, setDismissedAlerts] = useState([]); // Track dismissed alert IDs
-  
-  // UI Polish states
-  const [showSplash, setShowSplash] = useState(true);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [celebrationMessage, setCelebrationMessage] = useState('');
   
   // Injection form states
   const [injectionType, setInjectionType] = useState('Semaglutide');
