@@ -1,6 +1,6 @@
 {
-  "name": "Health Tracker - Peptide & Weight Management",
-  "short_name": "Health Tracker",
+  "name": "PepTalk - Peptide & Weight Management",
+  "short_name": "PepTalk",
   "description": "Track weight, medications, body measurements, and progress for your health journey",
   "start_url": "/PepTalk/",
   "scope": "/PepTalk/",
