@@ -804,6 +804,8 @@ const HealthTracker = () => {
   const [journalEntries, setJournalEntries] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
+  const [celebrateSuccess, setCelebrateSuccess] = useState(false);
   const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200 });
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
@@ -833,6 +835,11 @@ const HealthTracker = () => {
     weightReminderTime: '07:00'
   });
   const [dismissedAlerts, setDismissedAlerts] = useState([]); // Track dismissed alert IDs
+  
+  // UI Polish states
+  const [showSplash, setShowSplash] = useState(true);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationMessage, setCelebrationMessage] = useState('');
   
   // Injection form states
   const [injectionType, setInjectionType] = useState('Semaglutide');
@@ -889,6 +896,21 @@ const HealthTracker = () => {
   const photoInputRef = useRef(null);
 
   useEffect(() => { loadData(); }, []);
+  
+  // Hide splash screen after data loads
+  useEffect(() => {
+    if (!isLoading) {
+      setTimeout(() => setShowSplash(false), 1500);
+    }
+  }, [isLoading]);
+  
+  // Celebration trigger function
+  const celebrate = (message) => {
+    setCelebrationMessage(message);
+    setShowCelebration(true);
+    setTimeout(() => setShowCelebration(false), 3000);
+  };
+  
 
   const loadData = () => {
     setIsLoading(true);
@@ -939,10 +961,23 @@ const HealthTracker = () => {
   // CRUD operations
   const addOrUpdateWeight = () => {
     if (!weight || isNaN(parseFloat(weight))) return;
+    const newWeight = parseFloat(weight);
     let updated = editingWeight 
-      ? weightEntries.map(e => e.id === editingWeight.id ? { ...e, weight: parseFloat(weight), date: weightDate } : e)
-      : [...weightEntries, { id: Date.now(), weight: parseFloat(weight), date: weightDate }];
+      ? weightEntries.map(e => e.id === editingWeight.id ? { ...e, weight: newWeight, date: weightDate } : e)
+      : [...weightEntries, { id: Date.now(), weight: newWeight, date: weightDate }];
     updated.sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+    
+    // Check for milestones and celebrate!
+    if (!editingWeight && weightEntries.length > 0) {
+      const oldWeight = weightEntries[weightEntries.length - 1].weight;
+      const weightLost = oldWeight - newWeight;
+      const totalLost = weightEntries[0].weight - newWeight;
+      
+      if (weightLost >= 1) celebrate('🎉 Down ' + weightLost.toFixed(1) + ' lbs!');
+      if (Math.floor(totalLost) % 10 === 0 && totalLost >= 10) celebrate('🏆 ' + Math.floor(totalLost) + ' lbs lost total!');
+      if (userProfile.goalWeight && newWeight <= userProfile.goalWeight) celebrate('🎯 Goal Weight Reached!');
+    }
+    
     setWeightEntries(updated);
     saveData('health-weight-entries', updated);
     resetWeightForm();
@@ -963,6 +998,22 @@ const HealthTracker = () => {
       ? fastingEntries.map(e => e.id === editingFasting.id ? { ...e, fastingHours: hours, date: fastingDate } : e)
       : [...fastingEntries, { id: Date.now(), fastingHours: hours, date: fastingDate }];
     updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+    
+    // Calculate streak and celebrate milestones
+    if (!editingFasting) {
+      const streak = updated.filter((e, i) => {
+        const entryDate = parseLocalDate(e.date);
+        const today = new Date();
+        const daysDiff = Math.floor((today - entryDate) / (1000 * 60 * 60 * 24));
+        return daysDiff === i;
+      }).length;
+      
+      if (streak === 7) celebrate('🔥 7 Day Fasting Streak!');
+      if (streak === 14) celebrate('🔥 2 Week Streak!');
+      if (streak === 30) celebrate('🏆 30 Day Streak!');
+      if (hours >= 16) celebrate('💪 Great ' + hours + ' hour fast!');
+    }
+    
     setFastingEntries(updated);
     saveData('health-fasting-entries', updated);
     resetFastingForm();
@@ -1652,12 +1703,134 @@ const HealthTracker = () => {
   const upcomingInjections = getNextInjections();
   const measurementStats = getMeasurementStats();
 
-  if (isLoading) {
-    return <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center"><div className="text-white text-lg">Loading...</div></div>;
+  if (isLoading || showSplash) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-violet-900/20 to-slate-900 flex items-center justify-center overflow-hidden">
+        <div className="text-center animate-fade-in">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-violet-500/20 blur-3xl rounded-full animate-pulse"></div>
+            <Activity className="h-24 w-24 text-violet-400 mx-auto relative animate-float" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Health Tracker</h1>
+          <p className="text-violet-400 text-sm animate-pulse">Loading your data...</p>
+        </div>
+        <style>{`
+          @keyframes fade-in {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+          }
+          .animate-fade-in { animation: fade-in 0.6s ease-out; }
+          .animate-float { animation: float 3s ease-in-out infinite; }
+        `}</style>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-4 pb-24">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-4 pb-24 transition-all duration-300">
+      {/* Success Celebration Popup */}
+      {showCelebration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="animate-celebrate bg-gradient-to-r from-violet-500 to-purple-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-violet-500/50 pointer-events-auto transform scale-110">
+            <div className="text-2xl font-bold text-center">{celebrationMessage}</div>
+          </div>
+        </div>
+      )}
+      
+      <style>{`
+        @keyframes celebrate {
+          0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+          50% { transform: scale(1.2) rotate(0deg); }
+          100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        .animate-celebrate { animation: celebrate 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        
+        /* Smooth transitions for all interactive elements */
+        button, .transition-all { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        button:active { transform: scale(0.95); }
+        button:hover { transform: translateY(-1px); }
+        
+        /* Enhanced button styles with shadows */
+        .btn-primary {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        .btn-primary:hover {
+          box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+        }
+        .btn-primary:active {
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        }
+        
+        .btn-secondary {
+          background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+        }
+        .btn-secondary:hover {
+          box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+        }
+        
+        .btn-amber {
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+        .btn-amber:hover {
+          box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+        }
+        
+        /* Card hover effects */
+        .card-hover {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Smooth tab transitions */
+        .tab-enter { animation: tab-enter 0.3s ease-out; }
+        @keyframes tab-enter {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Alert slide in */
+        .alert-enter {
+          animation: alert-enter 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        @keyframes alert-enter {
+          from { opacity: 0; transform: translateX(-100px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        
+        /* Smooth dismiss animation */
+        .alert-exit {
+          animation: alert-exit 0.3s ease-in forwards;
+        }
+        @keyframes alert-exit {
+          to { opacity: 0; transform: translateX(100px); }
+        }
+        
+        /* Pulse animation for important elements */
+        .pulse-glow {
+          animation: pulse-glow 2s ease-in-out infinite;
+        }
+        @keyframes pulse-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+          50% { box-shadow: 0 0 20px 10px rgba(139, 92, 246, 0.2); }
+        }
+        
+        /* Float animation for icons */
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+        }
+      `}</style>
+      
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-white mb-1">Health Tracker</h1>
@@ -1668,7 +1841,7 @@ const HealthTracker = () => {
         {upcomingInjections
           .filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`))
           .map((injection, idx) => (
-          <div key={injection.medication} className={`mb-4 p-3 rounded-xl flex items-center gap-3 ${injection.isOverdue ? 'bg-red-500/20 border border-red-500/50' : 'bg-amber-500/20 border border-amber-500/50'}`}>
+          <div key={injection.medication} className={`alert-enter mb-4 p-3 rounded-xl flex items-center gap-3 shadow-lg ${injection.isOverdue ? 'bg-red-500/20 border border-red-500/50 shadow-red-500/20' : 'bg-amber-500/20 border border-amber-500/50 shadow-amber-500/20'}`}>
             <Bell className={`h-5 w-5 ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
             <div className="flex-1">
               <div className={`font-medium ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`}>
@@ -1709,7 +1882,7 @@ const HealthTracker = () => {
 
         {/* SUMMARY TAB */}
         {activeTab === 'summary' && (
-          <div className="space-y-4">
+          <div className="space-y-4 tab-enter">
             {/* Time Range Selector */}
             <div className="flex justify-between items-center bg-slate-800/50 rounded-xl p-1">
               {[{ id: '1m', label: '1 month' }, { id: '3m', label: '3 months' }, { id: '6m', label: '6 months' }, { id: '12m', label: '12 months' }, { id: 'all', label: 'All Time' }].map(range => (
@@ -1995,7 +2168,7 @@ const HealthTracker = () => {
 
         {/* INSIGHTS TAB */}
         {activeTab === 'insights' && (
-          <div className="space-y-4">
+          <div className="space-y-4 tab-enter">
             {/* Info Box - How Levels Work */}
             <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
               <div className="flex items-start gap-3">
@@ -2373,7 +2546,7 @@ const HealthTracker = () => {
 
         {/* WEIGHT TAB */}
         {activeTab === 'weight' && (
-          <div className="space-y-4">
+          <div className="space-y-4 tab-enter">
             <div className="bg-slate-800 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-sm">Your Height (for BMI)</span>
@@ -2412,7 +2585,7 @@ const HealthTracker = () => {
                     <label className="text-slate-400 text-sm block mb-1">Date</label>
                     <input type="date" value={weightDate} onChange={(e) => setWeightDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                   </div>
-                  <button onClick={addOrUpdateWeight} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-3 rounded-lg">{editingWeight ? 'Update' : 'Add Entry'}</button>
+                  <button onClick={addOrUpdateWeight} className="w-full btn-primary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingWeight ? 'Update' : 'Add Entry'}</button>
                 </div>
               </div>
             )}
@@ -2423,7 +2596,21 @@ const HealthTracker = () => {
                 {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
               </div>
               {weightEntries.length === 0 ? (
-                <div className="text-center py-8 text-slate-400"><Scale className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No weight entries yet</p></div>
+                <div className="text-center py-12 px-4">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-emerald-500/10 blur-2xl rounded-full"></div>
+                    <Scale className="h-16 w-16 mx-auto text-emerald-400 relative animate-bounce" style={{ animationDuration: '3s' }} />
+                  </div>
+                  <h3 className="text-white font-medium mb-2">Track Your Progress</h3>
+                  <p className="text-slate-400 text-sm mb-4">Start logging your weight to see your journey unfold</p>
+                  <button 
+                    onClick={() => setShowAddForm(true)} 
+                    className="btn-primary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add First Entry
+                  </button>
+                </div>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {[...weightEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
@@ -2547,7 +2734,7 @@ const HealthTracker = () => {
                     </div>
                     <button 
                       onClick={addOrUpdateFasting} 
-                      className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 rounded-lg"
+                      className="w-full btn-amber text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all"
                     >
                       {editingFasting ? 'Update' : 'Log Fasting'}
                     </button>
@@ -2559,10 +2746,20 @@ const HealthTracker = () => {
               <div>
                 <h4 className="text-white font-medium mb-2 text-sm">Fasting History</h4>
                 {fastingEntries.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No fasting entries yet</p>
-                    <p className="text-xs mt-1">Start tracking your intermittent fasting!</p>
+                  <div className="text-center py-10 px-4">
+                    <div className="relative mb-4">
+                      <div className="absolute inset-0 bg-amber-500/10 blur-2xl rounded-full"></div>
+                      <Clock className="h-16 w-16 mx-auto text-amber-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
+                    </div>
+                    <h3 className="text-white font-medium mb-2">Start Fasting Tracker</h3>
+                    <p className="text-slate-400 text-sm mb-4">Log your intermittent fasting windows and build streaks!</p>
+                    <button 
+                      onClick={() => setShowFastingForm(true)} 
+                      className="btn-amber text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Log First Fast
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -2616,7 +2813,7 @@ const HealthTracker = () => {
 
         {/* INJECTIONS TAB */}
         {activeTab === 'injections' && (
-          <div className="space-y-4">
+          <div className="space-y-4 tab-enter">
             <div className="grid grid-cols-4 gap-2">
               {['GLP-1', 'Peptide', 'Hormone', 'Other'].map(cat => {
                 const count = injectionEntries.filter(e => { const med = MEDICATIONS.find(m => m.name === e.type); return med?.category === cat || (cat === 'Other' && (!med || med.category === 'Other' || med.category === 'Triple Agonist' || med.category === 'GLP-1/GIP')); }).length;
@@ -2678,7 +2875,7 @@ const HealthTracker = () => {
                     <label className="text-slate-400 text-sm block mb-1">Notes</label>
                     <textarea value={injectionNotes} onChange={(e) => setInjectionNotes(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 resize-none" rows={2} placeholder="Optional notes..." />
                   </div>
-                  <button onClick={addOrUpdateInjection} className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg">{editingInjection ? 'Update' : 'Log Injection'}</button>
+                  <button onClick={addOrUpdateInjection} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingInjection ? 'Update' : 'Log Injection'}</button>
                 </div>
               </div>
             )}
@@ -2790,7 +2987,21 @@ const HealthTracker = () => {
                 <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
               </div>
               {progressPhotos.length === 0 ? (
-                <div className="text-center py-8 text-slate-400"><Camera className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No progress photos yet</p><p className="text-sm">Tap + to add your first photo</p></div>
+                <div className="text-center py-12 px-4">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-pink-500/10 blur-2xl rounded-full"></div>
+                    <Camera className="h-16 w-16 mx-auto text-pink-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
+                  </div>
+                  <h3 className="text-white font-medium mb-2">Document Your Journey</h3>
+                  <p className="text-slate-400 text-sm mb-4">Visual progress is the best motivation!</p>
+                  <button 
+                    onClick={() => document.querySelector('input[type="file"]').click()} 
+                    className="bg-gradient-to-r from-pink-500 to-rose-600 shadow-lg shadow-pink-500/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Add First Photo
+                  </button>
+                </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {progressPhotos.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map(photo => (
@@ -2868,7 +3079,7 @@ const HealthTracker = () => {
                         <select value={calcDesiredUnit} onChange={(e) => setCalcDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
                       </div>
                     </div>
-                    <button onClick={calculateDose} className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-2 rounded-lg">Calculate</button>
+                    <button onClick={calculateDose} className="w-full btn-secondary text-white font-medium py-2 rounded-lg transform hover:scale-105 transition-all">Calculate</button>
                     {calcResult && (
                       <div className="bg-slate-700/50 rounded-lg p-4 text-center">
                         <div className="text-2xl font-bold text-emerald-400">{calcResult.ml} mL</div>
@@ -3108,7 +3319,7 @@ const HealthTracker = () => {
                       ))}
                       <button onClick={() => setTitrationSteps([...titrationSteps, { dose: '', weeks: 4, unit: 'mg' }])} className="text-violet-400 text-sm hover:text-violet-300">+ Add Step</button>
                     </div>
-                    <button onClick={saveTitrationPlan} className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg">Save Titration Plan</button>
+                    <button onClick={saveTitrationPlan} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">Save Titration Plan</button>
                   </div>
                 </div>
 
@@ -3275,7 +3486,7 @@ const HealthTracker = () => {
                           body: 'Notifications are working! You\'ll receive injection reminders like this.',
                           tag: 'test'
                         })}
-                        className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg"
+                        className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all"
                       >
                         Send Test Notification
                       </button>
@@ -3424,7 +3635,7 @@ const HealthTracker = () => {
                     <textarea value={journalContent} onChange={(e) => setJournalContent(e.target.value)}
                       className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 min-h-32" placeholder="How did you feel today? Any side effects? Non-scale victories?" />
                   </div>
-                  <button onClick={addOrUpdateJournal} className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg">
+                  <button onClick={addOrUpdateJournal} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">
                     {editingJournal ? 'Update Entry' : 'Save Entry'}
                   </button>
                 </div>
@@ -3437,10 +3648,20 @@ const HealthTracker = () => {
                 {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-violet-500 hover:bg-violet-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
               </div>
               {journalEntries.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No journal entries yet</p>
-                  <p className="text-sm">Track your daily observations and progress</p>
+                <div className="text-center py-12 px-4">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-violet-500/10 blur-2xl rounded-full"></div>
+                    <BookOpen className="h-16 w-16 mx-auto text-violet-400 relative" style={{ animation: 'float 3s ease-in-out infinite' }} />
+                  </div>
+                  <h3 className="text-white font-medium mb-2">Start Your Journal</h3>
+                  <p className="text-slate-400 text-sm mb-4">Track feelings, side effects, and victories</p>
+                  <button 
+                    onClick={() => setShowAddForm(true)} 
+                    className="btn-secondary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Write First Entry
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
