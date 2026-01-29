@@ -1707,7 +1707,7 @@ const PepTalk = () => {
             <div className="absolute inset-0 bg-violet-500/20 blur-3xl rounded-full animate-pulse"></div>
             <Activity className="h-24 w-24 text-violet-400 mx-auto relative animate-float" strokeWidth={1.5} />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Health Tracker</h1>
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">PepTalk</h1>
           <p className="text-violet-400 text-sm animate-pulse">Loading your data...</p>
         </div>
         <style>{`
@@ -1829,7 +1829,7 @@ const PepTalk = () => {
       
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-white mb-1">Health Tracker</h1>
+          <h1 className="text-2xl font-bold text-white mb-1">PepTalk</h1>
           <p className="text-slate-400 text-sm">Weight • Injections • Measurements • Tools</p>
         </div>
 
