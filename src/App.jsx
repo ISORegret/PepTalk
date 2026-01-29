@@ -1,4 +1,4 @@
-kimport React, { useState, useEffect, useRef } from 'react';
+Tkimport React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays } from 'lucide-react';
 
@@ -3760,4 +3760,4 @@ const PepTalk = () => {
   );
 };
 
-export default HealthTracker;
+export default PepTalk;
