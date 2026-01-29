@@ -28,50 +28,40 @@
     <script type="module" src="/src/main.jsx"></script>
     
     <!-- Register Service Worker -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          // Register service worker with full base path
-          const swPath = window.location.pathname.includes('/health-tracker-app') 
-            ? '/health-tracker-app/service-worker.js' 
-            : '/service-worker.js';
-          
-          const scope = window.location.pathname.includes('/health-tracker-app')
-            ? '/health-tracker-app/'
-            : '/';
-          
-          navigator.serviceWorker.register(swPath, { scope })
-            .then((registration) => {
-              console.log('SW registered: ', registration);
-              
-              // Check for updates
-              registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // New service worker available, prompt user to refresh
-                    if (confirm('New version available! Refresh to update?')) {
-                      newWorker.postMessage({ type: 'SKIP_WAITING' });
-                      window.location.reload();
-                    }
+   <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/health-tracker-app/service-worker.js')
+          .then((registration) => {
+            console.log('Service Worker registered');
+            
+            // Check for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  if (confirm('New version available! Refresh to update?')) {
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    window.location.reload();
                   }
-                });
+                }
               });
-            })
-            .catch((registrationError) => {
-              console.log('SW registration failed: ', registrationError);
             });
-        });
-        
-        // Reload page when new service worker takes control
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
-          }
-        });
-      }
-    </script>
-  </body>
+          })
+          .catch((err) => {
+            console.log('Service Worker registration failed:', err);
+          });
+      });
+      
+      // Reload page when new service worker takes control
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+    }
+  </script>
+</body>
 </html>
