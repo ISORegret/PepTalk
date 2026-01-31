@@ -1424,7 +1424,7 @@ const PepTalk = () => {
   };
 
   // Export all data to JSON file
-  const exportData = () => {
+  const exportData = async () => {
     const allData = {
       exportDate: new Date().toISOString(),
       version: '1.0',
@@ -1437,17 +1437,54 @@ const PepTalk = () => {
       journalEntries,
       userProfile
     };
-    
+
     const dataStr = JSON.stringify(allData, null, 2);
+    const fileName = `health-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
+        const { Share } = await import('@capacitor/share');
+        const writeResult = await Filesystem.writeFile({
+          path: fileName,
+          data: dataStr,
+          directory: Directory.Documents,
+          encoding: Encoding.UTF8
+        });
+
+        try {
+          const canShare = Share?.canShare ? await Share.canShare() : { value: true };
+          if (canShare?.value !== false) {
+            await Share.share({
+              title: 'PepTalk data export',
+              text: 'PepTalk backup file',
+              url: writeResult.uri
+            });
+          } else {
+            alert(`Backup saved to Documents as ${fileName}.`);
+          }
+        } catch (shareError) {
+          console.warn('Share failed:', shareError);
+          alert(`Backup saved to Documents as ${fileName}.`);
+        }
+        return;
+      } catch (error) {
+        console.warn('Native export failed, using browser download:', error);
+      }
+    }
+
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `health-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = fileName;
+    link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      link.remove();
+    }, 1000);
   };
 
   // Import data from JSON file
