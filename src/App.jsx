@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
@@ -997,6 +997,21 @@ const PepTalk = () => {
   const [reconDesiredDose, setReconDesiredDose] = useState('');
   const [reconDesiredUnit, setReconDesiredUnit] = useState('mcg');
   const [reconResult, setReconResult] = useState(null);
+  // Calorie / TDEE calculator
+  const [tdeeAge, setTdeeAge] = useState('');
+  const [tdeeGender, setTdeeGender] = useState('male');
+  const [tdeeWeightLbs, setTdeeWeightLbs] = useState('');
+  const [tdeeHeightIn, setTdeeHeightIn] = useState('');
+  const [tdeeActivity, setTdeeActivity] = useState('moderate');
+  const [tdeeResult, setTdeeResult] = useState(null);
+
+  // Daily track (hydration + protein)
+  const [dailyTrackEntries, setDailyTrackEntries] = useState([]);
+  const [dailyHydration, setDailyHydration] = useState('');
+  const [dailyProtein, setDailyProtein] = useState('');
+
+  // More tab sub-section (when using 5 tabs)
+  const [activeMoreSection, setActiveMoreSection] = useState('body');
 
   // Journal form states
   const [journalDate, setJournalDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1048,6 +1063,7 @@ const PepTalk = () => {
       const journalData = localStorage.getItem('health-journal');
       const fastingData = localStorage.getItem('health-fasting-entries');
       const notificationSettingsData = localStorage.getItem('health-notification-settings');
+      const dailyTrackData = localStorage.getItem('health-daily-track');
       
       if (weightData) setWeightEntries(JSON.parse(weightData));
       if (injectionData) setInjectionEntries(JSON.parse(injectionData));
@@ -1059,6 +1075,7 @@ const PepTalk = () => {
       if (journalData) setJournalEntries(JSON.parse(journalData));
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
       if (notificationSettingsData) setNotificationSettings(JSON.parse(notificationSettingsData));
+      if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       
       // Check notification permission status (web vs native)
       if (Capacitor.isNativePlatform()) {
@@ -1518,6 +1535,58 @@ const PepTalk = () => {
     reader.readAsText(file);
   };
 
+  // Print/save as PDF — doctor summary (opens print dialog; user can "Save as PDF")
+  const printDoctorSummary = () => {
+    const sortedWeights = [...weightEntries].sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+    const sortedInjections = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+    const byMed = {};
+    sortedInjections.forEach(inj => {
+      if (!byMed[inj.type]) byMed[inj.type] = [];
+      if (byMed[inj.type].length < 20) byMed[inj.type].push(inj);
+    });
+    const weightRows = sortedWeights.slice(-60).reverse().map(e =>
+      `<tr><td>${new Date(parseLocalDate(e.date)).toLocaleDateString('en-US')}</td><td>${e.weight} lbs</td></tr>`
+    ).join('');
+    const injectionRows = Object.entries(byMed).map(([med, list]) =>
+      `<tr><td>${med}</td><td>${list.map(i => `${new Date(parseLocalDate(i.date)).toLocaleDateString('en-US')}: ${i.dose}${i.unit}`).join('; ')}</td></tr>`
+    ).join('');
+    const measurementRows = [...measurementEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).slice(0, 50).map(e =>
+      `<tr><td>${e.type}</td><td>${e.value}"</td><td>${new Date(parseLocalDate(e.date)).toLocaleDateString('en-US')}</td></tr>`
+    ).join('');
+    const recentJournals = [...journalEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).slice(0, 30).map(e =>
+      `<tr><td>${new Date(parseLocalDate(e.date)).toLocaleDateString('en-US')}</td><td>${e.mood}</td><td>${e.energy}/10</td><td>${e.hunger}/10</td><td>${(e.content || '').replace(/</g, '&lt;').substring(0, 200)}${(e.content || '').length > 200 ? '…' : ''}</td></tr>`
+    ).join('');
+    const win = window.open('', '_blank');
+    win.document.write(`
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>PepTalk – Doctor Summary</title>
+<style>
+  body { font-family: system-ui, sans-serif; padding: 24px; color: #1e293b; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .meta { color: #64748b; font-size: 0.875rem; margin-bottom: 24px; }
+  h2 { font-size: 1.1rem; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 16px; font-size: 0.875rem; }
+  th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+  th { background: #f1f5f9; }
+  @media print { body { padding: 12px; } }
+</style></head><body>
+<h1>PepTalk – Health Summary for Provider</h1>
+<p class="meta">Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}. Use browser Print → Save as PDF to export.</p>
+<h2>Weight history (recent)</h2>
+<table><thead><tr><th>Date</th><th>Weight</th></tr></thead><tbody>${weightRows || '<tr><td colspan="2">No entries</td></tr>'}</tbody></table>
+<h2>Injections summary</h2>
+<table><thead><tr><th>Medication</th><th>Recent doses</th></tr></thead><tbody>${injectionRows || '<tr><td colspan="2">No entries</td></tr>'}</tbody></table>
+<h2>Body measurements</h2>
+<table><thead><tr><th>Type</th><th>Value</th><th>Date</th></tr></thead><tbody>${measurementRows || '<tr><td colspan="3">No entries</td></tr>'}</tbody></table>
+<h2>Journal (recent)</h2>
+<table><thead><tr><th>Date</th><th>Mood</th><th>Energy</th><th>Hunger</th><th>Notes</th></tr></thead><tbody>${recentJournals || '<tr><td colspan="5">No entries</td></tr>'}</tbody></table>
+${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeight} lbs.</p>` : ''}
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { try { win.print(); } finally { win.close(); } }, 400);
+  };
+
 // Wipe ALL local data and reset state (factory reset)
 const wipeAllData = () => {
   const keysToRemove = [
@@ -1764,6 +1833,35 @@ const wipeAllData = () => {
     const concentrationMcgPerMl = peptideMcg / parseFloat(reconWaterAmount);
     const volumeMl = desiredMcg / concentrationMcgPerMl;
     setReconResult({ concentration: (concentrationMcgPerMl / 1000).toFixed(2), ml: volumeMl.toFixed(3), units: (volumeMl * 100).toFixed(1) });
+  };
+
+  // Calorie / TDEE calculator (Mifflin-St Jeor BMR, then activity multiplier)
+  const ACTIVITY_MULT = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very: 1.9 };
+  const calculateTDEE = () => {
+    const age = parseInt(tdeeAge, 10);
+    const weightKg = parseFloat(tdeeWeightLbs) / 2.205;
+    const heightCm = parseFloat(tdeeHeightIn) * 2.54;
+    if (!age || !tdeeWeightLbs || !tdeeHeightIn || weightKg <= 0 || heightCm <= 0) return;
+    const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + (tdeeGender === 'male' ? 5 : -161);
+    const tdee = Math.round(bmr * (ACTIVITY_MULT[tdeeActivity] || 1.55));
+    setTdeeResult({ bmr: Math.round(bmr), tdee });
+  };
+
+  // Daily track: save today's hydration + protein
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayDaily = dailyTrackEntries.find(e => e.date === todayStr);
+  const addOrUpdateDailyTrack = () => {
+    const hydrationOz = dailyHydration !== '' ? parseFloat(dailyHydration) : (todayDaily?.hydrationOz ?? 0);
+    const proteinG = dailyProtein !== '' ? parseFloat(dailyProtein) : (todayDaily?.proteinG ?? 0);
+    const existing = dailyTrackEntries.find(e => e.date === todayStr);
+    let updated = existing
+      ? dailyTrackEntries.map(e => e.date === todayStr ? { ...e, hydrationOz, proteinG } : e)
+      : [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz, proteinG }];
+    updated.sort((a, b) => b.date.localeCompare(a.date));
+    setDailyTrackEntries(updated);
+    saveData('health-daily-track', updated);
+    setDailyHydration('');
+    setDailyProtein('');
   };
 
   // Medication level calculations (pharmacokinetics)
@@ -2146,10 +2244,7 @@ const wipeAllData = () => {
             { id: 'insights', icon: Activity, label: 'Insights' },
             { id: 'weight', icon: Scale, label: 'Weight' },
             { id: 'injections', icon: Syringe, label: 'Injections' },
-            { id: 'measurements', icon: Ruler, label: 'Body' },
-            { id: 'journal', icon: BookOpen, label: 'Journal' },
-            { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
-            { id: 'tools', icon: Wrench, label: 'Tools' }
+            { id: 'more', icon: MoreHorizontal, label: 'More' }
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowAddForm(false); }}
               className={`menu-3d-item flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-2 rounded-xl font-medium transition-all duration-200 text-xs whitespace-nowrap ${activeTab === tab.id ? 'menu-3d-item-active bg-amber-500 text-slate-900 shadow-amber-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}>
@@ -2220,6 +2315,30 @@ const wipeAllData = () => {
                 </div>
               </div>
             )}
+
+            {/* Daily track: hydration + protein */}
+            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+              <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-amber-400" />Daily — Hydration & Protein</h3>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Hydration (oz today)</label>
+                  <input type="number" min="0" step="1" value={dailyHydration} onChange={(e) => setDailyHydration(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder={todayDaily?.hydrationOz ?? '0'} />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Protein (g today)</label>
+                  <input type="number" min="0" step="1" value={dailyProtein} onChange={(e) => setDailyProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder={todayDaily?.proteinG ?? '0'} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <button onClick={addOrUpdateDailyTrack} className="bg-amber-500 hover:bg-amber-600 text-slate-900 text-sm font-medium px-4 py-2 rounded-lg">Log today</button>
+                <button onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-amber-400 hover:text-amber-300 text-sm font-medium flex items-center gap-1">
+                  <Calculator className="h-4 w-4" /> Calorie / TDEE calculator
+                </button>
+              </div>
+              {todayDaily && (todayDaily.hydrationOz > 0 || todayDaily.proteinG > 0) && (
+                <p className="text-slate-500 text-xs mt-2">Today: {todayDaily.hydrationOz || 0} oz · {todayDaily.proteinG || 0} g protein</p>
+              )}
+            </div>
 
             {/* Upcoming Injections */}
             {upcomingInjections.length > 0 && (
@@ -2306,7 +2425,8 @@ const wipeAllData = () => {
                       {isBehind ? (
                         <button
                           onClick={() => {
-                            setActiveTab('tools');
+                            setActiveTab('more');
+                            setActiveMoreSection('tools');
                             setActiveToolSection('titration');
                           }}
                           className="w-full rounded-lg p-3 text-center text-sm bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30"
@@ -3192,8 +3312,23 @@ const wipeAllData = () => {
           </div>
         )}
 
-        {/* MEASUREMENTS TAB */}
-        {activeTab === 'measurements' && (
+        {/* MORE TAB */}
+        {activeTab === 'more' && (
+          <div className="space-y-4 tab-enter">
+            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-slate-800/70 backdrop-blur-sm">
+              {[
+                { id: 'body', icon: Ruler, label: 'Body' },
+                { id: 'journal', icon: BookOpen, label: 'Journal' },
+                { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
+                { id: 'tools', icon: Wrench, label: 'Tools' }
+              ].map(section => (
+                <button key={section.id} onClick={() => setActiveMoreSection(section.id)}
+                  className={`menu-3d-item flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-amber-500 text-slate-900 shadow-amber-500/20' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                  <section.icon className="h-4 w-4" />{section.label}
+                </button>
+              ))}
+            </div>
+            {activeMoreSection === 'body' && (
           <div className="space-y-4">
             {/* Measurement Stats */}
             {Object.keys(measurementStats).length > 0 && (
@@ -3319,10 +3454,8 @@ const wipeAllData = () => {
               )}
             </div>
           </div>
-        )}
-
-        {/* TOOLS TAB */}
-        {activeTab === 'tools' && (
+            )}
+            {activeMoreSection === 'tools' && (
           <div className="space-y-4">
             {/* Tool Section Selector - 3D */}
             <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-slate-800/70 backdrop-blur-sm">
@@ -3396,6 +3529,54 @@ const wipeAllData = () => {
                         <div className="text-2xl font-bold text-emerald-400 mt-1">{reconResult.ml} mL</div>
                         <div className="text-slate-400 text-sm">or</div>
                         <div className="text-xl font-bold text-violet-400">{reconResult.units} units</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-amber-400" />Calorie / TDEE Calculator</h3>
+                  <p className="text-slate-400 text-sm mb-3">Estimates BMR and total daily energy expenditure.</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-slate-400 text-sm block mb-1">Age</label>
+                        <input type="number" min="15" max="120" value={tdeeAge} onChange={(e) => setTdeeAge(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="30" />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 text-sm block mb-1">Gender</label>
+                        <select value={tdeeGender} onChange={(e) => setTdeeGender(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-slate-400 text-sm block mb-1">Weight (lbs)</label>
+                      <input type="number" step="0.1" value={tdeeWeightLbs} onChange={(e) => setTdeeWeightLbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 180" />
+                    </div>
+                    <div>
+                      <label className="text-slate-400 text-sm block mb-1">Height (inches)</label>
+                      <input type="number" step="0.1" value={tdeeHeightIn} onChange={(e) => setTdeeHeightIn(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 70" />
+                    </div>
+                    <div>
+                      <label className="text-slate-400 text-sm block mb-1">Activity level</label>
+                      <select value={tdeeActivity} onChange={(e) => setTdeeActivity(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                        <option value="sedentary">Sedentary (little/no exercise)</option>
+                        <option value="light">Light (1–3 days/week)</option>
+                        <option value="moderate">Moderate (3–5 days/week)</option>
+                        <option value="active">Active (6–7 days/week)</option>
+                        <option value="very">Very active (intense daily)</option>
+                      </select>
+                    </div>
+                    <button onClick={calculateTDEE} className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-medium py-2 rounded-lg">Calculate TDEE</button>
+                    {tdeeResult && (
+                      <div className="bg-slate-700/50 rounded-lg p-4 text-center space-y-1">
+                        <div className="text-slate-400 text-xs">BMR (basal metabolic rate)</div>
+                        <div className="text-xl font-bold text-amber-400">{tdeeResult.bmr} cal/day</div>
+                        <div className="text-slate-400 text-xs mt-2">TDEE (maintenance)</div>
+                        <div className="text-2xl font-bold text-emerald-400">{tdeeResult.tdee} cal/day</div>
+                        <div className="text-slate-500 text-xs mt-1">Deficit -500 ≈ {tdeeResult.tdee - 500} cal for ~1 lb/wk loss</div>
                       </div>
                     )}
                   </div>
@@ -3784,6 +3965,21 @@ const wipeAllData = () => {
                   </h3>
                   
                   <div className="space-y-4">
+                    {/* Doctor summary – Print / Save as PDF */}
+                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                        <FileDown className="h-5 w-5 text-amber-400" />
+                        Doctor summary
+                      </h4>
+                      <p className="text-slate-400 text-sm mb-3">
+                        Open a print-friendly summary (weight, injections, measurements, journal). Use Print → Save as PDF to share with your provider.
+                      </p>
+                      <button onClick={printDoctorSummary} className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 shadow-amber-500/20">
+                        <FileDown className="h-5 w-5" />
+                        Print / Save as PDF for doctor
+                      </button>
+                    </div>
+
                     {/* Export Section */}
                     <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
                       <h4 className="text-white font-medium mb-2">Export Data</h4>
@@ -3878,10 +4074,8 @@ const wipeAllData = () => {
               </div>
             </div>
           </div>
-        )}
-
-        {/* JOURNAL TAB */}
-        {activeTab === 'journal' && (
+            )}
+            {activeMoreSection === 'journal' && (
           <div className="space-y-4">
             {showAddForm && (
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
@@ -3987,10 +4181,8 @@ const wipeAllData = () => {
               )}
             </div>
           </div>
-        )}
-
-        {/* CALENDAR TAB */}
-        {activeTab === 'calendar' && (
+            )}
+            {activeMoreSection === 'calendar' && (
           <div className="space-y-4">
             <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
               <div className="flex justify-between items-center mb-4">
@@ -4047,6 +4239,8 @@ const wipeAllData = () => {
                 })}
               </div>
             </div>
+          </div>
+            )}
           </div>
         )}
       </div>
