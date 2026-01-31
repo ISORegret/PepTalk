@@ -1018,6 +1018,13 @@ const PepTalk = () => {
       setTimeout(() => setShowSplash(false), 1500);
     }
   }, [isLoading]);
+
+  // Reschedule local (push) notifications when app loads and reminders are on
+  useEffect(() => {
+    if (!isLoading && notificationPermission === 'granted' && notificationSettings.injectionReminders) {
+      scheduleLocalInjectionReminders();
+    }
+  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime]);
   
   // Celebration trigger function
   const celebrate = (message) => {
@@ -1140,6 +1147,46 @@ const PepTalk = () => {
     saveData('health-fasting-entries', updated);
   };
 
+  // Schedule local (push-style) notifications on device for when app is closed (Android/iOS)
+  const scheduleLocalInjectionReminders = async (settingsOverride) => {
+    try {
+      const cap = window.Capacitor;
+      if (!cap?.isNativePlatform()) return;
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') await LocalNotifications.requestPermissions();
+      const pending = await LocalNotifications.getPending();
+      if (pending?.notifications?.length) {
+        await LocalNotifications.cancel({ notifications: pending.notifications.map(n => ({ id: n.id })) });
+      }
+      const settings = settingsOverride ?? notificationSettings;
+      if (!settings.injectionReminders) return;
+      const [hr, min] = (settings.reminderTime || '09:00').split(':').map(Number);
+      const upcoming = getNextInjections();
+      const notifications = [];
+      let id = 1;
+      upcoming.forEach(injection => {
+        if (injection.daysUntil < 0 || injection.daysUntil > 14) return;
+        const at = new Date();
+        at.setDate(at.getDate() + injection.daysUntil);
+        at.setHours(hr, min, 0, 0);
+        if (at.getTime() <= Date.now()) return;
+        notifications.push({
+          id,
+          title: injection.isOverdue ? '⚠️ Injection Overdue' : '💉 Injection Reminder',
+          body: injection.isOverdue
+            ? `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`
+            : `Time to inject ${injection.medication}!`,
+          schedule: { at, allowWhileIdle: true }
+        });
+        id++;
+      });
+      if (notifications.length) await LocalNotifications.schedule({ notifications });
+    } catch (e) {
+      console.warn('Local notifications:', e);
+    }
+  };
+
   // Notification functions
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
@@ -1151,8 +1198,8 @@ const PepTalk = () => {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
       if (permission === 'granted') {
-        // Schedule initial notifications
         scheduleInjectionNotifications();
+        await scheduleLocalInjectionReminders();
       }
       return permission === 'granted';
     } catch (error) {
@@ -1167,7 +1214,6 @@ const PepTalk = () => {
     const upcoming = getNextInjections();
     upcoming.forEach(injection => {
       if (injection.isDueToday && !injection.isOverdue) {
-        // Schedule notification for today
         showNotification({
           title: '💉 Injection Reminder',
           body: `Time to inject ${injection.medication}!`,
@@ -1175,7 +1221,6 @@ const PepTalk = () => {
           requireInteraction: true
         });
       } else if (injection.isOverdue && notificationSettings.overdueAlerts) {
-        // Show overdue notification
         showNotification({
           title: '⚠️ Injection Overdue',
           body: `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`,
@@ -1223,6 +1268,7 @@ const PepTalk = () => {
     const updated = { ...notificationSettings, ...newSettings };
     setNotificationSettings(updated);
     saveData('health-notification-settings', updated);
+    if (notificationPermission === 'granted') scheduleLocalInjectionReminders(updated);
   };
 
   const addOrUpdateInjection = () => {
@@ -1775,7 +1821,7 @@ const wipeAllData = () => {
 
       // Fallback to simple phase if timeline not available
       let phase = currentPhase ? currentPhase.name : 'Active';
-      let phaseColor = currentPhase ? currentPhase.color : 'text-cyan-400';
+      let phaseColor = currentPhase ? currentPhase.color : 'text-amber-400';
 
       // Calculate next injection time
       const schedule = schedules.find(s => s.medication === medName);
@@ -1860,11 +1906,11 @@ const wipeAllData = () => {
       <div className="min-h-screen flex items-center justify-center overflow-hidden">
         <div className="text-center animate-fade-in">
           <div className="relative mb-6">
-            <div className="absolute inset-0 bg-violet-500/25 blur-3xl rounded-full animate-pulse"></div>
-            <Activity className="h-24 w-24 text-violet-400 mx-auto relative animate-float" strokeWidth={1.5} />
+            <div className="absolute inset-0 bg-amber-500/20 blur-3xl rounded-full animate-pulse"></div>
+            <Activity className="h-24 w-24 text-amber-400 mx-auto relative animate-float" strokeWidth={1.5} />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">PepTalk</h1>
-          <p className="text-violet-400 text-sm font-medium animate-pulse">Loading your data...</p>
+          <p className="text-amber-400 text-sm font-medium animate-pulse">Loading your data...</p>
         </div>
         <style>{`
           @keyframes fade-in {
@@ -1887,7 +1933,7 @@ const wipeAllData = () => {
       {/* Success Celebration Popup */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="animate-celebrate bg-gradient-to-r from-violet-500 to-purple-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-violet-500/50 pointer-events-auto transform scale-110">
+          <div className="animate-celebrate bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 px-8 py-4 rounded-2xl shadow-2xl shadow-amber-500/40 pointer-events-auto transform scale-110">
             <div className="text-2xl font-bold text-center">{celebrationMessage}</div>
           </div>
         </div>
@@ -2036,7 +2082,6 @@ const wipeAllData = () => {
         <header className="text-center mb-6">
           <h1 className="text-2xl font-bold text-white tracking-tight mb-0.5">PepTalk</h1>
           <p className="text-slate-400 text-sm font-medium">Weight · Injections · Measurements · Tools</p>
-          <p className="text-[10px] text-slate-500 mt-2 font-medium uppercase tracking-wider">Modern UI</p>
         </header>
 
         {/* Upcoming Injections Alert - Shows ALL overdue/due medications with dismiss */}
@@ -2063,8 +2108,8 @@ const wipeAllData = () => {
           </div>
         ))}
 
-        {/* Tab Navigation - modern pill bar */}
-        <div className="flex rounded-2xl p-1.5 mb-6 overflow-x-auto border border-white/[0.06] shadow-card bg-slate-800/60 backdrop-blur-xl">
+        {/* Tab Navigation - 3D pill bar */}
+        <div className="menu-3d flex rounded-2xl p-1.5 mb-6 overflow-x-auto bg-slate-800/70 backdrop-blur-xl">
           {[
             { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
             { id: 'insights', icon: Activity, label: 'Insights' },
@@ -2076,7 +2121,7 @@ const wipeAllData = () => {
             { id: 'tools', icon: Wrench, label: 'Tools' }
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowAddForm(false); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-2 rounded-xl font-medium transition-all duration-200 text-xs whitespace-nowrap ${activeTab === tab.id ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}>
+              className={`menu-3d-item flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-2 rounded-xl font-medium transition-all duration-200 text-xs whitespace-nowrap ${activeTab === tab.id ? 'menu-3d-item-active bg-amber-500 text-slate-900 shadow-amber-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}>
               <tab.icon className="h-4 w-4" />{tab.label}
             </button>
           ))}
@@ -2085,11 +2130,11 @@ const wipeAllData = () => {
         {/* SUMMARY TAB */}
         {activeTab === 'summary' && (
           <div className="space-y-4 tab-enter">
-            {/* Time Range Selector */}
-            <div className="flex justify-between items-center rounded-2xl p-1.5 border border-white/[0.06] bg-slate-800/50 backdrop-blur-sm">
+            {/* Time Range Selector - 3D */}
+            <div className="menu-3d flex justify-between items-center rounded-2xl p-1.5 bg-slate-800/60 backdrop-blur-sm">
               {[{ id: '1m', label: '1 month' }, { id: '3m', label: '3 months' }, { id: '6m', label: '6 months' }, { id: '12m', label: '12 months' }, { id: 'all', label: 'All Time' }].map(range => (
                 <button key={range.id} onClick={() => setTimeRange(range.id)}
-                  className={`flex-1 py-2 px-1 text-xs font-medium rounded-lg transition-all ${timeRange === range.id ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-slate-400 hover:text-white'}`}>
+                  className={`menu-3d-item flex-1 py-2 px-1 text-xs font-medium rounded-lg transition-all ${timeRange === range.id ? 'menu-3d-item-active text-amber-400 border-b-2 border-amber-400 bg-slate-700/40' : 'text-slate-400 hover:text-white'}`}>
                   {range.label}
                 </button>
               ))}
@@ -2103,41 +2148,41 @@ const wipeAllData = () => {
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-cyan-400 text-xs font-medium mb-1"><Scale className="h-3 w-3" />Total change</div>
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Scale className="h-3 w-3" />Total change</div>
                 <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-emerald-400' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-slate-400">lbs</span></div>
               </div>
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-cyan-400 text-xs font-medium mb-1"><Activity className="h-3 w-3" />Current BMI</div>
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Activity className="h-3 w-3" />Current BMI</div>
                 <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
               </div>
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-cyan-400 text-xs font-medium mb-1"><Scale className="h-3 w-3" />Weight</div>
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Scale className="h-3 w-3" />Weight</div>
                 <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-slate-400">lbs</span></div>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-cyan-400 text-xs font-medium mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
                 <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-emerald-400' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-slate-400">%</span></div>
               </div>
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-cyan-400 text-xs font-medium mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
                 <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-emerald-400' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-slate-400">lbs/wk</span></div>
               </div>
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-cyan-400 text-xs font-medium mb-1"><Target className="h-3 w-3" />To goal</div>
+                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Target className="h-3 w-3" />To goal</div>
                 <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-slate-400">lbs</span></div>
               </div>
             </div>
 
             {/* Estimated Goal Date */}
             {stats.estimatedGoalDate && (
-              <div className="rounded-2xl p-4 border border-emerald-500/25 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 backdrop-blur-sm">
+              <div className="rounded-2xl p-4 border border-amber-500/25 bg-gradient-to-r from-amber-500/15 to-amber-600/10 backdrop-blur-sm">
                 <div className="flex items-center gap-3">
-                  <div className="bg-emerald-500/30 p-2 rounded-lg"><Target className="h-5 w-5 text-emerald-400" /></div>
+                  <div className="bg-amber-500/20 p-2 rounded-lg border border-amber-500/30"><Target className="h-5 w-5 text-amber-400" /></div>
                   <div>
-                    <div className="text-emerald-400 text-sm font-medium">Estimated Goal Date</div>
+                    <div className="text-amber-400 text-sm font-medium">Estimated Goal Date</div>
                     <div className="text-white text-lg font-bold">{stats.estimatedGoalDate}</div>
                     <div className="text-slate-400 text-xs">Based on your {stats.weeklyAvg} lbs/week average</div>
                   </div>
@@ -2148,7 +2193,7 @@ const wipeAllData = () => {
             {/* Upcoming Injections */}
             {upcomingInjections.length > 0 && (
               <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Bell className="h-4 w-4 text-cyan-400" />Upcoming Injections</h3>
+                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Bell className="h-4 w-4 text-amber-400" />Upcoming Injections</h3>
                 <div className="space-y-2">
                   {upcomingInjections.slice(0, 3).map((inj, idx) => (
                     <div key={idx} className="flex items-center justify-between rounded-xl p-3 border border-white/[0.04] bg-slate-700/40">
@@ -2172,7 +2217,7 @@ const wipeAllData = () => {
               const med = MEDICATIONS.find(m => m.name === p.medication);
               return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
             }).length > 0 && (
-              <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/30 rounded-xl p-4">
+              <div className="rounded-2xl p-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-sm">
                 <h3 className="text-white font-medium mb-3 flex items-center gap-2">
                   <Activity className="h-4 w-4 text-violet-400" />
                   Dose Tracking
@@ -2206,7 +2251,7 @@ const wipeAllData = () => {
                         {/* Last Dose Taken */}
                         <div className="bg-slate-700/50 rounded-lg p-3">
                           <div className="text-slate-400 text-xs mb-1">Last Dose Taken</div>
-                          <div className="text-2xl font-bold text-cyan-400">
+                          <div className="text-2xl font-bold text-amber-400">
                             {lastInjection.dose}{lastInjection.unit}
                           </div>
                           <div className="text-slate-500 text-xs mt-1">
@@ -2242,7 +2287,7 @@ const wipeAllData = () => {
                       ) : (
                         <div className={`rounded-lg p-2 text-center text-sm ${
                           isOnTrack ? 'bg-emerald-500/20 text-emerald-400' : 
-                          'bg-cyan-500/20 text-cyan-400'
+                          'bg-amber-500/20 text-amber-400'
                         }`}>
                           {isOnTrack && '✓ On Track - Taking recommended dose'}
                           {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
@@ -2279,7 +2324,7 @@ const wipeAllData = () => {
                         {current.nextDose && <span className="text-slate-400 text-sm">→ {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks</span>}
                       </div>
                       <div className="mt-2 bg-slate-600 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-violet-500" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
+                        <div className="h-2 rounded-full bg-amber-500" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
                       </div>
                       <div className="text-slate-400 text-xs mt-1">Step {current.step} of {plan.steps.length}</div>
                     </div>
@@ -2372,13 +2417,13 @@ const wipeAllData = () => {
         {activeTab === 'insights' && (
           <div className="space-y-4 tab-enter">
             {/* Info Box - How Levels Work */}
-            <div className="rounded-2xl p-4 border border-cyan-500/25 bg-cyan-500/10 backdrop-blur-sm">
+            <div className="rounded-2xl p-4 border border-amber-500/20 bg-amber-500/10 backdrop-blur-sm">
               <div className="flex items-start gap-3">
-                <Activity className="h-5 w-5 text-cyan-400 mt-0.5 flex-shrink-0" />
+                <Activity className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h3 className="text-cyan-400 font-medium mb-2">Understanding Medication Levels</h3>
+                  <h3 className="text-amber-400 font-medium mb-2">Understanding Medication Levels</h3>
                   <div className="space-y-2 text-sm text-white">
-                    <p><strong>Why levels can be &gt;100%:</strong> When you inject regularly, new doses add to what's still in your system. This is called <span className="text-cyan-400">"steady-state accumulation"</span> and it's exactly how these medications are designed to work!</p>
+                    <p><strong>Why levels can be &gt;100%:</strong> When you inject regularly, new doses add to what's still in your system. This is called <span className="text-amber-400">"steady-state accumulation"</span> and it's exactly how these medications are designed to work!</p>
                     <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
                       <div className="bg-slate-700/50 rounded-lg p-2 text-center">
                         <div className="text-slate-400">Single Dose</div>
@@ -2388,7 +2433,7 @@ const wipeAllData = () => {
                         <div className="text-yellow-400">Building Up</div>
                         <div className="text-white font-semibold mt-1">100-150%</div>
                       </div>
-                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2 text-center">
+                      <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2 text-center">
                         <div className="text-emerald-400">Steady State ✓</div>
                         <div className="text-white font-semibold mt-1">150-200%</div>
                       </div>
@@ -2404,7 +2449,7 @@ const wipeAllData = () => {
                 <Activity className="h-16 w-16 mx-auto mb-4 text-slate-500" />
                 <h3 className="text-white font-semibold text-lg mb-2">No Recent Injections</h3>
                 <p className="text-slate-400 mb-6">Log an injection to see your medication levels and insights</p>
-                <button onClick={() => setActiveTab('injections')} className="bg-violet-500 hover:bg-violet-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg shadow-violet-500/25 transition-all">
+                <button onClick={() => setActiveTab('injections')} className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-6 py-3 rounded-xl font-medium shadow-lg shadow-amber-500/30 transition-all">
                   Log Injection
                 </button>
               </div>
@@ -2430,7 +2475,7 @@ const wipeAllData = () => {
                             ✓ {parseFloat(insight.currentLevel) >= 150 ? 'Steady State' : 'Building Up'}
                           </div>
                         ) : (
-                          <div className="text-cyan-400 text-xs">Single Dose Range</div>
+                          <div className="text-amber-400 text-xs">Single Dose Range</div>
                         )}
                       </div>
                     </div>
@@ -2585,7 +2630,7 @@ const wipeAllData = () => {
                         <div className="text-white font-medium mt-1">{insight.effectProfile?.peakEffects ?? 'Varies'}</div>
                       </div>
                       {insight.nextInjection && (
-                        <div className="flex-1 bg-violet-500/10 border border-violet-500/30 rounded-lg p-2 text-center">
+                        <div className="flex-1 bg-amber-500/10 border border-amber-500/25 rounded-lg p-2 text-center">
                           <div className="text-slate-400">Next Dose</div>
                           <div className="text-white font-medium mt-1">
                             {new Date(insight.nextInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -2646,7 +2691,7 @@ const wipeAllData = () => {
                         // PLAN: 2 days away
                         urgencyLevel = 'plan';
                         urgencyColor = 'bg-cyan-500/10 border-cyan-500/30';
-                        urgencyTextColor = 'text-cyan-400';
+                        urgencyTextColor = 'text-amber-400';
                         urgencyIcon = '📝';
                         urgencyMessage = `Plan injection in ${Math.ceil(daysUntilTypical)} days`;
                       } else {
@@ -2729,12 +2774,12 @@ const wipeAllData = () => {
                         )}
                         {insight.currentPhase && (
                           <li className="flex items-start gap-1.5">
-                            <span className="text-cyan-400 mt-0.5">●</span>
+                            <span className="text-amber-400 mt-0.5">●</span>
                             <span>Currently {parseFloat(insight.currentPhase.hoursIntoPhase).toFixed(0)}h into {insight.currentPhase.name} phase</span>
                           </li>
                         )}
                         <li className="flex items-start gap-1.5">
-                          <span className="text-cyan-400 mt-0.5">●</span>
+                          <span className="text-amber-400 mt-0.5">●</span>
                           <span>Track side effects in Journal tab to identify patterns with {insight.medication} timing</span>
                         </li>
                       </ul>
@@ -3064,7 +3109,7 @@ const wipeAllData = () => {
                   <div>
                     <label className="text-slate-400 text-sm block mb-2">Injection Site</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {INJECTION_SITES.map(site => <button key={site} onClick={() => setInjectionSite(site)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === site ? 'bg-violet-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{site}</button>)}
+                      {INJECTION_SITES.map(site => <button key={site} onClick={() => setInjectionSite(site)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === site ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{site}</button>)}
                     </div>
                   </div>
                   <div>
@@ -3085,7 +3130,7 @@ const wipeAllData = () => {
             <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-white font-medium">History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-violet-500 hover:bg-violet-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
               </div>
               {injectionEntries.length === 0 ? (
                 <div className="text-center py-8 text-slate-400"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
@@ -3184,7 +3229,7 @@ const wipeAllData = () => {
             {/* Progress Photos */}
             <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium flex items-center gap-2"><Camera className="h-4 w-4 text-cyan-400" />Progress Photos</h3>
+                <h3 className="text-white font-medium flex items-center gap-2"><Camera className="h-4 w-4 text-amber-400" />Progress Photos</h3>
                 <button onClick={() => photoInputRef.current?.click()} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>
                 <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
               </div>
@@ -3230,7 +3275,7 @@ const wipeAllData = () => {
                   {measurementEntries.map((entry) => (
                     <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
                       <div className="flex items-center gap-3">
-                        <div className="bg-cyan-500/20 p-2 rounded-lg"><Ruler className="h-5 w-5 text-cyan-400" /></div>
+                        <div className="bg-amber-500/20 p-2 rounded-lg border border-amber-500/20"><Ruler className="h-5 w-5 text-amber-400" /></div>
                         <div>
                           <div className="text-white font-medium">{entry.type}: {entry.value}"</div>
                           <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
@@ -3248,8 +3293,8 @@ const wipeAllData = () => {
         {/* TOOLS TAB */}
         {activeTab === 'tools' && (
           <div className="space-y-4">
-            {/* Tool Section Selector */}
-            <div className="flex bg-slate-800 rounded-xl p-1 overflow-x-auto">
+            {/* Tool Section Selector - 3D */}
+            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-slate-800/70 backdrop-blur-sm">
               {[
                 { id: 'calculator', label: 'Calculators' }, 
                 { id: 'schedule', label: 'Schedules' }, 
@@ -3258,7 +3303,7 @@ const wipeAllData = () => {
                 { id: 'data', label: 'Data' }
               ].map(section => (
                 <button key={section.id} onClick={() => setActiveToolSection(section.id)}
-                  className={`flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'bg-violet-500 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  className={`menu-3d-item flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'menu-3d-item-active bg-amber-500 text-slate-900' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
                   {section.label}
                 </button>
               ))}
@@ -3268,7 +3313,7 @@ const wipeAllData = () => {
             {activeToolSection === 'calculator' && (
               <>
                 <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Calculator className="h-5 w-5 text-violet-400" />Dose Calculator</h3>
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Calculator className="h-5 w-5 text-amber-400" />Dose Calculator</h3>
                   <div className="space-y-3">
                     <div>
                       <label className="text-slate-400 text-sm block mb-1">Concentration (mg/ml)</label>
@@ -3296,15 +3341,15 @@ const wipeAllData = () => {
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-emerald-400" />Reconstitution Calculator</h3>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-slate-400 text-sm block mb-1">Peptide Amount</label>
+                      <label className="text-slate-400 text-sm block mb-1">Vial (peptide in vial)</label>
                       <div className="flex gap-2">
-                        <input type="number" step="0.1" value={reconPeptideAmount} onChange={(e) => setReconPeptideAmount(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 5" />
+                        <input type="number" step="0.1" value={reconPeptideAmount} onChange={(e) => setReconPeptideAmount(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 5" title="Total peptide in the vial" />
                         <select value={reconPeptideUnit} onChange={(e) => setReconPeptideUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
                       </div>
                     </div>
                     <div>
-                      <label className="text-slate-400 text-sm block mb-1">Water Added (mL)</label>
-                      <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" />
+                      <label className="text-slate-400 text-sm block mb-1">BAC Water (mL)</label>
+                      <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" title="Bacteriostatic water volume added to the vial" />
                     </div>
                     <div>
                       <label className="text-slate-400 text-sm block mb-1">Desired Dose</label>
@@ -3447,7 +3492,7 @@ const wipeAllData = () => {
             {activeToolSection === 'titration' && (
               <div className="space-y-4">
                 {/* Titration Guidance */}
-                <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/30 rounded-xl p-4">
+                <div className="rounded-2xl p-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-sm">
                   <h3 className="text-white font-medium mb-3 flex items-center gap-2">
                     <TrendingUp className="h-5 w-5 text-violet-400" />
                     Titration Guidelines
@@ -3467,7 +3512,7 @@ const wipeAllData = () => {
 
                     {/* Hormone Guidance */}
                     <div className="bg-slate-800/50 rounded-lg p-3">
-                      <div className="text-cyan-400 font-medium mb-1">Testosterone (TRT)</div>
+                      <div className="text-amber-400 font-medium mb-1">Testosterone (TRT)</div>
                       <div className="text-slate-300 text-xs space-y-1">
                         <p><strong>Typical Start:</strong> 100-150mg/week split into 2 doses</p>
                         <p><strong>Titration:</strong> Adjust by 25-50mg based on blood work every 6-8 weeks</p>
@@ -3703,7 +3748,7 @@ const wipeAllData = () => {
               <div className="space-y-4">
                 <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-cyan-400" />
+                    <Activity className="h-5 w-5 text-amber-400" />
                     Export & Import Data
                   </h3>
                   
@@ -3737,7 +3782,7 @@ const wipeAllData = () => {
                           <span>Warning: This will replace all current data!</span>
                         </p>
                       </div>
-                      <label className="w-full bg-violet-500 hover:bg-violet-600 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 cursor-pointer">
+                      <label className="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 cursor-pointer shadow-gold-glow">
                         <Plus className="h-5 w-5" />
                         Import Data File
                         <input type="file" accept=".json" onChange={importData} className="hidden" />
@@ -3859,7 +3904,7 @@ const wipeAllData = () => {
             <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-white font-medium flex items-center gap-2"><BookOpen className="h-4 w-4 text-violet-400" />Journal Entries</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-violet-500 hover:bg-violet-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
               </div>
               {journalEntries.length === 0 ? (
                 <div className="text-center py-12 px-4">
@@ -3933,7 +3978,7 @@ const wipeAllData = () => {
               
               <div className="grid grid-cols-7 gap-1">
                 {getCalendarDays().map((day, idx) => (
-                  <div key={idx} className={`min-h-16 p-1 rounded-lg border ${day.isToday ? 'border-violet-500 bg-violet-500/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-slate-800/20'}`}>
+                  <div key={idx} className={`min-h-16 p-1 rounded-lg border ${day.isToday ? 'border-amber-500 bg-amber-500/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-slate-800/20'}`}>
                     <div className={`text-xs ${day.isCurrentMonth ? 'text-white' : 'text-slate-600'}`}>{day.date.getDate()}</div>
                     {day.injections.length > 0 && (
                       <div className="mt-1 space-y-0.5">
