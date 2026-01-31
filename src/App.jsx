@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays } from 'lucide-react';
+import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
@@ -22,6 +23,15 @@ const MEDICATIONS = [
   { name: 'AOD-9604', category: 'Peptide', color: '#ec4899', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 3 },
   { name: 'Melanotan II', category: 'Peptide', color: '#db2777', defaultSchedule: 7, halfLife: 33, peakHours: 12, effectDuration: 168 },
   { name: 'PT-141', category: 'Peptide', color: '#be185d', defaultSchedule: 0, halfLife: 3, peakHours: 1, effectDuration: 8 },
+  { name: 'Enclomiphene (Enclo)', category: 'SERM', color: '#7c3aed', defaultSchedule: 1, halfLife: 120, peakHours: 24, effectDuration: 24 },
+  { name: 'Kisspeptin', category: 'Peptide', color: '#a855f7', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
+  { name: 'Gonadorelin', category: 'Peptide', color: '#9333ea', defaultSchedule: 2, halfLife: 0.3, peakHours: 0.5, effectDuration: 4 },
+  { name: 'Fragment 176-191', category: 'Peptide', color: '#06b6d4', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 12 },
+  { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 2, peakHours: 2, effectDuration: 24 },
+  { name: 'Semax', category: 'Peptide', color: '#6366f1', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 4 },
+  { name: 'Epithalon', category: 'Peptide', color: '#64748b', defaultSchedule: 7, halfLife: 1, peakHours: 1, effectDuration: 24 },
+  { name: 'BPC-157 (Oral)', category: 'Peptide', color: '#eab308', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
+  { name: 'Anamorelin', category: 'Peptide', color: '#ca8a04', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
   { name: 'Other', category: 'Other', color: '#6b7280', defaultSchedule: 7, halfLife: 168, peakHours: 24, effectDuration: 168 }
 ];
 
@@ -56,6 +66,12 @@ const EFFECT_PROFILES = {
     sideEffects: ['Injection Site Reactions', 'Water Retention'],
     peakEffects: 'Hours to days post-injection',
     steadyState: 'Varies by peptide'
+  },
+  'SERM': {
+    effects: ['LH/FSH Stimulation', 'Natural Testosterone Support', 'Estrogen Receptor Modulation', 'Fertility Support'],
+    sideEffects: ['Visual Disturbances', 'Mood Changes', 'Hot Flashes', 'Headache'],
+    peakEffects: 'Days 1–2 of daily dosing; steady state in 1–2 weeks',
+    steadyState: '1–2 weeks of consistent daily dosing'
   }
 };
 
@@ -780,6 +796,106 @@ const PHASE_TIMELINES = {
         ]
       }
     ]
+  },
+  'SERM': {
+    phases: [
+      {
+        name: 'Absorption',
+        hours: [0, 6],
+        icon: '⬆️',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/30',
+        description: 'Oral medication absorbing',
+        whatsHappening: [
+          'Enclomiphene absorbing from gut',
+          'Estrogen receptor blockade beginning',
+          'Pituitary signaling starting to shift'
+        ],
+        whatToExpect: [
+          'No immediate effects',
+          'Take with or without food as prescribed',
+          'Consistent daily timing helps'
+        ],
+        tips: [
+          'Take at same time each day',
+          'Stay consistent with dosing',
+          'Note any visual changes to report'
+        ]
+      },
+      {
+        name: 'Rising',
+        hours: [6, 12],
+        icon: '📈',
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/10',
+        borderColor: 'border-yellow-500/30',
+        description: 'LH/FSH stimulation building',
+        whatsHappening: [
+          'Estrogen receptors blocked in hypothalamus/pituitary',
+          'LH and FSH release increasing',
+          'Natural testosterone production ramping up'
+        ],
+        whatToExpect: [
+          'Effects building through the day',
+          'Cumulative effect over days to weeks',
+          'Peak benefit with steady-state dosing'
+        ],
+        tips: [
+          'Give it 1–2 weeks for steady state',
+          'Track mood and energy if desired',
+          'Report any visual symptoms'
+        ]
+      },
+      {
+        name: 'Peak',
+        hours: [12, 24],
+        icon: '🎯',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/30',
+        description: 'Therapeutic effect before next dose',
+        whatsHappening: [
+          'Sustained LH/FSH elevation',
+          'Natural testosterone support',
+          'Estrogen modulation active'
+        ],
+        whatToExpect: [
+          'Stable effect with daily use',
+          'Steady state after 1–2 weeks of dosing',
+          'Long half-life means levels build over time'
+        ],
+        tips: [
+          'Take next dose at usual time',
+          'Consistency matters more than exact hour',
+          'Monitor with labs as directed'
+        ]
+      },
+      {
+        name: 'Next Dose',
+        hours: [24, 999],
+        icon: '💊',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/30',
+        description: 'Time for next daily dose',
+        whatsHappening: [
+          'Levels still present (long half-life)',
+          'Cumulative effect maintained with daily dosing',
+          'Ready for next dose to maintain steady state'
+        ],
+        whatToExpect: [
+          'Take today’s dose to stay on schedule',
+          'Skipping can shift steady state',
+          'Effects persist due to long half-life'
+        ],
+        tips: [
+          'Take your daily dose today',
+          'Same time daily for best consistency',
+          'If missed, take when remembered per your protocol'
+        ]
+      }
+    ]
   }
 };
 
@@ -810,6 +926,9 @@ const PepTalk = () => {
   const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200 });
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
+
   
   // Graph visibility state
   const [visibleLines, setVisibleLines] = useState({ weight: true }); // Start with weight visible, meds added dynamically
@@ -1313,14 +1432,49 @@ const PepTalk = () => {
         
         alert('Data imported successfully!');
         e.target.value = ''; // Reset file input
-      } catch (error) {
+            } catch (error) {
         alert('Error importing data. Please check the file format.');
         console.error('Import error:', error);
       }
     };
-    
+
     reader.readAsText(file);
   };
+
+// Wipe ALL local data and reset state (factory reset)
+const wipeAllData = () => {
+  const keysToRemove = [
+    'health-weight-entries',
+    'health-injection-entries',
+    'health-measurements',
+    'health-photos',
+    'health-schedules',
+    'health-titration',
+    'health-journal',
+    'health-user-profile',
+  ];
+
+  keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+  setWeightEntries([]);
+  setInjectionEntries([]);
+  setMeasurementEntries([]);
+  setProgressPhotos([]);
+  setSchedules([]);
+  setTitrationPlans([]);
+  setJournalEntries([]);
+  setUserProfile({ height: 70, goalWeight: 200 });
+
+  setShowWipeConfirm(false);
+  setWipeConfirmChecked(false);
+
+  setActiveTab('summary');
+  setActiveToolSection('calculator');
+
+  setCelebrationMessage('All data wiped. Fresh start ✨');
+  setShowCelebration(true);
+  setTimeout(() => setShowCelebration(false), 2500);
+};
 
   const deletePhoto = (id) => {
     const updated = progressPhotos.filter(p => p.id !== id);
@@ -1551,9 +1705,9 @@ const PepTalk = () => {
     return Math.max(0, remainingPercentage);
   };
 
-  // Get current phase based on hours since injection
-  const getCurrentPhase = (hoursAgo, category) => {
-    const timeline = PHASE_TIMELINES[category];
+  // Get current phase based on hours since injection (medication-specific first, then category fallback)
+  const getCurrentPhase = (hoursAgo, category, medName) => {
+    const timeline = (medName && MEDICATION_PHASE_TIMELINES[medName]) || PHASE_TIMELINES[category];
     if (!timeline) return null;
     
     // Find which phase we're in based on hours elapsed
@@ -1615,13 +1769,14 @@ const PepTalk = () => {
       });
       const currentLevel = totalLevel;
       
-      // Get current phase from timeline
-      const currentPhase = getCurrentPhase(hoursAgo, medication.category);
-      
+      // Get current phase from timeline (medication-specific first, then category)
+      const currentPhase = getCurrentPhase(hoursAgo, medication.category, medication.name);
+      const timeline = (medName && MEDICATION_PHASE_TIMELINES[medName]) || PHASE_TIMELINES[medication.category];
+
       // Fallback to simple phase if timeline not available
       let phase = currentPhase ? currentPhase.name : 'Active';
       let phaseColor = currentPhase ? currentPhase.color : 'text-cyan-400';
-      
+
       // Calculate next injection time
       const schedule = schedules.find(s => s.medication === medName);
       let nextInjection = null;
@@ -1630,7 +1785,7 @@ const PepTalk = () => {
         nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
         nextInjection = nextDate;
       }
-      
+
       insights.push({
         medication: medName,
         color: medication.color,
@@ -1639,12 +1794,13 @@ const PepTalk = () => {
         phase,
         phaseColor,
         currentPhase, // Full phase object with details
+        timeline, // Medication-specific or category timeline for phase list
         lastInjection: lastInjection.date,
         lastDose: lastInjection.dose,
         lastUnit: lastInjection.unit,
         hoursAgo: hoursAgo.toFixed(1),
         nextInjection,
-        effectProfile: EFFECT_PROFILES[medication.category]
+        effectProfile: (medName && MEDICATION_EFFECT_PROFILES[medName]) || EFFECT_PROFILES[medication.category]
       });
     });
     
@@ -1737,6 +1893,55 @@ const PepTalk = () => {
         </div>
       )}
       
+      {/* Wipe Data Confirmation */}
+{showWipeConfirm && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="absolute inset-0 bg-black/60"
+      onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}
+    />
+    <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6">
+      <h3 className="text-white text-xl font-semibold mb-2">Reset PepTalk?</h3>
+      <p className="text-slate-300 text-sm mb-4">
+        This permanently deletes all weight, injections, measurements, photos, schedules, and journal entries on this device.
+      </p>
+
+      <label className="flex items-start gap-3 bg-slate-800/70 border border-slate-700 rounded-xl p-3 mb-4 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={wipeConfirmChecked}
+          onChange={(e) => setWipeConfirmChecked(e.target.checked)}
+          className="mt-1"
+        />
+        <span className="text-slate-200 text-sm">
+          I understand this cannot be undone.
+        </span>
+      </label>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}
+          className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-medium py-3 rounded-xl"
+        >
+          Cancel
+        </button>
+
+        <button
+          disabled={!wipeConfirmChecked}
+          onClick={wipeAllData}
+          className={`flex-1 font-medium py-3 rounded-xl ${
+            wipeConfirmChecked
+              ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/40'
+              : 'bg-red-500/40 text-white/60 cursor-not-allowed'
+          }`}
+        >
+          Wipe Data
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
       <style>{`
         @keyframes celebrate {
           0% { transform: scale(0) rotate(-180deg); opacity: 0; }
@@ -2284,14 +2489,14 @@ const PepTalk = () => {
                     )}
 
                     {/* Phase Timeline */}
-                    {insight.currentPhase && PHASE_TIMELINES[insight.category] && (
+                    {insight.currentPhase && insight.timeline && (
                       <div className="mb-4">
                         <h4 className="text-white text-sm font-medium mb-3">Medication Phase Timeline</h4>
                         
                         {/* Visual Phase Progress Bar */}
                         <div className="mb-3">
                           <div className="flex items-center justify-between mb-2">
-                            {PHASE_TIMELINES[insight.category].phases.map((phase, idx) => (
+                            {insight.timeline.phases.map((phase, idx) => (
                               <div key={idx} className="flex-1 flex flex-col items-center">
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${
                                   idx === insight.currentPhase.phaseIndex 
@@ -2376,7 +2581,7 @@ const PepTalk = () => {
                     <div className="flex gap-2 text-xs">
                       <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
                         <div className="text-slate-400">Peak Effects</div>
-                        <div className="text-white font-medium mt-1">{insight.effectProfile?.peakEffects || 'Varies'}</div>
+                        <div className="text-white font-medium mt-1">{insight.effectProfile?.peakEffects ?? 'Varies'}</div>
                       </div>
                       {insight.nextInjection && (
                         <div className="flex-1 bg-violet-500/10 border border-violet-500/30 rounded-lg p-2 text-center">
@@ -3537,7 +3742,19 @@ const PepTalk = () => {
                         <input type="file" accept=".json" onChange={importData} className="hidden" />
                       </label>
                     </div>
-
+{/* Danger Zone */}
+<div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+  <h4 className="text-white font-medium mb-2">Danger Zone</h4>
+  <p className="text-slate-300 text-sm mb-3">
+    Permanently deletes all saved PepTalk data on this device.
+  </p>
+  <button
+    onClick={() => { setShowWipeConfirm(true); setWipeConfirmChecked(false); }}
+    className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-lg"
+  >
+    Wipe All Data
+  </button>
+</div>
                     {/* Data Summary */}
                     <div className="bg-slate-700/50 rounded-lg p-4">
                       <h4 className="text-white font-medium mb-3">Current Data Summary</h4>
