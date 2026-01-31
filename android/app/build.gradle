@@ -87,3 +87,12 @@ try {
 afterEvaluate {
     android.buildTypes.release.signingConfig = android.signingConfigs.debug
 }
+
+// When Android Studio injects externalOverride with path Desktop/Apk/PepTalk, ensure that file exists
+// so packageRelease input validation passes. Create it early (at config time) so it's there when AGP configures the task.
+def injectedKeystorePath = file("${System.getProperty('user.home')}/Desktop/Apk/PepTalk")
+def debugKeystore = file("${System.getProperty('user.home')}/.android/debug.keystore")
+if (!injectedKeystorePath.exists() && debugKeystore.exists()) {
+    injectedKeystorePath.parentFile.mkdirs()
+    injectedKeystorePath.bytes = debugKeystore.bytes
+}
