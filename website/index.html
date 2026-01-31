@@ -82,6 +82,33 @@
     }
     .content { position: relative; z-index: 1; }
 
+    /* Overlay scroll: hero stays fixed, content scrolls up over it */
+    .hero-wrap {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .hero-wrap * { pointer-events: auto; }
+    .scroll-content {
+      position: relative;
+      z-index: 2;
+      padding-top: 100vh;
+      background: transparent;
+    }
+    .scroll-content .screenshots-section,
+    .scroll-content .section,
+    .scroll-content .strip,
+    .scroll-content footer {
+      background: var(--bg);
+    }
+    .scroll-content .strip {
+      background: linear-gradient(180deg, var(--bg-elevated) 0%, rgba(10, 10, 12, 0.98) 100%);
+    }
+
     /* Animations */
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(24px); }
@@ -102,7 +129,7 @@
 
     /* Hero */
     .hero {
-      min-height: 72vh;
+      min-height: auto;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -416,7 +443,7 @@
     <div class="orb orb-3"></div>
   </div>
   <div class="grid-overlay"></div>
-  <div class="content">
+  <div class="hero-wrap">
     <section class="hero">
       <span class="badge">Android app — free download</span>
       <h1 class="logo">PepTalk</h1>
@@ -430,7 +457,9 @@
         Download for Android
       </a>
     </section>
+  </div>
 
+  <div class="scroll-content">
     <section class="screenshots-section reveal">
       <h2 class="section-title">See PepTalk in action</h2>
       <p class="section-sub">Summary, weight, injections, and insights — all in one place.</p>
