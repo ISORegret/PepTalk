@@ -20,6 +20,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Use debug signing so the build works without a release keystore.
+            // For production: create a keystore and add signingConfigs.release with storeFile, etc.
+            signingConfig signingConfigs.debug
         }
     }
     applicationVariants.all { variant ->

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
@@ -1018,6 +1018,11 @@ const PepTalk = () => {
   const [dailyTrackEntries, setDailyTrackEntries] = useState([]);
   const [dailyHydration, setDailyHydration] = useState('');
   const [dailyProtein, setDailyProtein] = useState('');
+  const [nutritionLabel, setNutritionLabel] = useState('');
+  const [nutritionCalories, setNutritionCalories] = useState('');
+  const [nutritionProtein, setNutritionProtein] = useState('');
+  const [nutritionCarbs, setNutritionCarbs] = useState('');
+  const [nutritionFat, setNutritionFat] = useState('');
 
   // More tab sub-section (when using 5 tabs)
   const [activeMoreSection, setActiveMoreSection] = useState('body');
@@ -1461,6 +1466,7 @@ const PepTalk = () => {
       schedules,
       titrationPlans,
       journalEntries,
+      dailyTrackEntries,
       userProfile
     };
     
@@ -1527,6 +1533,10 @@ const PepTalk = () => {
         if (imported.journalEntries) {
           setJournalEntries(imported.journalEntries);
           saveData('health-journal', imported.journalEntries);
+        }
+        if (imported.dailyTrackEntries) {
+          setDailyTrackEntries(imported.dailyTrackEntries);
+          saveData('health-daily-track', imported.dailyTrackEntries);
         }
         if (imported.userProfile) {
           setUserProfile(imported.userProfile);
@@ -1631,6 +1641,7 @@ const wipeAllData = () => {
     'health-schedules',
     'health-titration',
     'health-journal',
+    'health-daily-track',
     'health-user-profile',
   ];
 
@@ -1643,6 +1654,7 @@ const wipeAllData = () => {
   setSchedules([]);
   setTitrationPlans([]);
   setJournalEntries([]);
+  setDailyTrackEntries([]);
   setUserProfile({ height: 70, goalWeight: 200 });
 
   setShowWipeConfirm(false);
@@ -1944,6 +1956,37 @@ const wipeAllData = () => {
     saveData('health-daily-track', updated);
     setDailyHydration('');
     setDailyProtein('');
+  };
+
+  const addNutritionEntry = () => {
+    const calories = nutritionCalories !== '' ? parseFloat(nutritionCalories) : 0;
+    if (isNaN(calories) || calories < 0) return;
+    const protein = nutritionProtein !== '' ? parseFloat(nutritionProtein) : 0;
+    const carbs = nutritionCarbs !== '' ? parseFloat(nutritionCarbs) : 0;
+    const fat = nutritionFat !== '' ? parseFloat(nutritionFat) : 0;
+    const meal = { id: Date.now(), label: nutritionLabel.trim() || 'Meal', calories, protein: isNaN(protein) ? 0 : protein, carbs: isNaN(carbs) ? 0 : carbs, fat: isNaN(fat) ? 0 : fat };
+    const existing = dailyTrackEntries.find(e => e.date === todayStr);
+    const meals = [...(existing?.meals ?? []), meal];
+    const updated = existing
+      ? dailyTrackEntries.map(e => e.date === todayStr ? { ...e, meals } : e)
+      : [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals }];
+    updated.sort((a, b) => b.date.localeCompare(a.date));
+    setDailyTrackEntries(updated);
+    saveData('health-daily-track', updated);
+    setNutritionLabel('');
+    setNutritionCalories('');
+    setNutritionProtein('');
+    setNutritionCarbs('');
+    setNutritionFat('');
+  };
+
+  const deleteNutritionEntry = (mealId) => {
+    const existing = dailyTrackEntries.find(e => e.date === todayStr);
+    if (!existing?.meals?.length) return;
+    const meals = existing.meals.filter(m => m.id !== mealId);
+    const updated = dailyTrackEntries.map(e => e.date === todayStr ? { ...e, meals } : e);
+    setDailyTrackEntries(updated);
+    saveData('health-daily-track', updated);
   };
 
   // Medication level calculations (pharmacokinetics)
@@ -2431,30 +2474,6 @@ const wipeAllData = () => {
                 </div>
               </div>
             )}
-
-            {/* Daily track: hydration + protein */}
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-amber-400" />Daily — Hydration & Protein</h3>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className="text-slate-400 text-xs block mb-1">Hydration (oz today)</label>
-                  <input type="number" min="0" step="1" value={dailyHydration} onChange={(e) => setDailyHydration(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder={todayDaily?.hydrationOz ?? '0'} />
-                </div>
-                <div>
-                  <label className="text-slate-400 text-xs block mb-1">Protein (g today)</label>
-                  <input type="number" min="0" step="1" value={dailyProtein} onChange={(e) => setDailyProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder={todayDaily?.proteinG ?? '0'} />
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <button onClick={addOrUpdateDailyTrack} className="bg-amber-500 hover:bg-amber-600 text-slate-900 text-sm font-medium px-4 py-2 rounded-lg">Log today</button>
-                <button onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-amber-400 hover:text-amber-300 text-sm font-medium flex items-center gap-1">
-                  <Calculator className="h-4 w-4" /> Calorie / TDEE calculator
-                </button>
-              </div>
-              {todayDaily && (todayDaily.hydrationOz > 0 || todayDaily.proteinG > 0) && (
-                <p className="text-slate-500 text-xs mt-2">Today: {todayDaily.hydrationOz || 0} oz · {todayDaily.proteinG || 0} g protein</p>
-              )}
-            </div>
 
             {/* Upcoming Injections */}
             {upcomingInjections.length > 0 && (
@@ -3452,6 +3471,7 @@ const wipeAllData = () => {
             <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-slate-800/70 backdrop-blur-sm">
               {[
                 { id: 'body', icon: Ruler, label: 'Body' },
+                { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
                 { id: 'journal', icon: BookOpen, label: 'Journal' },
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' }
@@ -3585,6 +3605,90 @@ const wipeAllData = () => {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+            )}
+            {activeMoreSection === 'daily' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+              <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-amber-400" /><UtensilsCrossed className="h-4 w-4 text-amber-400" />Daily — Hydration, Protein & Nutrition</h3>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Hydration (oz today)</label>
+                  <input type="number" min="0" step="1" value={dailyHydration} onChange={(e) => setDailyHydration(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder={todayDaily?.hydrationOz ?? '0'} />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Protein (g today)</label>
+                  <input type="number" min="0" step="1" value={dailyProtein} onChange={(e) => setDailyProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder={todayDaily?.proteinG ?? '0'} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+                <button onClick={addOrUpdateDailyTrack} className="bg-amber-500 hover:bg-amber-600 text-slate-900 text-sm font-medium px-4 py-2 rounded-lg">Log hydration & protein</button>
+                <button onClick={() => { setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-amber-400 hover:text-amber-300 text-sm font-medium flex items-center gap-1">
+                  <Calculator className="h-4 w-4" /> Calorie / TDEE calculator
+                </button>
+              </div>
+
+              <div className="border-t border-white/[0.06] pt-4 mt-4">
+                <h4 className="text-slate-300 text-sm font-medium mb-2 flex items-center gap-2"><UtensilsCrossed className="h-4 w-4" />Nutrition (calories & macros)</h4>
+                <p className="text-slate-500 text-xs mb-3">Add meals or snacks; totals update automatically.</p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="col-span-2">
+                    <label className="text-slate-400 text-xs block mb-1">Label (e.g. Breakfast)</label>
+                    <input type="text" value={nutritionLabel} onChange={(e) => setNutritionLabel(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="Breakfast, Lunch, Snack…" />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs block mb-1">Calories</label>
+                    <input type="number" min="0" step="1" value={nutritionCalories} onChange={(e) => setNutritionCalories(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs block mb-1">Protein (g)</label>
+                    <input type="number" min="0" step="1" value={nutritionProtein} onChange={(e) => setNutritionProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs block mb-1">Carbs (g)</label>
+                    <input type="number" min="0" step="1" value={nutritionCarbs} onChange={(e) => setNutritionCarbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs block mb-1">Fat (g)</label>
+                    <input type="number" min="0" step="1" value={nutritionFat} onChange={(e) => setNutritionFat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                </div>
+                <button onClick={addNutritionEntry} className="w-full bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium py-2 rounded-lg mb-4">Add entry</button>
+
+                {(todayDaily?.meals?.length ?? 0) > 0 && (
+                  <>
+                    <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                      {(todayDaily?.meals ?? []).map((meal) => (
+                        <div key={meal.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2 text-sm group">
+                          <div>
+                            <span className="text-white font-medium">{meal.label}</span>
+                            <span className="text-slate-400 ml-2">{meal.calories} cal</span>
+                            {(meal.protein > 0 || meal.carbs > 0 || meal.fat > 0) && (
+                              <span className="text-slate-500 text-xs ml-2">P {meal.protein}g · C {meal.carbs}g · F {meal.fat}g</span>
+                            )}
+                          </div>
+                          <button type="button" onClick={() => deleteNutritionEntry(meal.id)} className="p-1.5 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-lg bg-slate-700/60 px-3 py-2 text-sm border border-white/[0.04]">
+                      <span className="text-slate-400">Today&apos;s totals: </span>
+                      <span className="text-white font-medium">{(todayDaily?.meals ?? []).reduce((s, m) => s + (m.calories || 0), 0)} cal</span>
+                      <span className="text-slate-400 mx-2">·</span>
+                      <span className="text-amber-400">P {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.protein || 0), 0)}g</span>
+                      <span className="text-slate-400 mx-2">·</span>
+                      <span className="text-emerald-400">C {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.carbs || 0), 0)}g</span>
+                      <span className="text-slate-400 mx-2">·</span>
+                      <span className="text-violet-400">F {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.fat || 0), 0)}g</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {todayDaily && (todayDaily.hydrationOz > 0 || todayDaily.proteinG > 0) && (
+                <p className="text-slate-500 text-xs mt-3">Hydration today: {todayDaily.hydrationOz || 0} oz · Protein (quick log): {todayDaily.proteinG || 0} g</p>
               )}
             </div>
           </div>
