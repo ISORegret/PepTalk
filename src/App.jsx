@@ -1249,32 +1249,45 @@ const PepTalk = () => {
     });
   };
 
-  const showNotification = (options) => {
-    if (!('Notification' in window)) {
-      console.log('Notifications not supported');
-      return;
-    }
-    
-    if (Notification.permission !== 'granted') {
-      console.log('Notification permission not granted');
-      return;
-    }
-    
+  const showNotification = async (options) => {
     try {
+      if (Capacitor.isNativePlatform()) {
+        const { LocalNotifications } = await import('@capacitor/local-notifications');
+        const perm = await LocalNotifications.checkPermissions();
+        if (perm.display !== 'granted') {
+          alert('Please enable notifications first.');
+          return;
+        }
+        const testId = 99999;
+        await LocalNotifications.cancel({ notifications: [{ id: testId }] });
+        await LocalNotifications.schedule({
+          notifications: [{
+            id: testId,
+            title: options.title ?? 'Notification',
+            body: options.body ?? '',
+            schedule: { at: new Date(Date.now() + 500) }
+          }]
+        });
+        return;
+      }
+      if (!('Notification' in window)) {
+        console.log('Notifications not supported');
+        return;
+      }
+      if (Notification.permission !== 'granted') {
+        console.log('Notification permission not granted');
+        return;
+      }
       const defaultOptions = {
         icon: '/icon-192.png',
         badge: '/icon-192.png',
         vibrate: [200, 100, 200],
         requireInteraction: false
       };
-      
       const notification = new Notification(options.title, { ...defaultOptions, ...options });
-      
-      // Auto-close after 5 seconds if not requiring interaction
       if (!options.requireInteraction) {
         setTimeout(() => notification.close(), 5000);
       }
-      
       return notification;
     } catch (error) {
       console.error('Error showing notification:', error);
