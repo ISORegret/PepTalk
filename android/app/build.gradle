@@ -86,9 +86,4 @@ try {
 // Force release to use debug keystore so packageRelease doesn't use broken externalOverride path.
 afterEvaluate {
     android.buildTypes.release.signingConfig = android.signingConfigs.debug
-    android.applicationVariants.all { variant ->
-        if (variant.buildType.name == 'release') {
-            variant.signingConfig = android.signingConfigs.debug
-        }
-    }
 }
