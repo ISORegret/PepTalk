@@ -327,8 +327,8 @@
       max-width: 200px;
       background: var(--bg-elevated);
       border: 1px solid var(--border);
-      border-radius: 2rem;
-      padding: 0.5rem;
+      border-radius: 1.75rem;
+      padding: 0.2rem;
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04);
       transition: transform 0.3s, box-shadow 0.3s;
     }
@@ -337,17 +337,18 @@
       box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(212, 168, 83, 0.12);
     }
     .phone-frame-inner {
-      border-radius: 1.5rem;
+      border-radius: 1.4rem;
       overflow: hidden;
       background: #0a0a0c;
-      min-height: 320px;
+      aspect-ratio: 9 / 19.5;
       position: relative;
     }
     .phone-frame-inner img {
       display: block;
       width: 100%;
-      height: auto;
-      vertical-align: top;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
     }
     .phone-frame-caption {
       text-align: center;
@@ -355,6 +356,56 @@
       font-weight: 600;
       color: var(--text-muted);
       margin-top: 0.6rem;
+    }
+    .phone-frame {
+      cursor: pointer;
+    }
+
+    /* Lightbox: click to view full size */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      cursor: pointer;
+    }
+    .lightbox.open {
+      display: flex;
+    }
+    .lightbox img {
+      max-width: 100%;
+      max-height: 90vh;
+      width: auto;
+      height: auto;
+      border-radius: 0.5rem;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      cursor: default;
+      pointer-events: none;
+    }
+    .lightbox-close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      width: 2.5rem;
+      height: 2.5rem;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .lightbox-close:hover {
+      background: rgba(255, 255, 255, 0.2);
     }
   </style>
 </head>
@@ -384,25 +435,25 @@
       <h2 class="section-title">See PepTalk in action</h2>
       <p class="section-sub">Summary, weight, injections, and insights — all in one place.</p>
       <div class="screenshots-row">
-        <div class="phone-frame">
+        <div class="phone-frame" data-screenshot="screenshots/summary.png" data-alt="PepTalk Summary screen" role="button" tabindex="0" title="Click to view full size">
           <div class="phone-frame-inner">
             <img src="screenshots/summary.png" alt="PepTalk Summary screen — weight change, BMI, goals" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Summary</p>
         </div>
-        <div class="phone-frame">
+        <div class="phone-frame" data-screenshot="screenshots/weight.png" data-alt="PepTalk Weight screen" role="button" tabindex="0" title="Click to view full size">
           <div class="phone-frame-inner">
             <img src="screenshots/weight.png" alt="PepTalk Weight screen — logs and charts" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Weight</p>
         </div>
-        <div class="phone-frame">
+        <div class="phone-frame" data-screenshot="screenshots/injections.png" data-alt="PepTalk Injections screen" role="button" tabindex="0" title="Click to view full size">
           <div class="phone-frame-inner">
             <img src="screenshots/injections.png" alt="PepTalk Injections screen — doses and schedule" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Injections</p>
         </div>
-        <div class="phone-frame">
+        <div class="phone-frame" data-screenshot="screenshots/insights.png" data-alt="PepTalk Insights screen" role="button" tabindex="0" title="Click to view full size">
           <div class="phone-frame-inner">
             <img src="screenshots/insights.png" alt="PepTalk Insights screen — body phase and trends" loading="lazy" />
           </div>
@@ -459,6 +510,11 @@
     </footer>
   </div>
 
+  <div class="lightbox" id="lightbox" aria-hidden="true" title="Click to close">
+    <button type="button" class="lightbox-close" aria-label="Close">×</button>
+    <img src="" alt="" id="lightbox-img" />
+  </div>
+
   <script>
     (function() {
       var reveals = document.querySelectorAll('.reveal');
@@ -472,6 +528,48 @@
       window.addEventListener('scroll', reveal);
       window.addEventListener('load', reveal);
       reveal();
+    })();
+
+    (function() {
+      var lightbox = document.getElementById('lightbox');
+      var lightboxImg = document.getElementById('lightbox-img');
+      var frames = document.querySelectorAll('.phone-frame[data-screenshot]');
+
+      function openLightbox(src, alt) {
+        lightboxImg.src = src;
+        lightboxImg.alt = alt || 'Screenshot';
+        lightbox.classList.add('open');
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeLightbox() {
+        lightbox.classList.remove('open');
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      frames.forEach(function(frame) {
+        frame.addEventListener('click', function() {
+          openLightbox(frame.getAttribute('data-screenshot'), frame.getAttribute('data-alt'));
+        });
+        frame.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openLightbox(frame.getAttribute('data-screenshot'), frame.getAttribute('data-alt'));
+          }
+        });
+      });
+
+      lightbox.addEventListener('click', function(e) {
+        if (e.target === lightbox) closeLightbox();
+      });
+      lightbox.querySelector('.lightbox-close').addEventListener('click', function(e) {
+        e.stopPropagation();
+        closeLightbox();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox();
+      });
     })();
   </script>
 </body>
