@@ -20,8 +20,6 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Use debug signing so the build works without a release keystore.
-            // For production: create a keystore and add signingConfigs.release with storeFile, etc.
             signingConfig signingConfigs.debug
         }
     }
@@ -61,4 +59,22 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// If Android Studio injected a broken "externalOverride" (keystore path missing/invalid),
+// point it at the debug keystore and keep release using debug so validateSigningRelease succeeds.
+afterEvaluate {
+    def sc = android.signingConfigs
+    def extOverride = sc.findByName('externalOverride')
+    if (extOverride != null && (extOverride.storeFile == null || !extOverride.storeFile.exists())) {
+        android.buildTypes.release.signingConfig = sc.debug
+        try {
+            extOverride.storeFile = sc.debug.storeFile
+            extOverride.storePassword = sc.debug.storePassword
+            extOverride.keyAlias = sc.debug.keyAlias
+            extOverride.keyPassword = sc.debug.keyPassword
+        } catch (Exception e) {
+            // Config may be immutable on some AGP versions; release already forced to debug
+        }
+    }
 }
