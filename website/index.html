@@ -355,8 +355,35 @@
       line-height: 1.4;
       margin-bottom: 0.35rem;
     }
-    .strip .btn-download { margin: 0 0.25rem 0.15rem 0; }
-    .strip .note { font-size: 0.6rem; opacity: 0.85; }
+    .strip .strip-buttons {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .strip .btn-download { margin: 0; }
+    .btn-ios {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.55rem 1.1rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      text-decoration: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .btn-ios:hover {
+      border-color: rgba(212, 168, 83, 0.4);
+      background: rgba(212, 168, 83, 0.08);
+    }
+    .strip .note { font-size: 0.6rem; opacity: 0.85; margin-top: 0.75rem; }
     footer {
       flex-shrink: 0;
       text-align: center;
@@ -412,6 +439,75 @@
       justify-content: center;
     }
     .lightbox-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+    /* iOS Add to Home Screen popup */
+    .ios-popup {
+      position: fixed;
+      inset: 0;
+      z-index: 101;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .ios-popup.open { display: flex; }
+    .ios-popup-inner {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      max-width: 340px;
+      width: 100%;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    }
+    .ios-popup h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+    .ios-popup ol {
+      margin: 0 0 1rem;
+      padding-left: 1.25rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .ios-popup ol li { margin-bottom: 0.35rem; }
+    .ios-popup-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+    .ios-popup .btn-close-popup {
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: transparent;
+      border: 1px solid rgba(212, 168, 83, 0.4);
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .ios-popup .btn-close-popup:hover {
+      background: var(--accent-soft);
+    }
+    .ios-popup .btn-open-safari {
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #08080a;
+      background: linear-gradient(135deg, var(--accent), #c49a4a);
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      text-decoration: none;
+      font-family: inherit;
+    }
+    .ios-popup .btn-open-safari:hover { filter: brightness(1.08); }
   </style>
 </head>
 <body>
@@ -458,7 +554,7 @@
           <p class="benefit-desc">Measurements, calculators, and reminders.</p>
           <ul>
             <li>Body measurements — waist, progress photos</li>
-            <li>Calculators — BMI, TDEE, doctor summary</li>
+            <li>Calculators — BMI, TDEE, Constitute calculator; export to JSON, CSV, or PDF for doctors or app transfers</li>
             <li>Reminders — even when the app is closed</li>
           </ul>
         </div>
@@ -502,9 +598,12 @@
 
     <section class="strip">
       <p><strong>Private.</strong> Your data stays on your device. No accounts, no selling data.</p>
-      <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
-      <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
-      <p class="note">Free · Android: download APK above · <strong>iOS:</strong> share this site’s link; on iPhone, open it in Safari → Share → Add to Home Screen</p>
+      <div class="strip-buttons">
+        <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
+        <a href="https://isoregret.github.io/PepTalk/" class="btn-ios" id="btn-ios" target="_blank" rel="noopener noreferrer">Add to Home Screen (iOS)</a>
+        <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+      </div>
+      <p class="note">Free · Android: APK above · iOS: open the link in Safari on your iPhone, then Share → Add to Home Screen</p>
     </section>
 
     <footer>
@@ -515,6 +614,22 @@
   <div class="lightbox" id="lightbox" aria-hidden="true" title="Click to close">
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
     <img src="" alt="" id="lightbox-img" />
+  </div>
+
+  <div class="ios-popup" id="ios-popup" aria-hidden="true" role="dialog" aria-labelledby="ios-popup-title" aria-modal="true">
+    <div class="ios-popup-inner">
+      <h3 id="ios-popup-title">Add PepTalk to your home screen</h3>
+      <ol>
+        <li>Open this page in <strong>Safari</strong> (if you’re not already).</li>
+        <li>Tap the <strong>Share</strong> button (square with an arrow).</li>
+        <li>Tap <strong>Add to Home Screen</strong>.</li>
+        <li>Tap <strong>Add</strong>.</li>
+      </ol>
+      <div class="ios-popup-actions">
+        <a href="https://isoregret.github.io/PepTalk/" class="btn-open-safari" id="ios-popup-open-safari" target="_blank" rel="noopener noreferrer">Open in Safari</a>
+        <button type="button" class="btn-close-popup" id="ios-popup-close">Got it</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -541,6 +656,33 @@
       lightbox.addEventListener('click', function(e) { if (e.target === lightbox) closeLightbox(); });
       lightbox.querySelector('.lightbox-close').addEventListener('click', function(e) { e.stopPropagation(); closeLightbox(); });
       document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox(); });
+    })();
+
+    (function() {
+      var btnIos = document.getElementById('btn-ios');
+      var popup = document.getElementById('ios-popup');
+      var btnClose = document.getElementById('ios-popup-close');
+      var btnSafari = document.getElementById('ios-popup-open-safari');
+      if (!btnIos || !popup) return;
+      function openIosPopup(e) {
+        e.preventDefault();
+        popup.classList.add('open');
+        popup.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeIosPopup() {
+        popup.classList.remove('open');
+        popup.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+      btnIos.addEventListener('click', openIosPopup);
+      btnClose.addEventListener('click', closeIosPopup);
+      popup.addEventListener('click', function(e) {
+        if (e.target === popup) closeIosPopup();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && popup.classList.contains('open')) closeIosPopup();
+      });
     })();
   </script>
 </body>

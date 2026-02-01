@@ -1647,7 +1647,7 @@ const PepTalk = () => {
     reader.readAsText(file);
   };
 
-  // Print/save as PDF — doctor summary (opens print dialog; user can "Save as PDF")
+  // Print/save as PDF — Constitute calculator (opens print dialog; user can "Save as PDF")
   const printDoctorSummary = () => {
     const sortedWeights = sortWeightByDateAsc(weightEntries);
     const sortedInjections = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
@@ -1671,7 +1671,7 @@ const PepTalk = () => {
     const win = window.open('', '_blank');
     win.document.write(`
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>PepTalk – Doctor Summary</title>
+<html><head><meta charset="utf-8"><title>PepTalk – Constitute Calculator</title>
 <style>
   body { font-family: system-ui, sans-serif; padding: 24px; color: #1e293b; max-width: 800px; margin: 0 auto; }
   h1 { font-size: 1.5rem; margin-bottom: 4px; }
@@ -4579,13 +4579,13 @@ const wipeAllData = () => {
                         <label className="text-slate-400 text-xs block mb-2">Export as</label>
                         <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 border border-white/[0.06]">
                           <option value="json">JSON Backup — full backup, import later</option>
-                          <option value="doctor">Doctor summary — Print / Save as PDF</option>
+                          <option value="doctor">Constitute calculator — Print / Save as PDF</option>
                           <option value="csv">CSV — weight & injections (spreadsheets)</option>
                         </select>
                       </div>
                       <button onClick={runExport} className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 shadow-amber-500/20">
                         <FileDown className="h-5 w-5" />
-                        {exportFormat === 'json' ? 'Export backup (JSON)' : exportFormat === 'doctor' ? 'Open doctor summary (Print/PDF)' : 'Download CSV'}
+                        {exportFormat === 'json' ? 'Export backup (JSON)' : exportFormat === 'doctor' ? 'Open Constitute calculator (Print/PDF)' : 'Download CSV'}
                       </button>
                     </div>
 
