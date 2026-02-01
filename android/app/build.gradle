@@ -45,6 +45,13 @@ android {
             }
         }
     }
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = variant.buildType.name == 'release'
+                ? 'PepTalk.apk'
+                : "PepTalk-${variant.buildType.name}.apk"
+        }
+    }
 }
 
 // flatDir used by Capacitor for plugin AARs; Gradle warns but no Maven layout here
@@ -77,15 +84,8 @@ try {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
 
-// Force release to use debug keystore; rename APK outputs (AGP 8+ needs afterEvaluate for applicationVariants)
+// Force release to use debug keystore
 afterEvaluate {
     android.buildTypes.release.signingConfig = android.signingConfigs.debug
-    android.applicationVariants.configureEach { variant ->
-        variant.outputs.configureEach { output ->
-            output.outputFileName = variant.buildType.name == 'release'
-                ? 'PepTalk.apk'
-                : "PepTalk-${variant.buildType.name}.apk"
-        }
-    }
 }
 
