@@ -4,6 +4,8 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
+const APP_VERSION = '1.0.0';
+
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
   { name: 'Semaglutide', category: 'GLP-1', color: '#10b981', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
@@ -2183,12 +2185,13 @@ const wipeAllData = () => {
     const now = new Date();
     const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
     
-    // Get recent injections (last 30 days for most meds)
-    const recentInjections = injectionEntries.filter(inj => {
+    // Get recent injections (last 90 days; fall back to all if none recent — e.g. sample data)
+    let recentInjections = injectionEntries.filter(inj => {
       const injDate = parseLocalDate(inj.date);
       const daysAgo = (now - injDate) / (1000 * 60 * 60 * 24);
-      return daysAgo <= 30;
+      return daysAgo <= 90;
     });
+    if (recentInjections.length === 0) recentInjections = injectionEntries;
     
     // Group by medication type
     const byMedication = {};
@@ -4049,7 +4052,6 @@ const wipeAllData = () => {
                 { id: 'calculator', label: 'Calculators' }, 
                 { id: 'schedule', label: 'Schedules' }, 
                 { id: 'titration', label: 'Titration' }, 
-                { id: 'glucose', label: 'Glucose & A1C' }, 
                 { id: 'notifications', label: 'Notifications' }, 
                 { id: 'data', label: 'Data' }
               ].map(section => (
@@ -4060,8 +4062,8 @@ const wipeAllData = () => {
               ))}
             </div>
 
-            {/* Calculators Section */}
-            {activeToolSection === 'calculator' && (
+            {/* Calculators Section (also show when 'glucose' was removed from Tools) */}
+            {(activeToolSection === 'calculator' || activeToolSection === 'glucose') && (
               <>
                 <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Calculator className="h-5 w-5 text-amber-400" />Dose Calculator</h3>
@@ -4407,109 +4409,6 @@ const wipeAllData = () => {
                     })}
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Glucose & A1C Section */}
-            {activeToolSection === 'glucose' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-emerald-400" />Glucose & A1C</h3>
-                  <p className="text-slate-400 text-sm mb-4">Optional log for people using GLP-1s or managing blood sugar. Shown in Week in review on Summary.</p>
-
-                  {/* Log Glucose */}
-                  <div className="mb-4">
-                    {!showGlucoseForm ? (
-                      <button onClick={() => setShowGlucoseForm(true)} className="w-full py-2 rounded-lg border border-dashed border-slate-500 text-slate-400 hover:text-white hover:border-emerald-500/50 text-sm">+ Log glucose</button>
-                    ) : (
-                      <div className="rounded-xl p-3 bg-slate-700/50 space-y-2">
-                        <div className="flex gap-2">
-                          <input type="number" step="1" min="20" max="500" value={glucoseValue} onChange={(e) => setGlucoseValue(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2" placeholder="mg/dL" />
-                          <select value={glucoseType} onChange={(e) => setGlucoseType(e.target.value)} className="bg-slate-700 text-white rounded-lg px-2 py-2 text-sm">
-                            <option value="fasting">Fasting</option>
-                            <option value="post_meal">Post-meal</option>
-                            <option value="random">Random</option>
-                          </select>
-                        </div>
-                        <input type="date" value={glucoseDate} onChange={(e) => setGlucoseDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" />
-                        <div className="flex gap-2">
-                          <button onClick={addGlucose} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-medium">Add</button>
-                          <button onClick={() => { setShowGlucoseForm(false); setGlucoseValue(''); }} className="px-3 py-2 text-slate-400 hover:text-white rounded-lg text-sm">Cancel</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Glucose list & chart */}
-                  {glucoseEntries.length > 0 && (
-                    <>
-                      <h4 className="text-slate-300 text-sm font-medium mb-2">Glucose trend (last 14 days)</h4>
-                      <div className="mb-4 h-40">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={(() => {
-                            const now = new Date();
-                            const points = [];
-                            for (let i = 13; i >= 0; i--) {
-                              const d = new Date(now);
-                              d.setDate(d.getDate() - i);
-                              const dateStr = formatDateLocal(d);
-                              const dayEntries = glucoseEntries.filter(e => e.date === dateStr);
-                              const avg = dayEntries.length ? (dayEntries.reduce((s, e) => s + parseFloat(e.value), 0) / dayEntries.length).toFixed(0) : null;
-                              points.push({ date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: dateStr, value: avg != null ? parseInt(avg, 10) : null });
-                            }
-                            return points;
-                          })()}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
-                            <YAxis stroke="#94a3b8" fontSize={10} domain={[60, 180]} />
-                            <Tooltip contentStyle={{ backgroundColor: 'rgba(30,41,59,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px' }} formatter={(v) => [v != null ? `${v} mg/dL` : '—', 'Glucose']} />
-                            <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} connectNulls name="Glucose" />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {sortByDateDesc(glucoseEntries).slice(0, 14).map(e => (
-                          <div key={e.id} className="flex items-center justify-between py-1.5 border-b border-white/5">
-                            <span className="text-slate-300 text-sm">{parseLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {e.type === 'fasting' ? 'Fasting' : e.type === 'post_meal' ? 'Post-meal' : 'Random'}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-white font-medium">{e.value} mg/dL</span>
-                              <button onClick={() => deleteGlucose(e.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="h-3 w-3" /></button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {/* Log A1C */}
-                  <div className="mt-6 pt-4 border-t border-white/5">
-                    {!showA1cForm ? (
-                      <button onClick={() => setShowA1cForm(true)} className="w-full py-2 rounded-lg border border-dashed border-slate-500 text-slate-400 hover:text-white hover:border-cyan-500/50 text-sm">+ Log A1C</button>
-                    ) : (
-                      <div className="rounded-xl p-3 bg-slate-700/50 space-y-2">
-                        <input type="number" step="0.1" min="4" max="15" value={a1cValue} onChange={(e) => setA1cValue(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2" placeholder="A1C %" />
-                        <input type="date" value={a1cDate} onChange={(e) => setA1cDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" />
-                        <div className="flex gap-2">
-                          <button onClick={addA1c} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white py-2 rounded-lg text-sm font-medium">Add</button>
-                          <button onClick={() => { setShowA1cForm(false); setA1cValue(''); }} className="px-3 py-2 text-slate-400 hover:text-white rounded-lg text-sm">Cancel</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {a1cEntries.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {sortByDateDesc(a1cEntries).map(e => (
-                        <div key={e.id} className="flex items-center justify-between py-1.5 border-b border-white/5">
-                          <span className="text-slate-300 text-sm">{parseLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-cyan-400 font-medium">{e.value}%</span>
-                            <button onClick={() => deleteA1c(e.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="h-3 w-3" /></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
@@ -4937,6 +4836,9 @@ const wipeAllData = () => {
           </div>
         )}
       </div>
+      <footer className="py-3 text-center text-slate-500 text-xs border-t border-white/[0.04]">
+        PepTalk v{APP_VERSION}
+      </footer>
     </div>
   );
 };
