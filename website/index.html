@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Download PepTalk — track weight, injections, measurements, and progress for your health journey." />
+  <meta name="description" content="PepTalk — track weight, injections, glucose, measurements, and progress. One app for your health journey." />
   <title>PepTalk — Your Health Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,22 +21,25 @@
       --text-muted: #8a8a9a;
       --border: rgba(255, 255, 255, 0.06);
     }
-    html { scroll-behavior: smooth; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
-      min-height: 100vh;
       -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
-    /* Animated background */
     .bg-wrap {
       position: fixed;
       inset: 0;
       z-index: 0;
       overflow: hidden;
+      pointer-events: none;
     }
     .bg-wrap::before {
       content: '';
@@ -45,31 +48,8 @@
       background:
         radial-gradient(ellipse 100% 80% at 50% -30%, rgba(212, 168, 83, 0.18), transparent 55%),
         radial-gradient(ellipse 70% 50% at 100% 50%, rgba(212, 168, 83, 0.08), transparent 45%),
-        radial-gradient(ellipse 60% 60% at 0% 80%, rgba(212, 168, 83, 0.06), transparent 45%),
         var(--bg);
-      animation: bgPulse 12s ease-in-out infinite;
     }
-    .orb {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(80px);
-      opacity: 0.5;
-      animation: orbFloat 20s ease-in-out infinite;
-    }
-    .orb-1 { width: 400px; height: 400px; background: var(--accent-glow); top: -150px; left: -100px; animation-delay: 0s; }
-    .orb-2 { width: 300px; height: 300px; background: rgba(212, 168, 83, 0.15); bottom: -80px; right: -80px; animation-delay: -7s; animation-duration: 25s; }
-    .orb-3 { width: 200px; height: 200px; background: rgba(212, 168, 83, 0.1); top: 40%; left: 10%; animation-delay: -3s; animation-duration: 18s; }
-    @keyframes bgPulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.92; }
-    }
-    @keyframes orbFloat {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      33% { transform: translate(30px, -20px) scale(1.05); }
-      66% { transform: translate(-20px, 20px) scale(0.98); }
-    }
-
-    /* Grid overlay */
     .grid-overlay {
       position: fixed;
       inset: 0;
@@ -80,141 +60,101 @@
       background-size: 60px 60px;
       pointer-events: none;
     }
-    .content { position: relative; z-index: 1; }
 
-    /* Overlay scroll: hero stays fixed, content scrolls up over it */
-    .hero-wrap {
-      position: fixed;
-      inset: 0;
-      z-index: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-    }
-    .hero-wrap * { pointer-events: auto; }
-    .scroll-content {
+    .page {
       position: relative;
-      z-index: 2;
-      padding-top: 100vh;
-      background: transparent;
-      pointer-events: none;
-    }
-    .scroll-content .screenshots-section,
-    .scroll-content .section,
-    .scroll-content .strip,
-    .scroll-content footer {
-      background: var(--bg);
-      pointer-events: auto;
-    }
-    .scroll-content .strip {
-      background: linear-gradient(180deg, var(--bg-elevated) 0%, rgba(10, 10, 12, 0.98) 100%);
+      z-index: 1;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: clamp(0.5rem, 2vw, 1rem) clamp(1rem, 4vw, 1.5rem);
     }
 
-    /* Animations */
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(24px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes btnGlow {
-      0%, 100% { box-shadow: 0 4px 24px rgba(212, 168, 83, 0.4); }
-      50% { box-shadow: 0 4px 36px rgba(212, 168, 83, 0.55); }
-    }
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-
-    /* Hero */
+    /* Hero — compact */
     .hero {
-      min-height: auto;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       text-align: center;
-      padding: 3rem 1.5rem 2rem;
+      padding: 0.5rem 0 0.75rem;
+    }
+    .hero .badge {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(212, 168, 83, 0.2);
+      margin-bottom: 0.4rem;
     }
     .hero .logo {
-      font-size: clamp(2.5rem, 8vw, 4rem);
+      font-size: clamp(1.75rem, 5vw, 2.5rem);
       font-weight: 800;
       letter-spacing: -0.04em;
-      margin-bottom: 0.35rem;
       background: linear-gradient(135deg, #f0c674, var(--accent), #a67c52);
-      background-size: 200% auto;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      animation: fadeInUp 0.8s ease-out, shimmer 6s linear infinite;
-      animation-fill-mode: both;
     }
     .hero .tagline {
       color: var(--text-muted);
-      font-size: 1rem;
-      margin-bottom: 0.85rem;
+      font-size: 0.7rem;
+      margin-top: 0.2rem;
       font-weight: 500;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      animation: fadeInUp 0.7s ease-out 0.15s both;
     }
     .hero h2 {
-      font-size: clamp(1.85rem, 5vw, 3rem);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      line-height: 1.15;
-      max-width: 560px;
-      margin-bottom: 0.6rem;
-      animation: fadeInUp 0.7s ease-out 0.25s both;
+      font-size: clamp(1rem, 2.5vw, 1.35rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      max-width: 480px;
+      margin-top: 0.4rem;
+      line-height: 1.3;
     }
-    .hero .sub {
-      color: var(--text-muted);
-      font-size: 1.1rem;
-      line-height: 1.65;
-      max-width: 460px;
-      margin-bottom: 1.35rem;
-      animation: fadeInUp 0.7s ease-out 0.35s both;
+    .hero .btns {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 0.5rem;
     }
     .btn-download {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0.6rem;
+      gap: 0.4rem;
       background: linear-gradient(135deg, var(--accent), #c49a4a);
       color: #08080a;
       font-family: inherit;
-      font-size: 1.15rem;
+      font-size: 0.9rem;
       font-weight: 700;
       text-decoration: none;
-      padding: 1.1rem 2.25rem;
-      border-radius: 0.875rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 0.6rem;
       border: none;
       cursor: pointer;
-      transition: transform 0.2s, filter 0.2s, box-shadow 0.2s;
-      box-shadow: 0 4px 24px rgba(212, 168, 83, 0.4);
-      animation: fadeInUp 0.7s ease-out 0.5s both, btnGlow 3s ease-in-out infinite 1s;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 2px 16px rgba(212, 168, 83, 0.4);
     }
     .btn-download:hover {
-      transform: translateY(-3px) scale(1.02);
-      box-shadow: 0 12px 40px rgba(212, 168, 83, 0.5);
-      filter: brightness(1.08);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(212, 168, 83, 0.5);
     }
-    .btn-download:active { transform: translateY(0) scale(1); }
-    .btn-download svg { width: 1.3rem; height: 1.3rem; transition: transform 0.2s; flex-shrink: 0; }
-    .btn-download:hover svg { transform: translateY(2px); }
-    .btn-download .btn-main { display: block; }
-    .btn-download .btn-sub { display: block; font-size: 0.75rem; font-weight: 500; opacity: 0.9; margin-top: 0.15rem; }
+    .btn-download svg { width: 1rem; height: 1rem; flex-shrink: 0; }
     .btn-coffee {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      margin-top: 0.75rem;
-      padding: 0.5rem 1rem;
-      font-size: 0.9rem;
+      gap: 0.3rem;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.75rem;
       font-weight: 600;
       color: var(--accent);
       background: transparent;
@@ -228,171 +168,97 @@
       border-color: var(--accent);
     }
 
-    /* Features */
-    .section {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 2.5rem 1.5rem;
+    /* Features grid — all in one view */
+    .features-wrap {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.5rem 0;
     }
-    .section.reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
-    .section.reveal.in-view { opacity: 1; transform: translateY(0); }
     .section-title {
-      font-size: clamp(1.6rem, 3.5vw, 2.25rem);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      text-align: center;
-      margin-bottom: 0.5rem;
-    }
-    .section-sub {
+      font-size: clamp(0.85rem, 2vw, 1rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
       color: var(--text-muted);
+      margin-bottom: 0.5rem;
       text-align: center;
-      margin-bottom: 1.25rem;
-      max-width: 520px;
-      margin-left: auto;
-      margin-right: auto;
-      font-size: 1.05rem;
     }
     .features {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 1.25rem;
-      margin-top: 1.25rem;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.5rem;
+      max-width: 1000px;
+      width: 100%;
+      flex: 1;
+      min-height: 0;
     }
     .feature {
       background: var(--bg-elevated);
       border: 1px solid var(--border);
-      border-radius: 1.25rem;
-      padding: 2rem;
-      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
-      animation: fadeInUp 0.6s ease-out both;
-      backdrop-filter: blur(12px);
+      border-radius: 0.75rem;
+      padding: 0.6rem 0.75rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      backdrop-filter: blur(8px);
     }
-    .feature:nth-child(1) { animation-delay: 0.1s; }
-    .feature:nth-child(2) { animation-delay: 0.15s; }
-    .feature:nth-child(3) { animation-delay: 0.2s; }
-    .feature:nth-child(4) { animation-delay: 0.25s; }
-    .feature:nth-child(5) { animation-delay: 0.3s; }
-    .feature:nth-child(6) { animation-delay: 0.35s; }
     .feature:hover {
-      transform: translateY(-6px);
       border-color: rgba(212, 168, 83, 0.25);
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 168, 83, 0.08);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     }
     .feature-icon {
-      width: 3rem;
-      height: 3rem;
-      border-radius: 0.75rem;
-      background: linear-gradient(135deg, var(--accent-soft), rgba(212, 168, 83, 0.06));
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 0.4rem;
+      background: var(--accent-soft);
       color: var(--accent);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 1.25rem;
-      font-size: 1.5rem;
-      border: 1px solid rgba(212, 168, 83, 0.15);
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-    .feature:hover .feature-icon {
-      transform: scale(1.08);
-      box-shadow: 0 8px 24px rgba(212, 168, 83, 0.2);
-    }
-    .feature h3 {
-      font-size: 1.15rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-    }
-    .feature p {
-      color: var(--text-muted);
-      font-size: 0.95rem;
-      line-height: 1.55;
-    }
-
-    /* Strip */
-    .strip {
-      background: linear-gradient(180deg, var(--bg-elevated) 0%, rgba(10, 10, 12, 0.98) 100%);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      padding: 2.5rem 1.5rem;
-      text-align: center;
-    }
-    .strip.reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
-    .strip.reveal.in-view { opacity: 1; transform: translateY(0); }
-    .strip p {
-      color: var(--text-muted);
-      max-width: 560px;
-      margin: 0 auto 1rem;
-      line-height: 1.65;
-      font-size: 1.05rem;
-    }
-    .strip .btn-download { margin-top: 0.5rem; animation: none; }
-    .strip .note { margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted); opacity: 0.8; }
-
-    /* Footer */
-    footer {
-      text-align: center;
-      padding: 1.5rem 1rem;
-      color: var(--text-muted);
       font-size: 0.9rem;
+      flex-shrink: 0;
     }
-
-    /* Badge pill */
-    .badge {
-      display: inline-block;
-      padding: 0.35rem 0.85rem;
-      border-radius: 999px;
+    .feature-text h3 {
       font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      background: var(--accent-soft);
-      color: var(--accent);
-      border: 1px solid rgba(212, 168, 83, 0.2);
-      margin-bottom: 1rem;
-      animation: fadeInUp 0.7s ease-out 0.05s both;
+      font-weight: 700;
+      margin-bottom: 0.15rem;
+    }
+    .feature-text p {
+      color: var(--text-muted);
+      font-size: 0.65rem;
+      line-height: 1.35;
     }
 
-    /* Screenshots section (glapp-style) */
-    .screenshots-section {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 2.5rem 1.5rem;
-    }
-    .screenshots-section.reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
-    .screenshots-section.reveal.in-view { opacity: 1; transform: translateY(0); }
-    .screenshots-section .section-title {
-      margin-bottom: 0.5rem;
-    }
-    .screenshots-section .section-sub {
-      margin-bottom: 1.75rem;
-    }
-    .screenshots-row {
+    /* Screenshots row — compact */
+    .screens-row {
+      flex-shrink: 0;
       display: flex;
-      flex-wrap: wrap;
       justify-content: center;
-      gap: 1.5rem;
-      margin-top: 1rem;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      padding: 0.25rem 0;
     }
     .phone-frame {
-      flex: 0 0 auto;
-      width: min(180px, 42vw);
-      max-width: 200px;
+      width: clamp(70px, 14vw, 100px);
       background: var(--bg-elevated);
       border: 1px solid var(--border);
-      border-radius: 1.75rem;
-      padding: 0.2rem;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04);
-      transition: transform 0.3s, box-shadow 0.3s;
+      border-radius: 0.75rem;
+      padding: 2px;
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s;
     }
     .phone-frame:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(212, 168, 83, 0.12);
+      transform: translateY(-2px);
+      border-color: rgba(212, 168, 83, 0.2);
     }
     .phone-frame-inner {
-      border-radius: 1.4rem;
+      border-radius: 0.5rem;
       overflow: hidden;
-      background: #0a0a0c;
       aspect-ratio: 9 / 19.5;
-      position: relative;
+      background: #0a0a0c;
     }
     .phone-frame-inner img {
       display: block;
@@ -403,16 +269,47 @@
     }
     .phone-frame-caption {
       text-align: center;
-      font-size: 0.8rem;
+      font-size: 0.6rem;
       font-weight: 600;
       color: var(--text-muted);
-      margin-top: 0.6rem;
-    }
-    .phone-frame {
-      cursor: pointer;
+      margin-top: 0.25rem;
     }
 
-    /* Lightbox: click to view full size */
+    /* Strip + footer */
+    .strip {
+      flex-shrink: 0;
+      text-align: center;
+      padding: 0.5rem 0.25rem 0.25rem;
+      border-top: 1px solid var(--border);
+    }
+    .strip p {
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      line-height: 1.4;
+      margin-bottom: 0.35rem;
+    }
+    .strip .btn-download { margin: 0 0.25rem 0.15rem 0; }
+    .strip .note { font-size: 0.6rem; opacity: 0.85; }
+    footer {
+      flex-shrink: 0;
+      text-align: center;
+      padding: 0.25rem 0;
+      color: var(--text-muted);
+      font-size: 0.65rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* Responsive: fewer columns on small screens */
+    @media (max-width: 900px) {
+      .features { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .features { grid-template-columns: repeat(2, 1fr); }
+      .screens-row { flex-wrap: wrap; justify-content: center; }
+    }
+
+    /* Lightbox */
     .lightbox {
       position: fixed;
       inset: 0;
@@ -424,17 +321,13 @@
       padding: 2rem;
       cursor: pointer;
     }
-    .lightbox.open {
-      display: flex;
-    }
+    .lightbox.open { display: flex; }
     .lightbox img {
       max-width: 100%;
       max-height: 90vh;
       width: auto;
       height: auto;
       border-radius: 0.5rem;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
-      cursor: default;
       pointer-events: none;
     }
     .lightbox-close {
@@ -448,127 +341,149 @@
       background: rgba(255, 255, 255, 0.1);
       color: var(--text);
       font-size: 1.5rem;
-      line-height: 1;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s;
     }
-    .lightbox-close:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
+    .lightbox-close:hover { background: rgba(255, 255, 255, 0.2); }
   </style>
 </head>
 <body>
-  <div class="bg-wrap">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
+  <div class="bg-wrap"></div>
   <div class="grid-overlay"></div>
-  <div class="hero-wrap">
-    <section class="hero">
-      <span class="badge">Android app — free download</span>
-      <h1 class="logo">PepTalk</h1>
-      <p class="tagline">Weight · Injections · Measurements · Tools</p>
-      <h2>Track your health journey in one place</h2>
-      <p class="sub">Log weight, medications, body measurements, and get reminders — simple, private, and built for the long run.</p>
-      <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        <span><span class="btn-main">Give it a shot</span><span class="btn-sub">For Android</span></span>
-      </a>
-      <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer" title="Support the app">☕ Buy me a coffee</a>
-    </section>
-  </div>
 
-  <div class="scroll-content">
-    <section class="screenshots-section reveal">
-      <h2 class="section-title">See PepTalk in action</h2>
-      <p class="section-sub">Summary, weight, injections, and insights — all in one place.</p>
-      <div class="screenshots-row">
-        <div class="phone-frame" data-screenshot="screenshots/summary.png" data-alt="PepTalk Summary screen" role="button" tabindex="0" title="Click to view full size">
+  <main class="page">
+    <section class="hero">
+      <span class="badge">Android · Free</span>
+      <h1 class="logo">PepTalk</h1>
+      <p class="tagline">Weight · Injections · Glucose · Measurements · Tools</p>
+      <h2>Track your health journey in one place</h2>
+      <div class="btns">
+        <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download for Android
+        </a>
+        <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer">☕ Coffee</a>
+      </div>
+    </section>
+
+    <div class="features-wrap">
+      <h2 class="section-title">Everything you need</h2>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">⚖️</div>
+          <div class="feature-text">
+            <h3>Weight & trends</h3>
+            <p>Log weight, charts, goals, BMI.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">💉</div>
+          <div class="feature-text">
+            <h3>Injections & schedules</h3>
+            <p>Doses, sites, split dosing, reminders.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🩸</div>
+          <div class="feature-text">
+            <h3>Glucose & A1C</h3>
+            <p>Log fasting/random glucose, A1C trends.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📊</div>
+          <div class="feature-text">
+            <h3>Summary dashboard</h3>
+            <p>Weight change, 7-day average, injection markers.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🧬</div>
+          <div class="feature-text">
+            <h3>Insights & body phase</h3>
+            <p>Where you're at in your cycle, what to expect.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📐</div>
+          <div class="feature-text">
+            <h3>Body measurements</h3>
+            <p>Waist, progress photos, timeline.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🧮</div>
+          <div class="feature-text">
+            <h3>Calculators & tools</h3>
+            <p>BMI, TDEE, schedules, doctor summary.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔔</div>
+          <div class="feature-text">
+            <h3>Reminders</h3>
+            <p>Notifications even when app is closed.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">💊</div>
+          <div class="feature-text">
+            <h3>Peptides & hormones</h3>
+            <p>Semaglutide, tirzepatide, BPC-157, testosterone, HCG, and more.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔒</div>
+          <div class="feature-text">
+            <h3>Private by design</h3>
+            <p>Data stays on your device. No account.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="screens-row">
+        <div class="phone-frame" data-screenshot="screenshots/summary.png" data-alt="Summary" role="button" tabindex="0" title="Click to enlarge">
           <div class="phone-frame-inner">
-            <img src="screenshots/summary.png" alt="PepTalk Summary screen — weight change, BMI, goals" loading="lazy" />
+            <img src="screenshots/summary.png" alt="Summary" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Summary</p>
         </div>
-        <div class="phone-frame" data-screenshot="screenshots/weight.png" data-alt="PepTalk Weight screen" role="button" tabindex="0" title="Click to view full size">
+        <div class="phone-frame" data-screenshot="screenshots/weight.png" data-alt="Weight" role="button" tabindex="0" title="Click to enlarge">
           <div class="phone-frame-inner">
-            <img src="screenshots/weight.png" alt="PepTalk Weight screen — logs and charts" loading="lazy" />
+            <img src="screenshots/weight.png" alt="Weight" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Weight</p>
         </div>
-        <div class="phone-frame" data-screenshot="screenshots/injections.png" data-alt="PepTalk Injections screen" role="button" tabindex="0" title="Click to view full size">
+        <div class="phone-frame" data-screenshot="screenshots/injections.png" data-alt="Injections" role="button" tabindex="0" title="Click to enlarge">
           <div class="phone-frame-inner">
-            <img src="screenshots/injections.png" alt="PepTalk Injections screen — doses and schedule" loading="lazy" />
+            <img src="screenshots/injections.png" alt="Injections" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Injections</p>
         </div>
-        <div class="phone-frame" data-screenshot="screenshots/insights.png" data-alt="PepTalk Insights screen" role="button" tabindex="0" title="Click to view full size">
+        <div class="phone-frame" data-screenshot="screenshots/insights.png" data-alt="Insights" role="button" tabindex="0" title="Click to enlarge">
           <div class="phone-frame-inner">
-            <img src="screenshots/insights.png" alt="PepTalk Insights screen — body phase and trends" loading="lazy" />
+            <img src="screenshots/insights.png" alt="Insights" loading="lazy" />
           </div>
           <p class="phone-frame-caption">Insights</p>
         </div>
       </div>
-    </section>
+    </div>
 
-    <section class="section reveal">
-      <h2 class="section-title">Everything you need, nothing you don’t</h2>
-      <p class="section-sub">Weight, injections, body metrics, peptides, hormones, and smart reminders — all in one app.</p>
-      <div class="features">
-        <div class="feature">
-          <div class="feature-icon">⚖️</div>
-          <h3>Weight & trends</h3>
-          <p>Log weight, see charts, and track progress toward your goal over time.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">💉</div>
-          <h3>Injections & schedules</h3>
-          <p>Record doses, sites, and notes. Get reminders so you never miss a shot.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">🧬</div>
-          <h3>Popular peptides & hormones</h3>
-          <p>Semaglutide, tirzepatide, BPC-157, testosterone, HCG, ipamorelin, and more — track any protocol in one place.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">📊</div>
-          <h3>Insights & body phase</h3>
-          <p>See where you're at in your cycle. Body phase and insights help you follow progress and understand what to expect.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">📐</div>
-          <h3>Body measurements</h3>
-          <p>Waist, progress photos, and other metrics in one simple timeline.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">🔔</div>
-          <h3>Reminders that work</h3>
-          <p>Notification reminders even when the app is closed — no account required.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="strip reveal">
-      <p><strong>Private by design.</strong> Your data stays on your device. No accounts, no selling data — just you and your numbers.</p>
-      <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk"><span class="btn-main">Give it a shot</span><span class="btn-sub">For Android</span></a>
-      <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer" style="margin-top: 0.5rem;">☕ Buy me a coffee</a>
-      <p class="note">Free · Web download · APK for Android 5.0+</p>
+    <section class="strip">
+      <p><strong>Private.</strong> Your data stays on your device. No accounts, no selling data.</p>
+      <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
+      <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+      <p class="note">Free · Android 5.0+ · <a href="mailto:Ryan@Isoregret.media?subject=PepTalk%20iOS">iOS? Contact us</a></p>
     </section>
 
     <footer>
-      <p>PepTalk — Your health tracker. Free web download for Android.</p>
-      <p style="margin-top: 0.5rem; font-size: 0.85rem;">Want iOS? <a href="mailto:Ryan@Isoregret.media?subject=PepTalk%20-%20iOS%20inquiry">Contact us</a>.</p>
-      <p style="margin-top: 0.75rem;">
-        <a href="mailto:Ryan@Isoregret.media?subject=PepTalk%20suggestion%20%26%20feedback">Suggestions?</a> · 
-        <a href="https://buymeacoffee.com/rtaylorbrix" target="_blank" rel="noopener noreferrer">Buy me a coffee</a>
-      </p>
+      PepTalk — Your health tracker. <a href="mailto:Ryan@Isoregret.media?subject=PepTalk%20feedback">Feedback</a> · <a href="https://buymeacoffee.com/rtaylorbrix" target="_blank" rel="noopener noreferrer">Coffee</a>
     </footer>
-  </div>
+  </main>
 
   <div class="lightbox" id="lightbox" aria-hidden="true" title="Click to close">
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
@@ -577,59 +492,26 @@
 
   <script>
     (function() {
-      var reveals = document.querySelectorAll('.reveal');
-      function reveal() {
-        reveals.forEach(function(el) {
-          var top = el.getBoundingClientRect().top;
-          var windowHeight = window.innerHeight;
-          if (top < windowHeight - 80) el.classList.add('in-view');
-        });
-      }
-      window.addEventListener('scroll', reveal);
-      window.addEventListener('load', reveal);
-      reveal();
-    })();
-
-    (function() {
       var lightbox = document.getElementById('lightbox');
       var lightboxImg = document.getElementById('lightbox-img');
       var frames = document.querySelectorAll('.phone-frame[data-screenshot]');
-
       function openLightbox(src, alt) {
         lightboxImg.src = src;
         lightboxImg.alt = alt || 'Screenshot';
         lightbox.classList.add('open');
-        lightbox.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
       }
       function closeLightbox() {
         lightbox.classList.remove('open');
-        lightbox.setAttribute('aria-hidden', 'true');
         document.body.style.overflow = '';
       }
-
       frames.forEach(function(frame) {
-        frame.addEventListener('click', function() {
-          openLightbox(frame.getAttribute('data-screenshot'), frame.getAttribute('data-alt'));
-        });
-        frame.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openLightbox(frame.getAttribute('data-screenshot'), frame.getAttribute('data-alt'));
-          }
-        });
+        frame.addEventListener('click', function() { openLightbox(frame.getAttribute('data-screenshot'), frame.getAttribute('data-alt')); });
+        frame.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(frame.getAttribute('data-screenshot'), frame.getAttribute('data-alt')); } });
       });
-
-      lightbox.addEventListener('click', function(e) {
-        if (e.target === lightbox) closeLightbox();
-      });
-      lightbox.querySelector('.lightbox-close').addEventListener('click', function(e) {
-        e.stopPropagation();
-        closeLightbox();
-      });
-      document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox();
-      });
+      lightbox.addEventListener('click', function(e) { if (e.target === lightbox) closeLightbox(); });
+      lightbox.querySelector('.lightbox-close').addEventListener('click', function(e) { e.stopPropagation(); closeLightbox(); });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox(); });
     })();
   </script>
 </body>
