@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
+import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
@@ -1995,7 +1995,8 @@ const wipeAllData = () => {
         doseData[inj.type] = doseInMg;
         unitData[inj.type] = inj.unit;
       });
-      return { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight != null ? parseFloat(weightEntry.weight) : null, units: unitData, ...doseData };
+      const injectionsForTooltip = dayInjections.map(inj => ({ type: inj.type, dose: inj.dose, unit: inj.unit }));
+      return { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight != null ? parseFloat(weightEntry.weight) : null, units: unitData, hasInjection: dayInjections.length > 0, injections: injectionsForTooltip, ...doseData };
     });
     // 7-day moving average trend line
     points.forEach(p => {
@@ -2851,6 +2852,25 @@ const wipeAllData = () => {
                           return [value, name]; 
                         }} 
                         labelFormatter={(label) => label}
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          const p = payload[0]?.payload;
+                          return (
+                            <div className="rounded-lg bg-slate-900/95 border border-slate-600/50 px-3 py-2 shadow-xl min-w-[160px]">
+                              <div className="text-slate-300 text-sm font-medium mb-1.5">{label}</div>
+                              {p?.weight != null && <div className="text-white text-sm">Weight: {p.weight} lbs</div>}
+                              {p?.weightTrend != null && <div className="text-slate-400 text-xs">7-day avg: {p.weightTrend.toFixed(1)} lbs</div>}
+                              {p?.injections?.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-slate-600/50">
+                                  <div className="text-emerald-400 text-xs font-medium mb-1">Injections</div>
+                                  {p.injections.map((inj, i) => (
+                                    <div key={i} className="text-slate-200 text-xs">{inj.type} {inj.dose}{inj.unit}</div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }}
                       />
                       {visibleLines.weight && (
                         <Area 
@@ -2870,8 +2890,21 @@ const wipeAllData = () => {
                           dataKey="weight" 
                           stroke="#f59e0b" 
                           strokeWidth={2.5} 
-                          dot={{ fill: '#0f172a', stroke: '#f59e0b', strokeWidth: 2, r: 4 }} 
-                          activeDot={{ r: 5, stroke: '#f59e0b', strokeWidth: 2, fill: '#0f172a' }}
+                          dot={({ cx, cy, payload }) => {
+                            if (payload.weight == null) return null;
+                            const isInjectionDay = payload.hasInjection;
+                            return (
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={isInjectionDay ? 6 : 4} 
+                                fill="#0f172a" 
+                                stroke={isInjectionDay ? '#10b981' : '#f59e0b'} 
+                                strokeWidth={2}
+                              />
+                            );
+                          }}
+                          activeDot={{ r: 6, stroke: '#f59e0b', strokeWidth: 2, fill: '#0f172a' }}
                           connectNulls 
                           name="Weight"
                         />
@@ -2891,21 +2924,24 @@ const wipeAllData = () => {
                       )}
                     </ComposedChart>
                   </ResponsiveContainer>
-                  <div className="flex items-center justify-center gap-6 mt-3 pt-3 border-t border-white/[0.04]">
-                    <button 
-                      onClick={() => setVisibleLines(prev => ({ ...prev, weight: !prev.weight }))}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.weight ? 'bg-amber-500/15 text-amber-400' : 'text-slate-500'}`}
-                    >
-                      <span className={`w-2.5 h-2.5 rounded-full ${visibleLines.weight ? 'bg-amber-400' : 'bg-slate-600'}`} />
-                      Weight
-                    </button>
-                    <button 
-                      onClick={() => setVisibleLines(prev => ({ ...prev, trend: !prev.trend }))}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.trend !== false ? 'bg-slate-500/15 text-slate-300' : 'text-slate-500'}`}
-                    >
-                      <span className={`inline-block w-5 h-0.5 rounded-full ${visibleLines.trend !== false ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                      7-day average
-                    </button>
+                  <div className="flex flex-col items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
+                    <div className="flex items-center gap-6">
+                      <button 
+                        onClick={() => setVisibleLines(prev => ({ ...prev, weight: !prev.weight }))}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.weight ? 'bg-amber-500/15 text-amber-400' : 'text-slate-500'}`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full ${visibleLines.weight ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                        Weight
+                      </button>
+                      <button 
+                        onClick={() => setVisibleLines(prev => ({ ...prev, trend: !prev.trend }))}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.trend !== false ? 'bg-slate-500/15 text-slate-300' : 'text-slate-500'}`}
+                      >
+                        <span className={`inline-block w-5 h-0.5 rounded-full ${visibleLines.trend !== false ? 'bg-slate-400' : 'bg-slate-600'}`} />
+                        7-day average
+                      </button>
+                    </div>
+                    <p className="text-slate-500 text-xs">Green ring on a point = injection that day</p>
                   </div>
                 </div>
               </div>

@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "exportDate": "2025-01-31T12:00:00.000Z",
+  "userProfile": {
+    "height": 70,
+    "goalWeight": 185
+  },
+  "weightEntries": [
+    { "id": 1704067200000, "date": "2025-01-01", "weight": 212 },
+    { "id": 1704153600000, "date": "2025-01-02", "weight": 211.5 },
+    { "id": 1704240000000, "date": "2025-01-05", "weight": 210 },
+    { "id": 1704326400000, "date": "2025-01-08", "weight": 209 },
+    { "id": 1704412800000, "date": "2025-01-10", "weight": 208.5 },
+    { "id": 1704499200000, "date": "2025-01-12", "weight": 207 },
+    { "id": 1704585600000, "date": "2025-01-15", "weight": 206 },
+    { "id": 1704672000000, "date": "2025-01-18", "weight": 205 },
+    { "id": 1704758400000, "date": "2025-01-20", "weight": 204 },
+    { "id": 1704844800000, "date": "2025-01-22", "weight": 203.5 },
+    { "id": 1704931200000, "date": "2025-01-25", "weight": 202 },
+    { "id": 1705017600000, "date": "2025-01-28", "weight": 201 },
+    { "id": 1705104000000, "date": "2025-01-31", "weight": 200 }
+  ],
+  "injectionEntries": [
+    { "id": 1704067200001, "date": "2025-01-01", "type": "Semaglutide", "dose": "0.25", "unit": "mg", "site": "Stomach", "notes": "" },
+    { "id": 1704672000001, "date": "2025-01-08", "type": "Semaglutide", "dose": "0.5", "unit": "mg", "site": "Thigh", "notes": "" },
+    { "id": 1705276800001, "date": "2025-01-15", "type": "Semaglutide", "dose": "0.5", "unit": "mg", "site": "Stomach", "notes": "" },
+    { "id": 1705881600001, "date": "2025-01-22", "type": "Semaglutide", "dose": "1", "unit": "mg", "site": "Thigh", "notes": "" },
+    { "id": 1706486400001, "date": "2025-01-29", "type": "Semaglutide", "dose": "1", "unit": "mg", "site": "Stomach", "notes": "" }
+  ],
+  "measurementEntries": [
+    { "id": 1704067200002, "type": "Waist", "value": "38", "date": "2025-01-01" },
+    { "id": 1704758400002, "type": "Waist", "value": "37", "date": "2025-01-20" },
+    { "id": 1705104000002, "type": "Waist", "value": "36.5", "date": "2025-01-31" }
+  ],
+  "progressPhotos": [],
+  "schedules": [
+    {
+      "id": 1704067200003,
+      "medication": "Semaglutide",
+      "frequencyDays": 7,
+      "preferredDay": 0,
+      "startDate": "2025-01-01",
+      "scheduleType": "recurring"
+    }
+  ],
+  "titrationPlans": [
+    {
+      "id": 1704067200004,
+      "medication": "Semaglutide",
+      "steps": [
+        { "dose": "0.25", "weeks": 4, "unit": "mg" },
+        { "dose": "0.5", "weeks": 4, "unit": "mg" },
+        { "dose": "1", "weeks": 4, "unit": "mg" }
+      ],
+      "startDate": "2025-01-01"
+    }
+  ],
+  "journalEntries": [
+    { "id": 1704067200005, "date": "2025-01-01", "content": "Starting the journey. Feeling motivated.", "mood": "neutral", "energy": 6, "hunger": 5 },
+    { "id": 1704153600005, "date": "2025-01-02", "content": "First full day. Appetite already a bit lower.", "mood": "neutral", "energy": 5, "hunger": 4 },
+    { "id": 1704672000005, "date": "2025-01-08", "content": "Upped to 0.5 mg. Slight nausea but manageable.", "mood": "neutral", "energy": 5, "hunger": 3 },
+    { "id": 1705276800005, "date": "2025-01-15", "content": "Two weeks in. Down a few pounds. Clothes fitting better.", "mood": "neutral", "energy": 6, "hunger": 3 }
+  ],
+  "dailyTrackEntries": [
+    { "id": 1704067200006, "date": "2025-01-01", "hydrationOz": 64, "proteinG": 120 },
+    { "id": 1704153600006, "date": "2025-01-02", "hydrationOz": 48, "proteinG": 95 },
+    { "id": 1704240000006, "date": "2025-01-05", "hydrationOz": 56, "proteinG": 110 },
+    { "id": 1704326400006, "date": "2025-01-08", "hydrationOz": 64, "proteinG": 105 },
+    { "id": 1704412800006, "date": "2025-01-10", "hydrationOz": 52, "proteinG": 100 },
+    { "id": 1704499200006, "date": "2025-01-12", "hydrationOz": 60, "proteinG": 115 },
+    { "id": 1704585600006, "date": "2025-01-15", "hydrationOz": 64, "proteinG": 118 },
+    { "id": 1704672000006, "date": "2025-01-18", "hydrationOz": 48, "proteinG": 102 },
+    { "id": 1704758400006, "date": "2025-01-20", "hydrationOz": 56, "proteinG": 108 },
+    { "id": 1704844800006, "date": "2025-01-22", "hydrationOz": 64, "proteinG": 112 },
+    { "id": 1704931200006, "date": "2025-01-25", "hydrationOz": 52, "proteinG": 98 },
+    { "id": 1705017600006, "date": "2025-01-28", "hydrationOz": 60, "proteinG": 110 },
+    { "id": 1705104000006, "date": "2025-01-31", "hydrationOz": 64, "proteinG": 125 }
+  ],
+  "glucoseEntries": [
+    { "id": 1704067200007, "date": "2025-01-01", "value": 108, "type": "fasting" },
+    { "id": 1704153600007, "date": "2025-01-02", "value": 102, "type": "fasting" },
+    { "id": 1704672000007, "date": "2025-01-08", "value": 98, "type": "fasting" },
+    { "id": 1705276800007, "date": "2025-01-15", "value": 95, "type": "fasting" },
+    { "id": 1705881600007, "date": "2025-01-22", "value": 92, "type": "fasting" },
+    { "id": 1705104000007, "date": "2025-01-31", "value": 90, "type": "fasting" }
+  ],
+  "a1cEntries": [
+    { "id": 1704067200008, "date": "2024-12-15", "value": 6.2 },
+    { "id": 1705276800008, "date": "2025-01-15", "value": 5.8 }
+  ]
+}
