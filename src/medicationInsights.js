@@ -42,19 +42,22 @@ export const MEDICATION_EFFECT_PROFILES = {
     effects: ['GLP-1 / GIP / Glucagon triple agonist', 'Appetite control', 'Metabolic boost', 'Fat loss'],
     sideEffects: ['Nausea', 'Increased heart rate', 'Fatigue', 'GI upset'],
     peakEffects: 'Peak effect 1–3 days post-injection; strong appetite suppression through the week',
-    steadyState: '4–6 weeks of weekly dosing for full effect'
+    steadyState: '4–6 weeks of weekly dosing for full effect',
+    splitDoseTip: 'Half dose twice per week (e.g. 2mg Mon & 2mg Thu instead of 4mg once) can give steadier levels and sometimes better tolerability.'
   },
   'Testosterone Cypionate': {
     effects: ['Sustained testosterone release', 'Muscle mass', 'Energy', 'Libido', 'Mood'],
     sideEffects: ['Injection site pain', 'Acne', 'Mood swings', 'Elevated hematocrit'],
     peakEffects: 'Peak blood levels ~24–48 hours; ester cleaves slowly over ~7–8 days',
-    steadyState: '4–6 weeks of weekly injections for stable levels'
+    steadyState: '4–6 weeks of weekly injections for stable levels',
+    splitDoseTip: 'Half dose twice per week (e.g. Mon & Thu) often gives steadier levels, less E2 spike, and sometimes lower hematocrit.'
   },
   'Testosterone Enanthate': {
     effects: ['Sustained testosterone release', 'Anabolic support', 'Energy', 'Libido'],
     sideEffects: ['Injection site pain', 'Acne', 'Mood changes', 'Hair loss in some'],
     peakEffects: 'Peak levels ~2–3 days; slightly shorter ester than cypionate',
-    steadyState: '4–5 weeks of weekly dosing for steady state'
+    steadyState: '4–5 weeks of weekly dosing for steady state',
+    splitDoseTip: 'Half dose twice per week (e.g. Mon & Thu) often gives steadier levels and smoother mood/energy.'
   },
   'HCG': {
     effects: ['LH-like stimulation', 'Testosterone support', 'Fertility', 'Testicular function'],

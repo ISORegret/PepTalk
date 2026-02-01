@@ -2812,6 +2812,12 @@ const wipeAllData = () => {
                       </div>
                     </div>
 
+                    {insight.effectProfile?.splitDoseTip && (
+                      <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-amber-200/90 text-xs">💡 {insight.effectProfile.splitDoseTip}</p>
+                      </div>
+                    )}
+
                     {/* Medication Level Chart */}
                     {getMedicationLevelChartData(insight.medication).length > 0 && (
                       <div className="mb-4">
@@ -3853,6 +3859,18 @@ const wipeAllData = () => {
                         className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
                         {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
                       </select>
+                      {MEDICATION_EFFECT_PROFILES[scheduleMed]?.splitDoseTip && (
+                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
+                          <p className="text-slate-300 text-xs mb-2">{MEDICATION_EFFECT_PROFILES[scheduleMed].splitDoseTip}</p>
+                          <button
+                            type="button"
+                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 4]); setScheduleFrequency(3); }}
+                            className="text-xs font-medium text-amber-400 hover:text-amber-300"
+                          >
+                            Use twice weekly (split dose) → Mon & Thu
+                          </button>
+                        </div>
+                      )}
                     </div>
                     
                     <div>
