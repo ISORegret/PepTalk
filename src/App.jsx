@@ -2039,18 +2039,27 @@ const wipeAllData = () => {
   const getOnTrackInfo = () => {
     const filtered = getFilteredData(weightEntries);
     if (filtered.length < 2) return null;
-    const lastInjection = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
-    if (!lastInjection) return null;
-    const med = MEDICATIONS.find(m => m.name === lastInjection.type);
-    if (!med || !['GLP-1', 'GLP-1/GIP', 'Triple Agonist'].includes(med.category)) return null;
-    const typical = TYPICAL_WEEKLY_LOSS[lastInjection.type] ?? TYPICAL_WEEKLY_LOSS[med.name] ?? 0.5;
+    // Use most recent GLP-1–type injection (user may also log hormones etc.; "On track?" is for GLP-1)
+    const medName = (e) => e.type ?? e.medication;
+    const lastGlp1Injection = [...injectionEntries]
+      .filter(e => {
+        const med = MEDICATIONS.find(m => m.name === medName(e));
+        return med && ['GLP-1', 'GLP-1/GIP', 'Triple Agonist'].includes(med.category);
+      })
+      .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
+    if (!lastGlp1Injection) return null;
+    const lastInjection = lastGlp1Injection;
+    const med = MEDICATIONS.find(m => m.name === medName(lastInjection));
+    if (!med) return null;
+    const injectionMed = medName(lastInjection);
+    const typical = TYPICAL_WEEKLY_LOSS[injectionMed] ?? TYPICAL_WEEKLY_LOSS[med.name] ?? 0.5;
     const userLoss = -parseFloat(stats.weeklyAvg); // positive = lbs lost per week
-    if (userLoss <= 0) return { med: lastInjection.type, dose: `${lastInjection.dose}${lastInjection.unit}`, typical, userLoss: 0, status: 'slower' };
+    if (userLoss <= 0) return { med: injectionMed, dose: `${lastInjection.dose}${lastInjection.unit}`, typical, userLoss: 0, status: 'slower' };
     const ratio = userLoss / typical;
     let status = 'on_track';
     if (ratio >= 1.2) status = 'ahead';
     else if (ratio < 0.7) status = 'slower';
-    return { med: lastInjection.type, dose: `${lastInjection.dose}${lastInjection.unit}`, typical, userLoss, status };
+    return { med: injectionMed, dose: `${lastInjection.dose}${lastInjection.unit}`, typical, userLoss, status };
   };
 
   // Chart data: your cumulative weight loss vs typical — week 1 through current week + 1
