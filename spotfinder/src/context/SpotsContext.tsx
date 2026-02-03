@@ -11,6 +11,13 @@ import {
   saveCollections,
   type Collection,
 } from '../data/spotStore';
+import {
+  fetchSpots as fetchSpotsFromSupabase,
+  insertSpot as insertSpotToSupabase,
+  updateSpot as updateSpotInSupabase,
+  addPhotoToSpot as addPhotoToSpotInSupabase,
+  SUPABASE_NOT_CONFIGURED,
+} from '../data/supabase';
 
 export type { Collection };
 
@@ -21,6 +28,7 @@ type SpotsContextValue = {
   updateSpot: (spotId: string, updates: Partial<Omit<PhotoSpot, 'id'>>) => Promise<void>;
   addPhotoToSpot: (spotId: string, imageUri: string, photoBy: string, note?: string) => Promise<void>;
   getSpotById: (id: string) => PhotoSpot | undefined;
+  isUserSpot: (spotId: string) => boolean;
   isLoading: boolean;
   favoriteIds: string[];
   toggleFavorite: (spotId: string) => Promise<void>;
@@ -43,18 +51,42 @@ export function SpotsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadUserSpots(), loadFavorites(), loadCollections()]).then(([loadedSpots, loadedFavs, loadedColls]) => {
-      if (!cancelled) setUserSpots(loadedSpots);
-      if (!cancelled) setFavoriteIds(loadedFavs);
-      if (!cancelled) setCollections(loadedColls);
+    async function load() {
+      const [favs, colls] = await Promise.all([loadFavorites(), loadCollections()]);
+      if (!cancelled) setFavoriteIds(favs);
+      if (!cancelled) setCollections(colls);
+      try {
+        const spots = await fetchSpotsFromSupabase();
+        if (!cancelled) {
+          setUserSpots(spots);
+          await saveUserSpots(spots);
+        }
+      } catch {
+        const spots = await loadUserSpots();
+        if (!cancelled) setUserSpots(spots);
+      }
       if (!cancelled) setIsLoading(false);
-    });
+    }
+    load();
     return () => { cancelled = true; };
   }, []);
 
   const allSpots = [...CURATED_SPOTS, ...userSpots];
 
   const addSpot = useCallback(async (spot: Omit<PhotoSpot, 'id'>) => {
+    try {
+      const newSpot = await insertSpotToSupabase(spot);
+      const next = [newSpot, ...userSpots];
+      setUserSpots(next);
+      await saveUserSpots(next);
+      return;
+    } catch (e) {
+      if ((e as Error).message === SUPABASE_NOT_CONFIGURED) {
+        // fall through to local
+      } else {
+        throw e;
+      }
+    }
     const id = `user-${Date.now()}`;
     const newSpot: PhotoSpot = { ...spot, id };
     const next = [...userSpots, newSpot];
@@ -63,9 +95,21 @@ export function SpotsProvider({ children }: { children: React.ReactNode }) {
   }, [userSpots]);
 
   const updateSpot = useCallback(async (spotId: string, updates: Partial<Omit<PhotoSpot, 'id'>>) => {
-    if (!spotId.startsWith('user-')) return;
     const spot = userSpots.find((s) => s.id === spotId);
     if (!spot) return;
+    try {
+      await updateSpotInSupabase(spotId, updates);
+      const refreshed = await fetchSpotsFromSupabase();
+      setUserSpots(refreshed);
+      await saveUserSpots(refreshed);
+      return;
+    } catch (e) {
+      if ((e as Error).message === SUPABASE_NOT_CONFIGURED) {
+        // fall through to local
+      } else {
+        throw e;
+      }
+    }
     const updated: PhotoSpot = { ...spot, ...updates };
     const next = userSpots.map((s) => (s.id === spotId ? updated : s));
     setUserSpots(next);
@@ -73,9 +117,21 @@ export function SpotsProvider({ children }: { children: React.ReactNode }) {
   }, [userSpots]);
 
   const addPhotoToSpot = useCallback(async (spotId: string, imageUri: string, photoBy: string, note?: string) => {
-    if (!spotId.startsWith('user-')) return;
     const spot = userSpots.find((s) => s.id === spotId);
     if (!spot) return;
+    try {
+      await addPhotoToSpotInSupabase(spotId, imageUri, photoBy, note);
+      const refreshed = await fetchSpotsFromSupabase();
+      setUserSpots(refreshed);
+      await saveUserSpots(refreshed);
+      return;
+    } catch (e) {
+      if ((e as Error).message === SUPABASE_NOT_CONFIGURED) {
+        // fall through to local
+      } else {
+        throw e;
+      }
+    }
     const additional = spot.additionalPhotos ?? [];
     const updated: PhotoSpot = {
       ...spot,
@@ -90,6 +146,8 @@ export function SpotsProvider({ children }: { children: React.ReactNode }) {
     (id: string) => getSpotById(id, allSpots),
     [allSpots]
   );
+
+  const isUserSpot = useCallback((spotId: string) => userSpots.some((s) => s.id === spotId), [userSpots]);
 
   const toggleFavorite = useCallback(async (spotId: string) => {
     const next = favoriteIds.includes(spotId)
@@ -143,6 +201,7 @@ export function SpotsProvider({ children }: { children: React.ReactNode }) {
     updateSpot,
     addPhotoToSpot,
     getSpotById: getSpotByIdImpl,
+    isUserSpot,
     isLoading,
     favoriteIds,
     toggleFavorite,

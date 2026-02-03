@@ -18,6 +18,7 @@ export default function SpotDetailScreen() {
     addPhotoToSpot,
     toggleFavorite,
     isFavorite,
+    isUserSpot,
     collections,
     addCollection,
     addSpotToCollection,
@@ -84,7 +85,7 @@ export default function SpotDetailScreen() {
   };
 
   const openAddPhoto = () => {
-    if (!spot?.id.startsWith('user-')) return;
+    if (!spot || !isUserSpot(spot.id)) return;
     setShowAddPhotoModal(true);
     setAddPhotoNote('');
     setPendingPhotoUri(null);
@@ -107,7 +108,7 @@ export default function SpotDetailScreen() {
   };
 
   const confirmAddPhoto = async () => {
-    if (!spot?.id.startsWith('user-') || !pendingPhotoUri) return;
+    if (!spot || !isUserSpot(spot.id) || !pendingPhotoUri) return;
     setAddingPhoto(true);
     setShowAddPhotoModal(false);
     try {
@@ -144,7 +145,7 @@ export default function SpotDetailScreen() {
   }
 
   const additionalPhotos = spot.additionalPhotos ?? [];
-  const isUserSpot = spot.id.startsWith('user-');
+  const canEditSpot = isUserSpot(spot.id);
 
   return (
     <View style={styles.container}>
@@ -158,7 +159,7 @@ export default function SpotDetailScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </Pressable>
-          {isUserSpot && (
+          {canEditSpot && (
             <Pressable
               style={styles.editButton}
               onPress={() => router.push(`/spot/edit/${spot.id}`)}
@@ -189,7 +190,7 @@ export default function SpotDetailScreen() {
                 <Text style={styles.spotTypeBadgeText}>{SPOT_TYPE_LABELS[spot.spotType]}</Text>
               </View>
             )}
-            {isUserSpot && (
+            {canEditSpot && (
               <View style={styles.addedByYou}>
                 <Text style={styles.addedByYouText}>Added by you</Text>
               </View>
@@ -274,7 +275,7 @@ export default function SpotDetailScreen() {
 
           <Text style={styles.credit}>Photo by {spot.photoBy}</Text>
 
-          {(isUserSpot || additionalPhotos.length > 0) && (
+          {(canEditSpot || additionalPhotos.length > 0) && (
             <View style={styles.morePhotosSection}>
               <Text style={styles.morePhotosTitle}>More photos at this spot</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.morePhotosList}>
@@ -285,7 +286,7 @@ export default function SpotDetailScreen() {
                     {p.note ? <Text style={styles.morePhotoNote}>{p.note}</Text> : null}
                   </View>
                 ))}
-                {isUserSpot && (
+                {canEditSpot && (
                   <Pressable
                     style={({ pressed }) => [styles.addPhotoCard, pressed && styles.addPhotoCardPressed]}
                     onPress={openAddPhoto}
@@ -303,8 +304,8 @@ export default function SpotDetailScreen() {
                   </Pressable>
                 )}
               </ScrollView>
-              {isUserSpot && (
-                <Text style={styles.morePhotosHint}>Anyone using this app on this device can add a photo and note to this spot.</Text>
+              {canEditSpot && (
+                <Text style={styles.morePhotosHint}>Anyone using this app can add a photo and note to this spot.</Text>
               )}
             </View>
           )}

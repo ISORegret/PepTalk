@@ -39,7 +39,7 @@ function isRemoteUri(uri: string): boolean {
 
 export default function EditSpotScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getSpotById, updateSpot } = useSpots();
+  const { getSpotById, updateSpot, isUserSpot } = useSpots();
   const { theme } = useTheme();
   const router = useRouter();
   const spot = id ? getSpotById(id) : undefined;
@@ -59,7 +59,7 @@ export default function EditSpotScreen() {
   const [pickingImage, setPickingImage] = useState(false);
 
   useEffect(() => {
-    if (spot && spot.id.startsWith('user-')) {
+    if (spot && isUserSpot(spot.id)) {
       setName(spot.name);
       setAddress(spot.address);
       setLatitude(spot.latitude.toString());
@@ -77,7 +77,7 @@ export default function EditSpotScreen() {
         setLocalImageUri(spot.imageUri);
       }
     }
-  }, [spot?.id]);
+  }, [spot?.id, isUserSpot]);
 
   const pickFromGallery = async () => {
     setPickingImage(true);
@@ -192,7 +192,7 @@ export default function EditSpotScreen() {
     );
   }
 
-  if (!spot.id.startsWith('user-')) {
+  if (!isUserSpot(spot.id)) {
     return (
       <View style={styles.container}>
         <View style={styles.center}>

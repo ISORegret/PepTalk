@@ -30,6 +30,15 @@
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4938fcf9-ab9f-48d6-b4e6-6c8cda783ce1"
+      },
+      "supabaseUrl": "https://ehbstcsfkmhsuuancokm.supabase.co",
+      "supabaseAnonKey": "sb_publishable_AuzACIh_0dvWBExqOb1-iQ_rpf6IBei"
+    },
+    "owner": "itsbrickel"
   }
 }

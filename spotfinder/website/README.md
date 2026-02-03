@@ -1,6 +1,6 @@
 # SpotFinder download website
 
-A simple landing page to offer the **SpotFinder Android APK** for direct download (like PepTalk).
+A **standalone** landing page for the **SpotFinder Android APK** — deploy this folder as its own site (e.g. Netlify, Cloudflare). Do not add it to the PepTalk website.
 
 ## 1. Add your APK
 

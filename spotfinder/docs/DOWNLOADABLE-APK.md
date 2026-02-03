@@ -1,6 +1,6 @@
-# Downloadable APK for SpotFinder (like PepTalk)
+# Downloadable APK for SpotFinder
 
-You can build an Android APK and host it on a simple website so anyone can download and install SpotFinder without the Play Store — same idea as PepTalk.
+Build an Android APK and host it on a **standalone** website so anyone can download and install SpotFinder without the Play Store. This is a **separate site** (e.g. spotfinder-download.netlify.app) — not part of the PepTalk website.
 
 ---
 
@@ -101,6 +101,6 @@ Upload the `website` folder via FTP/SFTP so that `index.html` and `SpotFinder.ap
 | 3 | Download APK from Expo dashboard → rename to `SpotFinder.apk` → put in `spotfinder/website/` |
 | 4 | Deploy `website` folder to Netlify (or Cloudflare / your server) |
 
-After that, your download page URL (e.g. `https://spotfinder-download.netlify.app`) will offer **Download APK**; users install the APK on their Android device (they may need to allow “Install from this source” in settings).
+After that, your **standalone** download page (separate from PepTalk) (e.g. `https://spotfinder-download.netlify.app`) will offer **Download APK**; users install the APK on their Android device (they may need to allow “Install from this source” in settings).
 
-This is the same pattern as PepTalk: build APK → put in website folder → deploy website → share the link.
+Keep this download site separate from any PepTalk website.
