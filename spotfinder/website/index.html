@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SpotFinder — find photo spots for photographers and car photographers. Map, filters, parking, tips. No account required." />
+  <title>SpotFinder — Photo & Car Spots</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1419;
+      --bg-elevated: rgba(26, 31, 38, 0.95);
+      --accent: #34d399;
+      --accent-glow: rgba(52, 211, 153, 0.35);
+      --accent-soft: rgba(52, 211, 153, 0.12);
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: rgba(255, 255, 255, 0.08);
+    }
+    html, body {
+      min-height: 100%;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: clamp(1rem, 4vw, 2rem);
+      padding-bottom: 2rem;
+    }
+    .page {
+      max-width: 560px;
+      width: 100%;
+    }
+    .hero {
+      text-align: center;
+      padding: 1.5rem 0 1rem;
+    }
+    .hero .badge {
+      display: inline-block;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(52, 211, 153, 0.25);
+      margin-bottom: 0.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(1.75rem, 5vw, 2.25rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, #6ee7b7, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .tagline {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.4rem;
+      line-height: 1.4;
+    }
+    .hero p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0.75rem;
+      line-height: 1.5;
+    }
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, var(--accent), #10b981);
+      color: #0f1419;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.75rem;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(52, 211, 153, 0.35);
+      margin-top: 1.25rem;
+    }
+    .btn-download:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 28px rgba(52, 211, 153, 0.45);
+    }
+    .value-block {
+      text-align: center;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      border-radius: 0.75rem;
+      background: var(--accent-soft);
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .value-block strong { color: var(--accent); font-weight: 700; }
+    .features {
+      margin-top: 1.5rem;
+      padding: 1rem 0;
+      border-top: 1px solid var(--border);
+    }
+    .features h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+    .features ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .features li {
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    .features li::before {
+      content: '·';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <span class="badge">Android · Free</span>
+      <h1>SpotFinder</h1>
+      <p class="tagline">Photo & car spots for photographers</p>
+      <p>Find spots on a map, filter by type, get address, parking, and tips. Add your own spots. No account required.</p>
+      <a href="SpotFinder.apk" class="btn-download" download="SpotFinder.apk">Download APK</a>
+    </section>
+
+    <p class="value-block"><strong>Local-first.</strong> Your spots stay on your device. <strong>Dark theme.</strong> Edit your spots. Notes on community photos.</p>
+
+    <section class="features">
+      <h2>What’s inside</h2>
+      <ul>
+        <li>For You feed — curated + your spots, filter by Car spots, Urban, Garage, etc.</li>
+        <li>Map — all spots, tap for details; long-press to add a spot</li>
+        <li>Spot details — address, best time, parking, photography tips, GPS</li>
+        <li>Add & edit your spots — name, photo, parking, tips</li>
+        <li>More photos at a spot — add your photo + optional note</li>
+      </ul>
+    </section>
+
+    <footer>
+      SpotFinder — Photo & car spots. Android only (APK). Install may require “Allow from this source” in device settings.
+    </footer>
+  </main>
+</body>
+</html>

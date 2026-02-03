@@ -1,13 +1,32 @@
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { SpotsProvider } from '../src/context/SpotsContext';
 
-export default function RootLayout() {
+function RootStack() {
+  const { theme } = useTheme();
+  const isDark = theme.bg === '#0f1419';
   return (
-    <SpotsProvider>
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="spot/[id]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="spot/edit/[id]" options={{ presentation: 'card' }} />
       </Stack>
-    </SpotsProvider>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <SpotsProvider>
+          <RootStack />
+        </SpotsProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
