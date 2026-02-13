@@ -8,6 +8,7 @@
     "build": "vite build",
     "postinstall": "patch-package",
     "build:android": "vite build --mode android && npx cap sync android",
+    "build:apk": "npm run build:android && cd android && ./gradlew assembleDebug",
     "build:ios": "vite build && npx cap sync ios",
     "preview": "vite preview"
   },
