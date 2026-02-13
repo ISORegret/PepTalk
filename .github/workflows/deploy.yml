@@ -33,12 +33,13 @@ jobs:
         run: npm ci
       
       - name: Build
-        run: npm run build
+        run: npm run build -- --mode pages
       
       - name: Prepare deploy (landing + app + APK)
         run: |
           mkdir -p dist/PepTalk
           find dist -maxdepth 1 -mindepth 1 ! -name PepTalk -exec mv {} dist/PepTalk/ \;
+          sed -i 's|/PepTalk/|/PepTalk/PepTalk/|g' dist/PepTalk/manifest.json 2>/dev/null || true
           cp website/index.html dist/
           [ -f website/PepTalk.apk ] && cp website/PepTalk.apk dist/ || true
           [ -d website/screenshots ] && cp -r website/screenshots dist/ || true

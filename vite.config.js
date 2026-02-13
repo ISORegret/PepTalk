@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: mode === 'android' ? './' : '/PepTalk/',
+  base: mode === 'android' ? './' : mode === 'pages' ? '/PepTalk/PepTalk/' : '/PepTalk/',
   build: {
     chunkSizeWarningLimit: 600,
     rollupOptions: {
