@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.5';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
