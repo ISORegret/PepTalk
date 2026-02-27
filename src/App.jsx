@@ -1014,7 +1014,8 @@ const PHASE_TIMELINES = {
   }
 };
 
-const INJECTION_SITES = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)', 'Arm (Right)', 'Glute (Left)', 'Glute (Right)', 'Subcutaneous', 'Intramuscular'];
+const INJECTION_ROUTES = ['SubQ', 'IM'];
+const BODY_LOCATIONS = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)', 'Arm (Right)', 'Glute (Left)', 'Glute (Right)', 'Upper Arm', 'Abdomen'];
 const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
 const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
 
@@ -1073,6 +1074,7 @@ const PepTalk = () => {
   
   // Graph visibility state
   const [visibleLines, setVisibleLines] = useState({ weight: true, trend: true });
+  const [chartRangeWeeks, setChartRangeWeeks] = useState(0); // 0 = all, 4, 8, 12
   
   // Weight form states
   const [weight, setWeight] = useState('');
@@ -1102,6 +1104,7 @@ const PepTalk = () => {
   const [injectionDose, setInjectionDose] = useState('');
   const [injectionUnit, setInjectionUnit] = useState('mg');
   const [injectionDate, setInjectionDate] = useState(getTodayLocal());
+  const [injectionRoute, setInjectionRoute] = useState('SubQ');
   const [injectionSite, setInjectionSite] = useState('Stomach');
   const [injectionNotes, setInjectionNotes] = useState('');
   const [selectedSideEffects, setSelectedSideEffects] = useState([]);
@@ -1265,7 +1268,7 @@ const PepTalk = () => {
 
   // Form reset functions
   const resetWeightForm = () => { setWeight(''); setWeightDate(getTodayLocal()); setEditingWeight(null); setShowAddForm(false); };
-  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); };
+  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); };
   const resetMeasurementForm = () => { setMeasurementType('Waist'); setMeasurementValue(''); setMeasurementDate(getTodayLocal()); setShowAddForm(false); };
   const resetJournalForm = () => { setJournalContent(''); setJournalMood('neutral'); setJournalEnergy(5); setJournalHunger(5); setJournalDate(getTodayLocal()); setEditingJournal(null); setShowAddForm(false); };
   const resetFastingForm = () => { setFastingHours(''); setFastingDate(getTodayLocal()); setEditingFasting(null); setShowFastingForm(false); };
@@ -1523,7 +1526,7 @@ const PepTalk = () => {
 
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
-    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects };
+    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects };
     let updated = editingInjection 
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
       : [...injectionEntries, { id: Date.now(), ...entryData }];
@@ -1834,9 +1837,9 @@ ${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeig
     const sortedGlucose = sortByDateDesc(glucoseEntries);
     const sortedA1c = sortByDateDesc(a1cEntries);
     const rows = [];
-    rows.push('Type,Date,Value,Medication,Dose,Unit');
-    sortedWeights.forEach(e => rows.push(`Weight,${e.date},${e.weight},,,`));
-    sortedInjections.forEach(e => rows.push(`Injection,${e.date},,${e.type},${e.dose},${e.unit}`));
+    rows.push('Type,Date,Value,Medication,Dose,Unit,Route,Site');
+    sortedWeights.forEach(e => rows.push(`Weight,${e.date},${e.weight},,,,,`));
+    sortedInjections.forEach(e => rows.push(`Injection,${e.date},,${e.type},${e.dose},${e.unit},${e.route || ''},${e.site || ''}`));
     sortedGlucose.forEach(e => rows.push(`Glucose,${e.date},${e.value} mg/dL (${e.type}),,,`));
     sortedA1c.forEach(e => rows.push(`A1C,${e.date},${e.value}%,,,`));
     const csv = rows.join('\n');
@@ -2166,13 +2169,18 @@ const wipeAllData = () => {
     return { step: plan.steps.length, dose: lastStep.dose, unit: lastStep.unit, weeksRemaining: 0, nextDose: null, completed: true };
   };
 
-  const getSummaryChartData = () => {
+  const getSummaryChartData = (maxWeeks = 0) => {
     const filteredWeights = getFilteredData(weightEntries);
     const filteredInjections = getFilteredData(injectionEntries);
     const allDates = new Set();
     filteredWeights.forEach(e => allDates.add(e.date));
     filteredInjections.forEach(e => allDates.add(e.date));
-    const sortedDates = Array.from(allDates).sort((a, b) => new Date(a) - new Date(b));
+    let sortedDates = Array.from(allDates).sort((a, b) => new Date(a) - new Date(b));
+    if (maxWeeks > 0 && sortedDates.length > 0) {
+      const cutoff = new Date(sortedDates[sortedDates.length - 1]);
+      cutoff.setDate(cutoff.getDate() - maxWeeks * 7);
+      sortedDates = sortedDates.filter(d => new Date(d) >= cutoff);
+    }
     const points = sortedDates.map(date => {
       const dayWeights = filteredWeights.filter(e => e.date === date);
       const weightEntry = dayWeights.length === 0 ? null : dayWeights.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
@@ -2188,7 +2196,7 @@ const wipeAllData = () => {
         doseData[inj.type] = doseInMg;
         unitData[inj.type] = inj.unit;
       });
-      const injectionsForTooltip = dayInjections.map(inj => ({ type: inj.type, dose: inj.dose, unit: inj.unit }));
+      const injectionsForTooltip = dayInjections.map(inj => ({ type: inj.type, dose: inj.dose, unit: inj.unit, route: inj.route, site: inj.site }));
       return { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight != null ? parseFloat(weightEntry.weight) : null, units: unitData, hasInjection: dayInjections.length > 0, injections: injectionsForTooltip, ...doseData };
     });
     // 7-day moving average trend line
@@ -2371,7 +2379,16 @@ const wipeAllData = () => {
     return dose; // mg
   };
 
-  // Medication level calculations (pharmacokinetics) — weighted by user's actual dose
+  // Effective hours for decay: IM absorbs faster so dose "enters" sooner (earlier peak)
+  const getEffectiveHoursForDecay = (injection, medication, hoursElapsed) => {
+    const route = injection.route || 'SubQ';
+    if (route === 'IM' && medication.peakHours) {
+      return hoursElapsed + medication.peakHours * 0.35; // IM: treat as if injected ~35% of peak-time earlier
+    }
+    return hoursElapsed;
+  };
+
+  // Medication level calculations (pharmacokinetics) — weighted by user's actual dose; SubQ vs IM affects curve
   const calculateMedicationLevel = (injection, medication) => {
     const now = new Date();
     const injectionDate = parseLocalDate(injection.date);
@@ -2380,8 +2397,9 @@ const wipeAllData = () => {
     if (hoursElapsed < 0) return 0; // Future injection
     if (!medication.halfLife) return 0;
     
+    const effectiveHours = getEffectiveHoursForDecay(injection, medication, hoursElapsed);
     const doseMg = toDoseMg(injection);
-    const halfLivesElapsed = hoursElapsed / medication.halfLife;
+    const halfLivesElapsed = effectiveHours / medication.halfLife;
     const remainingMg = doseMg * Math.pow(0.5, halfLivesElapsed);
     
     return Math.max(0, remainingMg);
@@ -2445,8 +2463,9 @@ const wipeAllData = () => {
         const injDate = parseLocalDate(inj.date);
         const hoursElapsed = (now - injDate) / (1000 * 60 * 60);
         if (hoursElapsed >= 0) {
+          const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
           const doseMg = toDoseMg(inj);
-          const halfLivesElapsed = hoursElapsed / medication.halfLife;
+          const halfLivesElapsed = effectiveHours / medication.halfLife;
           const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
           if (remaining > 0.0001) totalRemainingMg += remaining;
         }
@@ -2512,14 +2531,15 @@ const wipeAllData = () => {
       date.setDate(date.getDate() + i);
       const dateStr = formatDateLocal(date);
       
-      // Calculate total level from all injections before this date, weighted by user's actual dose
+      // Calculate total level from all injections before this date, weighted by user's actual dose (SubQ vs IM)
       const injectionsBeforeDate = recentInjections.filter(inj => parseLocalDate(inj.date) <= date);
       let totalRemainingMg = 0;
       injectionsBeforeDate.forEach(inj => {
         const injDate = parseLocalDate(inj.date);
         const hoursElapsed = (date - injDate) / (1000 * 60 * 60);
+        const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
         const doseMg = toDoseMg(inj);
-        const halfLivesElapsed = hoursElapsed / medication.halfLife;
+        const halfLivesElapsed = effectiveHours / medication.halfLife;
         const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
         if (remaining > 0.0001) totalRemainingMg += remaining;
       });
@@ -3062,12 +3082,31 @@ const wipeAllData = () => {
             </div>
 
             {/* Weight chart — clean, modern */}
-            {weightEntries.length > 0 && (
+            {weightEntries.length > 0 && (() => {
+              const summaryData = getSummaryChartData(chartRangeWeeks);
+              const pointCount = summaryData.length;
+              const xInterval = pointCount > 28 ? Math.max(0, Math.floor(pointCount / 7)) : 0;
+              const showAllDots = pointCount <= 35;
+              return (
               <div className="rounded-2xl overflow-hidden border border-white/[0.06] bg-slate-800/40 backdrop-blur-sm">
                 <div className="px-5 pt-5 pb-1">
-                  <h3 className="text-slate-300 text-sm font-medium mb-4">Weight over time</h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <h3 className="text-slate-300 text-sm font-medium">Weight over time</h3>
+                    <div className="flex items-center gap-1">
+                      {[4, 8, 12, 0].map((w) => (
+                        <button
+                          key={w || 'all'}
+                          type="button"
+                          onClick={() => setChartRangeWeeks(w)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${chartRangeWeeks === w ? 'bg-amber-500/25 text-amber-400' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+                        >
+                          {w === 0 ? 'All' : `${w}w`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={getSummaryChartData()} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+                    <ComposedChart data={summaryData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} />
@@ -3082,8 +3121,8 @@ const wipeAllData = () => {
                         stroke="#64748b" 
                         fontSize={11} 
                         tickMargin={8}
-                        interval="preserveStartEnd"
-                        minTickGap={32}
+                        interval={xInterval}
+                        minTickGap={pointCount > 21 ? 48 : 32}
                       />
                       <YAxis 
                         yAxisId="weight"
@@ -3124,7 +3163,7 @@ const wipeAllData = () => {
                                 <div className="mt-2 pt-2 border-t border-slate-600/50">
                                   <div className="text-emerald-400 text-xs font-medium mb-1">Injections</div>
                                   {p.injections.map((inj, i) => (
-                                    <div key={i} className="text-slate-200 text-xs">{inj.type} {inj.dose}{inj.unit}</div>
+                                    <div key={i} className="text-slate-200 text-xs">{inj.type} {inj.dose}{inj.unit}{(inj.route || inj.site) && <span className="text-slate-500"> · {[inj.route, inj.site].filter(Boolean).join(' ')}</span>}</div>
                                   ))}
                                 </div>
                               )}
@@ -3152,6 +3191,7 @@ const wipeAllData = () => {
                           strokeWidth={2.5} 
                           dot={({ cx, cy, payload }) => {
                             if (payload.weight == null) return null;
+                            if (!showAllDots && !payload.hasInjection) return null;
                             const isInjectionDay = payload.hasInjection;
                             return (
                               <circle 
@@ -3201,11 +3241,12 @@ const wipeAllData = () => {
                         7-day average
                       </button>
                     </div>
-                    <p className="text-slate-500 text-xs">Green ring on a point = injection that day</p>
+                    <p className="text-slate-500 text-xs">Green ring = injection that day{!showAllDots && ' · Dots only on injection days when zoomed out'}</p>
                   </div>
                 </div>
               </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -3235,6 +3276,7 @@ const wipeAllData = () => {
                       </div>
                     </div>
                     <p className="text-xs text-slate-400 mt-2">💡 Steady state = optimal therapeutic level with consistent effects and fewer side effects.</p>
+                    <p className="text-xs text-slate-400 mt-2">📌 <strong>Route:</strong> Levels use your chosen route (SubQ vs IM). IM is modeled with faster absorption → earlier peak; the graph reflects this.</p>
                   </div>
                 </div>
               </div>
@@ -3916,9 +3958,18 @@ const wipeAllData = () => {
                     <input type="date" value={injectionDate} onChange={(e) => setInjectionDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-2">Injection Site</label>
+                    <label className="text-slate-400 text-sm block mb-2">Route <span className="text-amber-400">*</span></label>
+                    <div className="flex gap-2">
+                      {INJECTION_ROUTES.map((route) => (
+                        <button key={route} type="button" onClick={() => setInjectionRoute(route)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${injectionRoute === route ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{route === 'SubQ' ? 'SubQ (subcutaneous)' : 'IM (intramuscular)'}</button>
+                      ))}
+                    </div>
+                    <p className="text-slate-500 text-xs mt-1">IM absorbs faster → earlier peak; level curve reflects route.</p>
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-sm block mb-2">Body location</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {INJECTION_SITES.map(site => <button key={site} onClick={() => setInjectionSite(site)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === site ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{site}</button>)}
+                      {BODY_LOCATIONS.map(loc => <button key={loc} type="button" onClick={() => setInjectionSite(loc)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === loc ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{loc}</button>)}
                     </div>
                   </div>
                   <div>
@@ -3952,13 +4003,13 @@ const wipeAllData = () => {
                           <div className="p-2 rounded-lg mt-1" style={{ backgroundColor: `${getMedicationColor(entry.type)}20` }}><Syringe className="h-5 w-5" style={{ color: getMedicationColor(entry.type) }} /></div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2"><span className="text-white font-medium">{entry.type}</span><span className="text-slate-300">{entry.dose} {entry.unit}</span></div>
-                            <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{entry.site && <span className="ml-2">• {entry.site}</span>}</div>
+                            <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-2">• {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
                             {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{entry.sideEffects.map(effect => <span key={effect} className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">{effect}</span>)}</div>}
                             {entry.notes && <div className="text-sm text-slate-400 mt-2 italic">{entry.notes}</div>}
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setShowAddForm(true); }} className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setShowAddForm(true); }} className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
                           <button onClick={() => deleteInjection(entry.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
