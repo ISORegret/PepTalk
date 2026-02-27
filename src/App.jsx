@@ -3085,7 +3085,8 @@ const wipeAllData = () => {
             {weightEntries.length > 0 && (() => {
               const summaryData = getSummaryChartData(chartRangeWeeks);
               const pointCount = summaryData.length;
-              const xInterval = pointCount > 28 ? Math.max(0, Math.floor(pointCount / 7)) : 0;
+              // Limit X-axis ticks so labels don't overlap (4w can have ~28 points → unreadable)
+              const xInterval = pointCount > 12 ? Math.max(0, Math.floor(pointCount / 6)) : 0;
               const showAllDots = pointCount <= 35;
               return (
               <div className="rounded-2xl overflow-hidden border border-white/[0.06] bg-slate-800/40 backdrop-blur-sm">
@@ -3122,7 +3123,7 @@ const wipeAllData = () => {
                         fontSize={11} 
                         tickMargin={8}
                         interval={xInterval}
-                        minTickGap={pointCount > 21 ? 48 : 32}
+                        minTickGap={pointCount > 14 ? 56 : pointCount > 8 ? 40 : 32}
                       />
                       <YAxis 
                         yAxisId="weight"
