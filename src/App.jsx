@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea } from 'recharts';
+import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
@@ -3088,6 +3088,15 @@ const wipeAllData = () => {
               // Limit X-axis ticks so labels don't overlap (4w can have ~28 points → unreadable)
               const xInterval = pointCount > 12 ? Math.max(0, Math.floor(pointCount / 6)) : 0;
               const showAllDots = pointCount <= 35;
+              // Y-axis domain from actual weight values only (avoids bad top tick like "0002")
+              const weightValues = summaryData.map(p => p.weight).filter(w => w != null && !isNaN(w));
+              const wMin = weightValues.length ? Math.min(...weightValues) : 0;
+              const wMax = weightValues.length ? Math.max(...weightValues) : 100;
+              const yDomain = [Math.floor(wMin) - 2, Math.ceil(wMax) + 2];
+              // Current weight = most recent point with a value (for reference line + highlight)
+              const lastPointWithWeight = [...summaryData].reverse().find(p => p.weight != null);
+              const currentWeight = lastPointWithWeight?.weight;
+              const currentWeightDate = lastPointWithWeight?.fullDate;
               return (
               <div className="rounded-2xl overflow-hidden border border-white/[0.06] bg-slate-800/40 backdrop-blur-sm">
                 <div className="px-5 pt-5 pb-1">
@@ -3107,7 +3116,7 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={summaryData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+                    <ComposedChart data={summaryData} margin={{ top: 8, right: 72, left: 8, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} />
@@ -3133,9 +3142,20 @@ const wipeAllData = () => {
                         fontSize={11} 
                         tickMargin={8}
                         width={36}
-                        domain={['dataMin - 2', 'dataMax + 2']}
+                        domain={yDomain}
                         tickFormatter={(v) => `${v}`}
                       />
+                      {currentWeight != null && (
+                        <ReferenceLine 
+                          yAxisId="weight"
+                          y={currentWeight} 
+                          stroke="#f59e0b" 
+                          strokeWidth={1.5} 
+                          strokeDasharray="4 4"
+                          strokeOpacity={0.8}
+                          label={{ value: `Current: ${currentWeight} lbs`, position: 'right', fill: '#f59e0b', fontSize: 11, fontWeight: 600 }}
+                        />
+                      )}
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'rgba(15, 23, 42, 0.96)', 
@@ -3194,15 +3214,24 @@ const wipeAllData = () => {
                             if (payload.weight == null) return null;
                             if (!showAllDots && !payload.hasInjection) return null;
                             const isInjectionDay = payload.hasInjection;
+                            const isCurrentWeight = currentWeightDate != null && payload.fullDate === currentWeightDate;
+                            const r = isInjectionDay ? 6 : 4;
                             return (
-                              <circle 
-                                cx={cx} 
-                                cy={cy} 
-                                r={isInjectionDay ? 6 : 4} 
-                                fill="#0f172a" 
-                                stroke={isInjectionDay ? '#10b981' : '#f59e0b'} 
-                                strokeWidth={2}
-                              />
+                              <g>
+                                {isCurrentWeight && (
+                                  <text x={cx - 6} y={cy} textAnchor="end" dominantBaseline="middle" fill="#f59e0b" fontSize={11} fontWeight={600}>
+                                    {payload.weight}
+                                  </text>
+                                )}
+                                <circle 
+                                  cx={cx} 
+                                  cy={cy} 
+                                  r={r} 
+                                  fill="#0f172a" 
+                                  stroke={isInjectionDay ? '#10b981' : '#f59e0b'} 
+                                  strokeWidth={2}
+                                />
+                              </g>
                             );
                           }}
                           activeDot={{ r: 6, stroke: '#f59e0b', strokeWidth: 2, fill: '#0f172a' }}
