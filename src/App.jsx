@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
-const APP_VERSION = '1.0.8';
+const APP_VERSION = '1.0.9';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
@@ -1119,6 +1119,8 @@ const PepTalk = () => {
   const [vialExpiry, setVialExpiry] = useState('');
   const [vialReconstituted, setVialReconstituted] = useState(false);
   const [vialReconstitutedDate, setVialReconstitutedDate] = useState('');
+  const [editingVialId, setEditingVialId] = useState(null);
+  const [vialRemainingMg, setVialRemainingMg] = useState('');
 
   
   // Graph visibility state
@@ -3617,7 +3619,7 @@ const wipeAllData = () => {
                           strokeWidth={1.5} 
                           strokeDasharray="4 4"
                           strokeOpacity={0.8}
-                          label={{ value: `Current: ${currentWeight} lbs`, position: 'left', fill: '#e8b84c', fontSize: 11, fontWeight: 600 }}
+                          label={false}
                         />
                       )}
                       <Tooltip 
@@ -5393,8 +5395,80 @@ const wipeAllData = () => {
               <div className="space-y-4">
                 <div className="ui-card p-4">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Syringe className="h-5 w-5 text-gold-400" />Vial inventory</h3>
-                  <p className="text-gray-400 text-sm mb-4">Reconstitution calculator: enter vial size and bac water (for peptides/hormones that need reconstitution). Pre‑constituted meds (e.g. testosterone in oil): enter total amount only. When you log an injection and choose a vial, the dose is subtracted automatically.</p>
+                  <p className="text-gray-400 text-sm mb-4">Reconstitution calculator: enter vial size and bac water (for peptides/hormones that need reconstitution). Pre‑constituted meds (e.g. testosterone in oil): use <strong>Volume (ml)</strong> + <strong>Concentration (mg/ml)</strong> — e.g. label &quot;250 mg/mL&quot; means 250 mg/ml concentration. 10 ml × 250 = 2500 mg total. When you log an injection and choose a vial, the dose is subtracted automatically.</p>
                   <div className="space-y-3">
+                    {editingVialId != null ? (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-gold-400 font-medium text-sm">Edit vial</span>
+                          <button type="button" onClick={() => { setEditingVialId(null); setVialTotalMg(''); setVialRemainingMg(''); setVialConcentrationForMl(''); setVialExpiry(''); setVialReconstituted(false); setVialReconstitutedDate(''); }} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Medication</label>
+                          <select value={vialMedication} onChange={(e) => setVialMedication(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                            {MEDICATIONS.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-gray-400 text-sm block mb-1">Total (mg)</label>
+                            <input type="number" step="0.01" min="0" value={vialTotalMg} onChange={(e) => setVialTotalMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                          </div>
+                          <div>
+                            <label className="text-gray-400 text-sm block mb-1">Remaining (mg)</label>
+                            <input type="number" step="0.01" min="0" value={vialRemainingMg} onChange={(e) => setVialRemainingMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml) — optional, for display</label>
+                          <input type="number" step="0.1" min="0" value={vialConcentrationForMl} onChange={(e) => setVialConcentrationForMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 250" />
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Expiry / use-by (optional)</label>
+                          <input type="date" value={vialExpiry} onChange={(e) => setVialExpiry(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" id="vial-recon-edit" checked={vialReconstituted} onChange={(e) => setVialReconstituted(e.target.checked)} className="rounded bg-slate-700" />
+                          <label htmlFor="vial-recon-edit" className="text-gray-400 text-sm">Reconstituted</label>
+                        </div>
+                        {vialReconstituted && (
+                          <div>
+                            <label className="text-gray-400 text-sm block mb-1">Reconstituted on</label>
+                            <input type="date" value={vialReconstitutedDate} onChange={(e) => setVialReconstitutedDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                          </div>
+                        )}
+                        <button
+                          onClick={() => {
+                            const totalMg = parseFloat(vialTotalMg);
+                            const remainingMg = parseFloat(vialRemainingMg);
+                            if (isNaN(totalMg) || totalMg <= 0) return;
+                            const conc = vialConcentrationForMl ? parseFloat(vialConcentrationForMl) : undefined;
+                            const updated = vials.map(v => v.id === editingVialId ? {
+                              ...v,
+                              medication: vialMedication,
+                              totalMg,
+                              remainingMg: isNaN(remainingMg) || remainingMg < 0 ? v.remainingMg : Math.min(remainingMg, totalMg),
+                              concentration: conc && conc > 0 ? conc : v.concentration,
+                              expiry: vialExpiry || null,
+                              reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null
+                            } : v);
+                            setVials(updated);
+                            saveData('health-vials', updated);
+                            setEditingVialId(null);
+                            setVialTotalMg('');
+                            setVialRemainingMg('');
+                            setVialConcentrationForMl('');
+                            setVialExpiry('');
+                            setVialReconstituted(false);
+                            setVialReconstitutedDate('');
+                          }}
+                          className="w-full ui-btn-primary py-2.5"
+                        >
+                          Update vial
+                        </button>
+                      </>
+                    ) : (
+                      <>
                     <div>
                       <label className="text-gray-400 text-sm block mb-1">Medication</label>
                       <select value={vialMedication} onChange={(e) => setVialMedication(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
@@ -5420,12 +5494,12 @@ const wipeAllData = () => {
                     {vialUnit === 'ml' && (
                       <div>
                         <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml)</label>
-                        <input type="number" step="0.1" min="0" value={vialConcentrationForMl} onChange={(e) => setVialConcentrationForMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 200" />
-                        <p className="text-gray-500 text-xs mt-1">Total mg = volume (ml) × concentration. Example: 10 ml × 200 mg/ml = 2000 mg.</p>
+                        <input type="number" step="0.1" min="0" value={vialConcentrationForMl} onChange={(e) => setVialConcentrationForMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 250" />
+                        <p className="text-gray-500 text-xs mt-1">Label often says &quot;250 mg/mL&quot; — that&apos;s concentration. Total mg = volume × concentration. 10 ml × 250 mg/ml = 2500 mg. Dose 0.5 ml = 125 mg.</p>
                       </div>
                     )}
                     {MEDICATIONS.find(m => m.name === vialMedication)?.preConstituted ? (
-                      <p className="text-gray-500 text-xs">Pre-constituted (e.g. in oil). No bac water needed — just total amount in vial.</p>
+                      <p className="text-gray-500 text-xs">Pre-constituted (e.g. in oil). Use Volume (ml) + Concentration (mg/ml) above for total mg.</p>
                     ) : (
                       <div>
                         <label className="text-gray-400 text-sm block mb-1">Bac water vol (ml)</label>
@@ -5481,6 +5555,8 @@ const wipeAllData = () => {
                     >
                       Add vial
                     </button>
+                      </>
+                    )}
                   </div>
                 </div>
                 {vials.length > 0 && (
@@ -5508,7 +5584,10 @@ const wipeAllData = () => {
                               {v.expiry && <span className="text-gray-500 text-xs ml-2">· Exp {v.expiry}</span>}
                               {v.reconstitutedDate && <span className="text-gray-500 text-xs ml-2 block">Recon {v.reconstitutedDate}{useBy ? ` · use by ${useBy}` : ''}</span>}
                             </div>
-                            <button onClick={() => { const updated = vials.filter(x => x.id !== v.id); setVials(updated); saveData('health-vials', updated); }} className="p-2 text-gray-400 hover:text-red-400 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => { setEditingVialId(v.id); setVialMedication(v.medication); setVialTotalMg(String(v.totalMg)); setVialRemainingMg(String(v.remainingMg ?? v.totalMg)); setVialConcentrationForMl(v.concentration ? String(v.concentration) : ''); setVialExpiry(v.expiry || ''); setVialReconstituted(!!v.reconstitutedDate); setVialReconstitutedDate(v.reconstitutedDate || ''); }} className="p-2 text-gray-400 hover:text-gold-400 rounded-lg" title="Edit vial"><Edit2 className="h-4 w-4" /></button>
+                              <button onClick={() => { const updated = vials.filter(x => x.id !== v.id); setVials(updated); saveData('health-vials', updated); if (editingVialId === v.id) setEditingVialId(null); }} className="p-2 text-gray-400 hover:text-red-400 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                            </div>
                           </div>
                         );
                       })}
