@@ -404,3 +404,56 @@ export const MEDICATION_PHASE_TIMELINES = {
     ]
   }
 };
+
+/**
+ * What clinical trials and people commonly report by day in the injection cycle.
+ * Used for "Side effects by day in cycle" reference (not user-reported data).
+ */
+export const TYPICAL_SIDE_EFFECTS_BY_DAY = {
+  'Semaglutide': [
+    { day: 'Day 0 (injection day)', effects: ['Nausea', 'Injection site reaction', 'Fatigue', 'Heartburn'] },
+    { day: 'Days 1–2', effects: ['Nausea may peak', 'GI upset', 'Decreased appetite', 'Fullness'] },
+    { day: 'Days 3–7', effects: ['Often improves', 'Constipation possible', 'Mild fatigue'] }
+  ],
+  'Tirzepatide': [
+    { day: 'Day 0 (injection day)', effects: ['Nausea', 'Injection site reaction', 'GI upset'] },
+    { day: 'Days 1–3', effects: ['Nausea can peak', 'Diarrhea or constipation', 'Decreased appetite'] },
+    { day: 'Days 4–7', effects: ['Usually improves', 'Some fatigue', 'Titration-dependent'] }
+  ],
+  'Liraglutide': [
+    { day: 'Day 0 (each day)', effects: ['Nausea', 'Injection site reaction', 'Headache'] },
+    { day: 'Within 24h', effects: ['Peak nausea often first 1–2 weeks', 'GI effects', 'Improves over time'] }
+  ],
+  'Dulaglutide': [
+    { day: 'Day 0 (injection day)', effects: ['Nausea', 'Injection site reaction', 'Abdominal discomfort'] },
+    { day: 'Days 1–3', effects: ['Nausea may peak 24–72h', 'Diarrhea or constipation'] },
+    { day: 'Days 4–7', effects: ['Often improves', 'Decreased appetite can persist'] }
+  ],
+  'Retatrutide': [
+    { day: 'Day 0 (injection day)', effects: ['Nausea', 'Injection site reaction', 'Fatigue'] },
+    { day: 'Days 1–3', effects: ['Nausea/GI common in trials', 'Increased heart rate in some'] },
+    { day: 'Days 4–7', effects: ['Titration-dependent', 'Often improves with time'] }
+  ],
+  'Testosterone Cypionate': [
+    { day: 'Day 0 (injection day)', effects: ['Injection site pain', 'Mild soreness', 'Possible mood lift'] },
+    { day: 'Days 1–3', effects: ['Peak levels ~24–48h', 'Energy/mood can peak', 'Acne or oiliness in some'] },
+    { day: 'Days 4–7', effects: ['Levels decline toward next dose', 'Some report "trough" fatigue'] }
+  ],
+  'Testosterone Enanthate': [
+    { day: 'Day 0 (injection day)', effects: ['Injection site pain', 'Mild soreness'] },
+    { day: 'Days 1–3', effects: ['Peak levels ~2–3 days', 'Energy/mood', 'Acne in some'] },
+    { day: 'Days 4–7', effects: ['Shorter ester than cypionate', 'Trough before next dose'] }
+  ],
+  'HCG': [
+    { day: 'Day 0 (injection day)', effects: ['Injection site reaction', 'Mild headache possible'] },
+    { day: 'Days 1–2', effects: ['Peak effect 24–48h', 'Mood/energy in some'] }
+  ],
+  'BPC-157': [
+    { day: 'Day 0 (injection)', effects: ['Injection site discomfort rare', 'Generally well tolerated'] },
+    { day: 'Ongoing', effects: ['Healing effects build over days–weeks', 'Minimal side effects in studies'] }
+  ],
+  'TB-500': [
+    { day: 'Day 0 (injection)', effects: ['Injection site reactions possible', 'Generally well tolerated'] },
+    { day: 'Ongoing', effects: ['Effects accumulate over weeks', 'Rare systemic side effects'] }
+  ]
+};

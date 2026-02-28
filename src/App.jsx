@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
-import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
+import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
 const APP_VERSION = '1.2.0';
 
@@ -3574,7 +3574,7 @@ const wipeAllData = () => {
               const currentWeightDate = lastPointWithWeight?.fullDate;
               return (
               <div className="ui-card overflow-hidden">
-                <div className="px-5 pt-5 pb-1">
+                <div className="px-2 sm:px-3 pt-5 pb-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <h3 className="text-gray-300 text-sm font-medium">Weight over time</h3>
                     <div className="flex items-center gap-1">
@@ -3591,7 +3591,7 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={summaryData} margin={{ top: 8, right: 16, left: 104, bottom: 4 }}>
+                    <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 44, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.2} />
@@ -3616,7 +3616,7 @@ const wipeAllData = () => {
                         stroke="#64748b" 
                         fontSize={11} 
                         tickMargin={8}
-                        width={36}
+                        width={40}
                         domain={yDomain}
                         tickFormatter={(v) => `${v}`}
                         allowDecimals={false}
@@ -3771,26 +3771,29 @@ const wipeAllData = () => {
               </div>
             )}
 
-            {/* Side effects by day in cycle */}
+            {/* Side effects by day in cycle — what clinical trials / people commonly report (reference, not your input) */}
             {(() => {
-              const medNamesWithEffects = [...new Set(injectionEntries.filter(e => (e.sideEffects?.length ?? 0) > 0).map(e => e.type))];
-              if (medNamesWithEffects.length === 0) return null;
+              const loggedMeds = getLoggedMedications();
+              const medsToShow = loggedMeds.filter(m => TYPICAL_SIDE_EFFECTS_BY_DAY[m]);
+              const displayMeds = medsToShow.length > 0 ? medsToShow : ['Semaglutide', 'Tirzepatide'];
               return (
                 <div className="ui-card p-4">
                   <h3 className="text-white font-semibold mb-2 text-sm">Side effects by day in cycle</h3>
-                  <p className="text-gray-400 text-xs mb-3">Reported on injection day (day 0). Many people feel effects peak 1–2 days after; use Journal to track how you feel the next day.</p>
-                  {medNamesWithEffects.map(medName => {
-                    const byDay = getSideEffectsByDayInCycle(medName);
-                    const day0 = byDay.day0 || {};
-                    const entries = Object.entries(day0).sort((a, b) => b[1] - a[1]);
-                    if (entries.length === 0) return null;
+                  <p className="text-gray-400 text-xs mb-3">What clinical trials and people commonly report by day in the injection cycle — reference only, not your logged side effects.</p>
+                  {displayMeds.map(medName => {
+                    const byDay = TYPICAL_SIDE_EFFECTS_BY_DAY[medName];
+                    if (!byDay || !Array.isArray(byDay)) return null;
                     return (
-                      <div key={medName} className="mb-3 last:mb-0">
-                        <div className="text-gold-400 text-xs font-medium mb-1">{medName}</div>
-                        <div className="text-gray-300 text-xs">
-                          <span className="text-gray-500">Day 0 (injection day): </span>
-                          {entries.map(([name, count]) => (
-                            <span key={name} className="inline-block bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded mr-1 mb-1">{name} ({count})</span>
+                      <div key={medName} className="mb-4 last:mb-0">
+                        <div className="text-gold-400 text-xs font-medium mb-2">{medName}</div>
+                        <div className="space-y-1.5">
+                          {byDay.map(({ day, effects }, i) => (
+                            <div key={i} className="text-gray-300 text-xs">
+                              <span className="text-gray-500">{day}: </span>
+                              {effects.map(ef => (
+                                <span key={ef} className="inline-block bg-slate-600/50 text-gray-300 px-2 py-0.5 rounded mr-1 mb-1">{ef}</span>
+                              ))}
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -4603,7 +4606,7 @@ const wipeAllData = () => {
         {/* MORE TAB */}
         {activeTab === 'more' && (
           <div key="more" className="space-y-4 tab-enter">
-            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto overflow-y-hidden bg-[var(--bg-elevated)] backdrop-blur-sm scroll-smooth" style={{ scrollbarWidth: 'thin' }}>
+            <div className="menu-3d flex flex-wrap gap-2 rounded-xl p-2 overflow-x-auto overflow-y-hidden bg-[var(--bg-elevated)] backdrop-blur-sm scroll-smooth" style={{ scrollbarWidth: 'thin' }}>
               {[
                 { id: 'profile', icon: User, label: 'Profile' },
                 { id: 'body', icon: Ruler, label: 'Body' },
@@ -4616,7 +4619,7 @@ const wipeAllData = () => {
                   key={section.id}
                   ref={el => { moreSectionRefs.current[section.id] = el; }}
                   onClick={() => setActiveMoreSection(section.id)}
-                  className={`menu-3d-item flex-1 min-w-[4.5rem] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                  className={`menu-3d-item flex-1 min-w-[4.5rem] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                 >
                   <section.icon className="h-4 w-4 flex-shrink-0" />{section.label}
                 </button>
