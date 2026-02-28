@@ -3,17 +3,43 @@
 @tailwind utilities;
 
 :root {
-  --bg-base: #0a0a0c;
-  --bg-elevated: rgba(20, 20, 28, 0.85);
-  --accent: #d4a853;
-  --accent-glow: rgba(212, 168, 83, 0.25);
-  --accent-muted: rgba(212, 168, 83, 0.12);
-  --text-primary: #f5f5f7;
-  --text-secondary: #8a8a9a;
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --radius-card: 1rem;
-  --radius-pill: 9999px;
-  /* Set by JS for web vs native so Android/iOS get correct asset path */
+  /* Background — deep neutral night */
+  --bg-base: #0E1117;
+  --bg-surface: #151922;
+  /* Cards — elevated slate */
+  --bg-elevated: #1F2937;
+  --bg-card: #1F2937;
+  --bg-card-hover: #374151;
+
+  /* Accent / Highlight — energy amber */
+  --accent: #F59E0B;
+  --accent-hover: #FBBF24;
+  --accent-muted: rgba(245, 158, 11, 0.12);
+  --accent-glow: rgba(245, 158, 11, 0.28);
+  /* Box outline — keep visible */
+  --border-gold: rgba(245, 158, 11, 0.35);
+
+  /* Success — performance green */
+  --color-success: #22C55E;
+  /* Text — primary soft white, secondary cool gray */
+  --text-primary: #F9FAFB;
+  --text-secondary: #9CA3AF;
+  --text-muted: #9CA3AF;
+
+  /* Borders & radius */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+
+  /* Shadows — lighter so cards don’t feel heavy */
+  --shadow-card: 0 4px 20px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-gold);
+  --shadow-card-hover: 0 12px 40px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(245, 158, 11, 0.45);
+  --shadow-nav: 0 -1px 0 0 rgba(255, 255, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.25);
+
+  /* Set by JS for web vs native */
   --bg-image: url('/PepTalk/bg-hex.jpg');
 }
 
@@ -23,7 +49,6 @@ html, body {
   background: var(--bg-base);
 }
 
-/* Background image rotated 90° for portrait orientation */
 body::before {
   content: '';
   position: fixed;
@@ -35,12 +60,13 @@ body::before {
   background-image: var(--bg-image);
   background-size: cover;
   background-position: center;
+  opacity: 0.06;
   z-index: 0;
   pointer-events: none;
 }
 
 body {
-  padding-top: max(env(safe-area-inset-top, 0px), 16px);
+  padding-top: max(env(safe-area-inset-top, 0px), 12px);
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -52,48 +78,179 @@ body {
   z-index: 1;
   min-height: 100%;
   box-sizing: border-box;
+  background: radial-gradient(ellipse 100% 50% at 50% -15%, rgba(245, 158, 11, 0.03), transparent 50%);
 }
 
-/* 3D menu container - recessed/inset well */
-.menu-3d {
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.4),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
-    0 1px 0 rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(0, 0, 0, 0.3);
-}
-
-/* 3D menu item - flat default */
-.menu-3d-item {
-  box-shadow: none;
-  border: 1px solid transparent;
-  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
-}
-
-/* 3D menu item - raised when active */
-.menu-3d-item-active {
-  box-shadow:
-    0 2px 0 rgba(255, 255, 255, 0.08),
-    0 4px 8px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  transform: translateY(-1px);
-}
-
-/* Gold accent card */
+/* Card - primary content container */
 @layer components {
-  .card-glass {
-    @apply rounded-2xl border border-white/[0.06] shadow-card;
-    background: var(--bg-elevated);
+  .ui-card {
+    @apply rounded-xl border transition-all duration-300 ease-out;
+    background: var(--bg-card);
+    border-color: var(--border-gold);
+    box-shadow: var(--shadow-card);
     backdrop-filter: blur(12px);
   }
-  .card-glass:hover {
-    box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 168, 83, 0.08);
+  .ui-card:hover {
+    /* No fill change — keeps borders and lines sharp */
+    box-shadow: var(--shadow-card);
+    border-color: var(--border-gold);
   }
-  .tab-pill {
-    @apply rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200;
+
+  .ui-card-inner {
+    @apply rounded-lg border transition-all duration-200;
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
   }
-  .gold-accent {
+  .ui-card-inner:hover {
+    border-color: rgba(255, 255, 255, 0.11);
+  }
+
+  /* Primary button / active state */
+  .ui-accent {
+    @apply font-semibold transition-all duration-200;
     color: var(--accent);
   }
+  .ui-btn-primary {
+    @apply rounded-xl px-4 py-2.5 font-semibold transition-all duration-200 ease-out active:scale-[0.97];
+    background: var(--accent);
+    color: #0E1117;
+    box-shadow: 0 2px 12px var(--accent-glow);
+  }
+  .ui-btn-primary:hover {
+    background: var(--accent-hover);
+    box-shadow: 0 2px 14px var(--accent-glow);
+    transform: translateY(0);
+  }
+
+  /* Secondary / ghost button — subtle neutral hover so details stay clear */
+  .ui-btn-ghost {
+    @apply rounded-xl px-4 py-2.5 font-medium transition-all duration-200 ease-out active:scale-[0.98];
+    color: var(--text-muted);
+  }
+  .ui-btn-ghost:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  /* Tab bar — outline kept */
+  .ui-tab-bar {
+    @apply flex rounded-xl overflow-hidden;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-gold);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .ui-tab {
+    @apply flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2.5 px-1.5 rounded-lg font-medium text-xs transition-all duration-200 ease-out;
+    color: var(--text-muted);
+  }
+  .ui-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .ui-tab:active {
+    transform: scale(0.98);
+  }
+  .ui-tab-active {
+    background: var(--accent);
+    color: #0E1117;
+    box-shadow: 0 2px 8px var(--accent-glow);
+  }
+  .ui-tab-active:hover {
+    transform: none;
+  }
+
+  /* Segmented control (e.g. time range) */
+  .ui-segmented {
+    @apply flex rounded-lg p-1 gap-0.5;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-gold);
+  }
+  .ui-segmented-btn {
+    @apply flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all duration-200 ease-out;
+    color: var(--text-muted);
+  }
+  .ui-segmented-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .ui-segmented-btn-active {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--accent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  .ui-segmented-btn-active:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Alert banner */
+  .ui-alert {
+    @apply rounded-xl p-4 flex items-center gap-3 border backdrop-blur-sm;
+  }
+  .ui-alert-warning {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.35);
+  }
+  .ui-alert-danger {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+  }
+
+  /* Modal overlay */
+  .ui-modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+  }
+  .ui-modal {
+    @apply relative w-full max-w-md rounded-2xl border p-6 shadow-2xl;
+    background: var(--bg-elevated);
+    border-color: var(--border-gold);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-gold), 0 0 40px rgba(245, 158, 11, 0.08);
+  }
+
+  /* Page / tab content enter */
+  .tab-enter {
+    animation: tab-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  @keyframes tab-enter {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Hover lift for interactive cards */
+  .hover-lift {
+    transition: transform 0.25s ease-out, box-shadow 0.25s ease-out;
+  }
+  .hover-lift:hover {
+    transform: translateY(-3px);
+  }
+
+  /* Inputs/selects — subtle focus so details stay clear (no strong amber) */
+  input:focus,
+  select:focus,
+  button:focus-visible,
+  [role="combobox"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* More / legacy menu */
+.menu-3d {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-gold);
+  background: var(--bg-elevated);
+}
+.menu-3d-item {
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  color: var(--text-muted);
+}
+.menu-3d-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+.menu-3d-item-active {
+  background: var(--accent) !important;
+  color: #0E1117 !important;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }

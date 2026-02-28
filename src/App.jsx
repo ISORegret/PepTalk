@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
@@ -17,7 +17,7 @@ const MEDICATIONS = [
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168 },
   { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 33, peakHours: 12, effectDuration: 72 },
-  { name: 'BPC-157', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
+  { name: 'BPC-157', category: 'Peptide', color: '#e8b84c', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 240, peakHours: 24, effectDuration: 168 },
   { name: 'Ipamorelin', category: 'Peptide', color: '#fbbf24', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 4 },
   { name: 'CJC-1295', category: 'Peptide', color: '#f97316', defaultSchedule: 1, halfLife: 168, peakHours: 12, effectDuration: 168 },
@@ -87,6 +87,33 @@ const TYPICAL_WEEKLY_LOSS = {
   'Liraglutide': 0.4, 'Dulaglutide': 0.4,
   'Retatrutide': 0.8
 };
+
+// Dose-specific typical lb/week from trials — dose = mg per 7 days (weekly total)
+// [ [weeklyMg, rate], ... ] sorted ascending by weeklyMg
+const TYPICAL_WEEKLY_LOSS_BY_DOSE = {
+  'Semaglutide': [[0.25, 0.2], [0.5, 0.35], [1, 0.5], [2.4, 0.6]],
+  'Wegovy': [[0.25, 0.2], [0.5, 0.35], [1, 0.5], [2.4, 0.6]],
+  'Ozempic': [[0.25, 0.2], [0.5, 0.35], [1, 0.5], [2, 0.5]],
+  'Rybelsus (Oral Semaglutide)': [[3, 0.3], [7, 0.35], [14, 0.4]],
+  'Tirzepatide': [[2.5, 0.3], [5, 0.5], [7.5, 0.6], [10, 0.65], [15, 0.7]],
+  'Mounjaro': [[2.5, 0.3], [5, 0.5], [7.5, 0.6], [10, 0.65], [15, 0.7]],
+  'Zepbound': [[2.5, 0.3], [5, 0.5], [7.5, 0.6], [10, 0.65], [15, 0.7]],
+  'Liraglutide': [[0.6, 0.2], [1.2, 0.3], [1.8, 0.35], [2.4, 0.4], [3, 0.4]],
+  'Dulaglutide': [[0.75, 0.25], [1.5, 0.35], [3, 0.4], [4.5, 0.4]],
+  'Retatrutide': [[0.5, 0.4], [1, 0.5], [2, 0.65], [4, 0.75], [6, 0.78], [8, 0.8], [12, 0.85]]
+};
+
+function getTypicalWeeklyLossForDose(medName, doseMg) {
+  const byDose = TYPICAL_WEEKLY_LOSS_BY_DOSE[medName];
+  if (byDose && byDose.length > 0 && doseMg != null && !isNaN(doseMg)) {
+    let rate = byDose[0][1];
+    for (const [dose, r] of byDose) {
+      if (doseMg >= dose) rate = r;
+    }
+    return rate;
+  }
+  return TYPICAL_WEEKLY_LOSS[medName] ?? TYPICAL_WEEKLY_LOSS['Semaglutide'] ?? 0.5;
+}
 
 // Simple meal estimator: common foods (cal, protein, carbs, fat per serving; optional hydrationOz)
 const COMMON_FOODS = {
@@ -246,9 +273,9 @@ const PHASE_TIMELINES = {
         name: 'Peak Effect',
         hours: [48, 96],
         icon: '🎯',
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/30',
+        color: 'text-green-500',
+        bgColor: 'bg-green-500/10',
+        borderColor: 'border-green-500/30',
         description: 'Maximum medication concentration and effectiveness',
         whatsHappening: [
           'Peak blood concentration reached',
@@ -398,9 +425,9 @@ const PHASE_TIMELINES = {
         name: 'Peak Effect',
         hours: [48, 96],
         icon: '🎯',
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/30',
+        color: 'text-green-500',
+        bgColor: 'bg-green-500/10',
+        borderColor: 'border-green-500/30',
         description: 'Maximum dual-agonist effect',
         whatsHappening: [
           'Peak concentration achieved',
@@ -553,9 +580,9 @@ const PHASE_TIMELINES = {
         name: 'Peak Power',
         hours: [48, 96],
         icon: '🔥',
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/30',
+        color: 'text-green-500',
+        bgColor: 'bg-green-500/10',
+        borderColor: 'border-green-500/30',
         description: 'Maximum triple-agonist effect',
         whatsHappening: [
           'Peak blood levels achieved',
@@ -709,9 +736,9 @@ const PHASE_TIMELINES = {
         name: 'Peak',
         hours: [72, 96],
         icon: '💪',
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/30',
+        color: 'text-green-500',
+        bgColor: 'bg-green-500/10',
+        borderColor: 'border-green-500/30',
         description: 'Maximum testosterone levels',
         whatsHappening: [
           'Peak blood concentration',
@@ -840,9 +867,9 @@ const PHASE_TIMELINES = {
         name: 'Peak Effect',
         hours: [2, 8],
         icon: '🎯',
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/30',
+        color: 'text-green-500',
+        bgColor: 'bg-green-500/10',
+        borderColor: 'border-green-500/30',
         description: 'Maximum peptide activity',
         whatsHappening: [
           'Peak blood concentration',
@@ -966,9 +993,9 @@ const PHASE_TIMELINES = {
         name: 'Peak',
         hours: [12, 24],
         icon: '🎯',
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/30',
+        color: 'text-green-500',
+        bgColor: 'bg-green-500/10',
+        borderColor: 'border-green-500/30',
         description: 'Therapeutic effect before next dose',
         whatsHappening: [
           'Sustained LH/FSH elevation',
@@ -1039,6 +1066,15 @@ const formatDateLocal = (d) => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
+// Normalize any date string to YYYY-MM-DD for calendar-day comparison (handles ISO with time)
+const toCalendarDay = (dateString) => {
+  if (!dateString) return '';
+  const s = String(dateString).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = parseLocalDate(s);
+  return isNaN(d.getTime()) ? '' : formatDateLocal(d);
+};
 
 // Sort weight entries by date then id (same-day order = entry order). Use for "previous" / "current" / "start".
 const sortWeightByDateAsc = (entries) => [...entries].sort((a, b) => {
@@ -1067,14 +1103,24 @@ const PepTalk = () => {
   const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200 });
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
-  const [exportFormat, setExportFormat] = useState('json'); // 'json' | 'doctor' | 'csv'
+  const [showCalculatorUnitRef, setShowCalculatorUnitRef] = useState(false);
+  const [exportFormat, setExportFormat] = useState('json'); // 'json' | 'csv'
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
+  const [selectedVialId, setSelectedVialId] = useState(null);
+  const [vials, setVials] = useState([]);
+  const [vialMedication, setVialMedication] = useState('Semaglutide');
+  const [vialTotalMg, setVialTotalMg] = useState('');
+  const [vialExpiry, setVialExpiry] = useState('');
 
   
   // Graph visibility state
   const [visibleLines, setVisibleLines] = useState({ weight: true, trend: true });
   const [chartRangeWeeks, setChartRangeWeeks] = useState(0); // 0 = all, 4, 8, 12
+  const [insightsExpandedMed, setInsightsExpandedMed] = useState(null); // medication name or null
+  const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
   
   // Weight form states
   const [weight, setWeight] = useState('');
@@ -1187,6 +1233,16 @@ const PepTalk = () => {
   const photoInputRef = useRef(null);
 
   useEffect(() => { loadData(); }, []);
+
+  // Show welcome/update modal when app version changes (unless user chose "Do not show again")
+  useEffect(() => {
+    if (isLoading) return;
+    try {
+      const hideForever = localStorage.getItem('peptalk-welcome-hide-forever') === 'true';
+      const lastSeenVersion = localStorage.getItem('peptalk-welcome-version');
+      if (!hideForever && lastSeenVersion !== APP_VERSION) setShowWelcomeModal(true);
+    } catch (_) {}
+  }, [isLoading]);
   
   // Hide splash screen after data loads
   useEffect(() => {
@@ -1243,6 +1299,11 @@ const PepTalk = () => {
       if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
+      const vialsData = localStorage.getItem('health-vials');
+      if (vialsData) {
+        const parsed = JSON.parse(vialsData);
+        setVials(parsed.map(v => ({ ...v, remainingMg: v.remainingMg ?? v.totalMg })));
+      }
       
       // Check notification permission status (web vs native)
       if (Capacitor.isNativePlatform()) {
@@ -1268,7 +1329,7 @@ const PepTalk = () => {
 
   // Form reset functions
   const resetWeightForm = () => { setWeight(''); setWeightDate(getTodayLocal()); setEditingWeight(null); setShowAddForm(false); };
-  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); };
+  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); };
   const resetMeasurementForm = () => { setMeasurementType('Waist'); setMeasurementValue(''); setMeasurementDate(getTodayLocal()); setShowAddForm(false); };
   const resetJournalForm = () => { setJournalContent(''); setJournalMood('neutral'); setJournalEnergy(5); setJournalHunger(5); setJournalDate(getTodayLocal()); setEditingJournal(null); setShowAddForm(false); };
   const resetFastingForm = () => { setFastingHours(''); setFastingDate(getTodayLocal()); setEditingFasting(null); setShowFastingForm(false); };
@@ -1533,6 +1594,13 @@ const PepTalk = () => {
     updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
     setInjectionEntries(updated);
     saveData('health-injection-entries', updated);
+    // Deduct from vial if one was selected (new log only)
+    if (!editingInjection && selectedVialId) {
+      const doseMg = toDoseMg({ dose: injectionDose, unit: injectionUnit });
+      const updatedVials = vials.map(v => v.id === selectedVialId ? { ...v, remainingMg: Math.max(0, (v.remainingMg ?? v.totalMg) - doseMg) } : v);
+      setVials(updatedVials);
+      saveData('health-vials', updatedVials);
+    }
     resetInjectionForm();
   };
 
@@ -1660,7 +1728,8 @@ const PepTalk = () => {
       dailyTrackEntries,
       glucoseEntries,
       a1cEntries,
-      userProfile
+      userProfile,
+      vials
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -1766,6 +1835,10 @@ const PepTalk = () => {
         if (imported.userProfile) {
           setUserProfile(imported.userProfile);
           saveData('health-user-profile', imported.userProfile);
+        }
+        if (imported.vials) {
+          setVials(imported.vials);
+          saveData('health-vials', imported.vials);
         }
         
         alert('Data imported successfully!');
@@ -1880,7 +1953,6 @@ ${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeig
 
   const runExport = async () => {
     if (exportFormat === 'json') await exportData();
-    else if (exportFormat === 'doctor') printDoctorSummary();
     else if (exportFormat === 'csv') await exportCSV();
   };
 
@@ -1898,6 +1970,7 @@ const wipeAllData = () => {
     'health-glucose-entries',
     'health-a1c-entries',
     'health-user-profile',
+    'health-vials',
   ];
 
   keysToRemove.forEach((k) => localStorage.removeItem(k));
@@ -1912,6 +1985,7 @@ const wipeAllData = () => {
   setDailyTrackEntries([]);
   setGlucoseEntries([]);
   setA1cEntries([]);
+  setVials([]);
   setUserProfile({ height: 70, goalWeight: 200 });
 
   setShowWipeConfirm(false);
@@ -2002,9 +2076,9 @@ const wipeAllData = () => {
 
   const calculateBMI = (weightLbs, heightInches) => heightInches ? ((weightLbs / (heightInches * heightInches)) * 703).toFixed(1) : null;
   const getBMICategory = (bmi) => {
-    if (!bmi) return { label: '-', color: 'text-slate-400' };
+    if (!bmi) return { label: '-', color: 'text-gray-400' };
     if (bmi < 18.5) return { label: 'Underweight', color: 'text-blue-400' };
-    if (bmi < 25) return { label: 'Normal', color: 'text-emerald-400' };
+    if (bmi < 25) return { label: 'Normal', color: 'text-green-500' };
     if (bmi < 30) return { label: 'Overweight', color: 'text-yellow-400' };
     return { label: 'Obese', color: 'text-red-400' };
   };
@@ -2038,7 +2112,7 @@ const wipeAllData = () => {
     return { current: current.toFixed(1), change: change.toFixed(1), trend: change < 0 ? 'down' : change > 0 ? 'up' : 'neutral', bmi, percentChange: percentChange.toFixed(1), weeklyAvg: weeklyAvg.toFixed(1), toGoal: toGoal.toFixed(1), estimatedGoalDate };
   };
 
-  // "On track?" — compare user's weekly loss to typical GLP-1 loss (from trials)
+  // "On track?" — compare user's weekly loss to typical GLP-1 loss for their medication and dose (from trials)
   const getOnTrackInfo = () => {
     const filtered = getFilteredData(weightEntries);
     if (filtered.length < 2) return null;
@@ -2055,14 +2129,22 @@ const wipeAllData = () => {
     const med = MEDICATIONS.find(m => m.name === medName(lastInjection));
     if (!med) return null;
     const injectionMed = medName(lastInjection);
-    const typical = TYPICAL_WEEKLY_LOSS[injectionMed] ?? TYPICAL_WEEKLY_LOSS[med.name] ?? 0.5;
+    // Weekly dose (mg per 7 days): sum of this med's injections in the last 7 days
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const injectionsLast7Days = injectionEntries.filter(e => medName(e) === injectionMed && parseLocalDate(e.date) >= sevenDaysAgo);
+    const weeklyDoseMg = injectionsLast7Days.length > 0
+      ? injectionsLast7Days.reduce((sum, inj) => sum + toDoseMg(inj), 0)
+      : toDoseMg(lastInjection);
+    const typical = getTypicalWeeklyLossForDose(injectionMed, weeklyDoseMg);
     const userLoss = -parseFloat(stats.weeklyAvg); // positive = lbs lost per week
-    if (userLoss <= 0) return { med: injectionMed, dose: `${lastInjection.dose}${lastInjection.unit}`, typical, userLoss: 0, status: 'slower' };
+    const doseLabel = injectionsLast7Days.length > 1 ? `${weeklyDoseMg} mg/week` : `${lastInjection.dose}${lastInjection.unit}`;
+    if (userLoss <= 0) return { med: injectionMed, dose: doseLabel, typical, userLoss: 0, status: 'slower' };
     const ratio = userLoss / typical;
     let status = 'on_track';
     if (ratio >= 1.2) status = 'ahead';
     else if (ratio < 0.7) status = 'slower';
-    return { med: injectionMed, dose: `${lastInjection.dose}${lastInjection.unit}`, typical, userLoss, status };
+    return { med: injectionMed, dose: doseLabel, typical, userLoss, status };
   };
 
   // Chart data: your cumulative weight loss vs typical — week 1 through current week + 1
@@ -2117,38 +2199,108 @@ const wipeAllData = () => {
     const upcoming = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+    const todayStr = formatDateLocal(today);
+    const msPerDay = 24 * 60 * 60 * 1000;
+
     schedules.forEach(schedule => {
-      // Find the MOST RECENT injection for this medication
       const medicationInjections = injectionEntries
         .filter(e => e.type === schedule.medication)
         .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-      
       const lastInjection = medicationInjections[0];
       let nextDate;
-      
-      if (lastInjection) {
-        nextDate = parseLocalDate(lastInjection.date);
-        nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
+
+      if (schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0) {
+        // Next injection = next calendar day that is one of the scheduled weekdays
+        const specificDays = schedule.specificDays;
+        let start = new Date(today);
+        start.setHours(0, 0, 0, 0);
+        if (lastInjection) {
+          const lastDayStr = toCalendarDay(lastInjection.date);
+          const lastDayOfWeek = parseLocalDate(lastDayStr).getDay();
+          if (lastDayStr === todayStr && specificDays.includes(lastDayOfWeek)) {
+            start.setDate(start.getDate() + 1);
+          }
+        }
+        for (let i = 0; i < 8; i++) {
+          const d = new Date(start);
+          d.setDate(start.getDate() + i);
+          d.setHours(0, 0, 0, 0);
+          if (specificDays.includes(d.getDay())) {
+            nextDate = d;
+            break;
+          }
+        }
+        if (!nextDate) {
+          nextDate = new Date(today);
+          nextDate.setDate(today.getDate() + 7);
+        }
       } else {
-        nextDate = new Date(today);
+        if (lastInjection) {
+          nextDate = parseLocalDate(lastInjection.date);
+          nextDate.setDate(nextDate.getDate() + (schedule.frequencyDays ?? 7));
+        } else {
+          nextDate = new Date(today);
+        }
+        nextDate.setHours(0, 0, 0, 0);
       }
-      
-      nextDate.setHours(0, 0, 0, 0);
-      
-      // Calculate days until next injection
-      const daysUntil = Math.round((nextDate - today) / (24 * 60 * 60 * 1000));
-      
-      upcoming.push({ 
-        medication: schedule.medication, 
-        nextDate, 
-        daysUntil, 
-        isOverdue: daysUntil < 0, 
-        isDueToday: daysUntil === 0 
+
+      const daysUntil = Math.round((nextDate - today) / msPerDay);
+
+      upcoming.push({
+        medication: schedule.medication,
+        nextDate,
+        daysUntil,
+        isOverdue: daysUntil < 0,
+        isDueToday: daysUntil === 0
       });
     });
-    
+
     return upcoming.sort((a, b) => a.daysUntil - b.daysUntil);
+  };
+
+  // Logging streak: days with weight logged in last 7, and consecutive weeks with at least one entry
+  const getLoggingStreak = () => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const dayStrs = new Set();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      dayStrs.add(formatDateLocal(d));
+    }
+    const entriesInLast7 = weightEntries.filter(e => dayStrs.has(toCalendarDay(e.date)));
+    const uniqueDays = new Set(entriesInLast7.map(e => toCalendarDay(e.date)));
+    const weekKey = (dateStr) => {
+      const d = parseLocalDate(dateStr);
+      const start = new Date(d);
+      start.setDate(start.getDate() - start.getDay());
+      return formatDateLocal(start);
+    };
+    const byWeek = {};
+    weightEntries.forEach(e => {
+      const w = weekKey(toCalendarDay(e.date));
+      if (!byWeek[w]) byWeek[w] = true;
+    });
+    let weeksInRow = 0;
+    for (let i = 0; i < 52; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i * 7);
+      const w = weekKey(formatDateLocal(d));
+      if (byWeek[w]) weeksInRow++; else break;
+    }
+    return { daysLoggedLast7: uniqueDays.size, weeksInRow };
+  };
+
+  // Most-mentioned side effects from injection logs (for Insights/Summary)
+  const getSideEffectsSummary = () => {
+    const counts = {};
+    injectionEntries.forEach(entry => {
+      (entry.sideEffects || []).forEach(se => {
+        counts[se] = (counts[se] || 0) + 1;
+      });
+    });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return sorted.slice(0, 5).map(([name]) => name);
   };
 
   const getCurrentTitrationDose = (plan) => {
@@ -2368,6 +2520,19 @@ const wipeAllData = () => {
     saveData('health-daily-track', updated);
   };
 
+  // Suggest next injection site for rotation (based on last injection site for this med)
+  const getSuggestedInjectionSite = (medicationName) => {
+    const recent = injectionEntries
+      .filter(e => e.type === medicationName)
+      .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))
+      .slice(0, 10);
+    if (recent.length === 0) return BODY_LOCATIONS[0];
+    const lastSite = recent[0].site || 'Stomach';
+    const idx = BODY_LOCATIONS.indexOf(lastSite);
+    const nextIdx = idx >= 0 ? (idx + 1) % BODY_LOCATIONS.length : 0;
+    return BODY_LOCATIONS[nextIdx];
+  };
+
   // Convert injection dose to mg-equivalent for pharmacokinetic weighting (same units = comparable)
   const toDoseMg = (inj) => {
     let dose = parseFloat(inj.dose);
@@ -2480,7 +2645,7 @@ const wipeAllData = () => {
 
       // Fallback to simple phase if timeline not available
       let phase = currentPhase ? currentPhase.name : 'Active';
-      let phaseColor = currentPhase ? currentPhase.color : 'text-amber-400';
+      let phaseColor = currentPhase ? currentPhase.color : 'text-gold-400';
 
       // Calculate next injection time
       const schedule = schedules.find(s => s.medication === medName);
@@ -2525,18 +2690,21 @@ const wipeAllData = () => {
     const now = new Date();
     const data = [];
     
-    // Generate data points for the last 14 days
+    // Generate data points for the last 14 days. Compare by calendar day only so any injection
+    // logged on that day is always included and the curve goes up on injection days.
     for (let i = -14; i <= 0; i++) {
       const date = new Date(now);
       date.setDate(date.getDate() + i);
+      date.setHours(23, 59, 59, 999);
       const dateStr = formatDateLocal(date);
       
-      // Calculate total level from all injections before this date, weighted by user's actual dose (SubQ vs IM)
-      const injectionsBeforeDate = recentInjections.filter(inj => parseLocalDate(inj.date) <= date);
+      // Include all injections on or before this calendar day (string comparison YYYY-MM-DD)
+      const injectionsBeforeDate = recentInjections.filter(inj => toCalendarDay(inj.date) <= dateStr);
       let totalRemainingMg = 0;
       injectionsBeforeDate.forEach(inj => {
-        const injDate = parseLocalDate(inj.date);
-        const hoursElapsed = (date - injDate) / (1000 * 60 * 60);
+        const injDay = toCalendarDay(inj.date);
+        const injDate = parseLocalDate(injDay); // start of injection day
+        const hoursElapsed = (date.getTime() - injDate.getTime()) / (1000 * 60 * 60);
         const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
         const doseMg = toDoseMg(inj);
         const halfLivesElapsed = effectiveHours / medication.halfLife;
@@ -2547,13 +2715,17 @@ const wipeAllData = () => {
       const lastInjAtDate = injectionsBeforeDate[injectionsBeforeDate.length - 1];
       const lastDoseMg = lastInjAtDate ? toDoseMg(lastInjAtDate) : 0;
       const level = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
-      
+      const injectionDatesSet = new Set(recentInjections.map(inj => toCalendarDay(inj.date)));
+      const hasInjection = injectionDatesSet.has(dateStr);
+
       data.push({
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        level: Math.round(level)
+        fullDate: dateStr,
+        level: Math.round(level),
+        injectionDay: hasInjection
       });
     }
-    
+
     return data;
   };
 
@@ -2567,37 +2739,94 @@ const wipeAllData = () => {
 
   if (isLoading || showSplash) {
     return (
-      <div className="min-h-screen flex items-center justify-center overflow-hidden">
-        <div className="text-center animate-fade-in">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-amber-500/20 blur-3xl rounded-full animate-pulse"></div>
-            <Activity className="h-24 w-24 text-amber-400 mx-auto relative animate-float" strokeWidth={1.5} />
+      <div className="min-h-screen flex items-center justify-center overflow-hidden bg-[var(--bg-base)]">
+        <div className="text-center relative">
+          {/* Outer glow ring */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="splash-ring w-48 h-48 rounded-full border-2 border-accent/30" />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">PepTalk</h1>
-          <p className="text-amber-400 text-sm font-medium animate-pulse">Loading your data...</p>
+          <div className="relative mb-6 splash-icon-wrap">
+            <div className="absolute inset-0 bg-accent/25 blur-3xl rounded-full splash-glow" />
+            <div className="absolute inset-0 rounded-full border border-accent/20 splash-ring-inner" />
+            <Activity className="h-24 w-24 text-gold-400 mx-auto relative splash-float" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight splash-title">PepTalk</h1>
+          <p className="text-gold-400 text-sm font-medium splash-subtitle">Loading your data...</p>
+          <div className="flex justify-center gap-1 mt-4 splash-dots">
+            <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0s' }} />
+            <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0.2s' }} />
+            <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0.4s' }} />
+          </div>
         </div>
         <style>{`
-          @keyframes fade-in {
-            from { opacity: 0; transform: translateY(20px); }
+          .splash-glow {
+            animation: splash-glow 2.5s ease-in-out infinite;
+          }
+          @keyframes splash-glow {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.15); }
+          }
+          .splash-ring {
+            animation: splash-ring 3s linear infinite;
+          }
+          @keyframes splash-ring {
+            from { transform: rotate(0deg); opacity: 0.4; }
+            50% { opacity: 0.8; }
+            to { transform: rotate(360deg); opacity: 0.4; }
+          }
+          .splash-ring-inner {
+            animation: splash-ring-inner 4s linear infinite reverse;
+          }
+          @keyframes splash-ring-inner {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .splash-float {
+            animation: splash-float 2.5s ease-in-out infinite;
+          }
+          @keyframes splash-float {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-12px) scale(1.05); }
+          }
+          .splash-title {
+            animation: splash-title 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+          }
+          @keyframes splash-title {
+            from { opacity: 0; transform: translateY(16px) scale(0.92); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          .splash-subtitle {
+            animation: splash-subtitle 0.6s ease-out 0.5s both;
+          }
+          @keyframes splash-subtitle {
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
           }
-          @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
+          .splash-dots {
+            animation: splash-fade 0.5s ease-out 0.7s both;
           }
-          .animate-fade-in { animation: fade-in 0.6s ease-out; }
-          .animate-float { animation: float 3s ease-in-out infinite; }
+          .splash-dot {
+            animation: splash-dot-bounce 1.2s ease-in-out infinite;
+          }
+          @keyframes splash-dot-bounce {
+            0%, 100% { transform: translateY(0); opacity: 0.6; }
+            50% { transform: translateY(-4px); opacity: 1; }
+          }
+          @keyframes splash-fade {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
         `}</style>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-4 pb-24 transition-all duration-300">
+    <div className="min-h-screen p-3 pb-28 transition-all duration-300 bg-[var(--bg-base)]">
       {/* Success Celebration Popup */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="animate-celebrate bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 px-8 py-4 rounded-2xl shadow-2xl shadow-amber-500/40 pointer-events-auto transform scale-110">
+          <div className="animate-celebrate bg-gradient-to-r from-accent to-gold-600 text-gray-900 px-8 py-4 rounded-2xl shadow-2xl shadow-accent/40 pointer-events-auto transform scale-110">
             <div className="text-2xl font-bold text-center">{celebrationMessage}</div>
           </div>
         </div>
@@ -2605,44 +2834,39 @@ const wipeAllData = () => {
       
       {/* Wipe Data Confirmation */}
 {showWipeConfirm && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div
-      className="absolute inset-0 bg-black/60"
-      onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}
-    />
-    <div className="relative w-full max-w-md rounded-2xl border border-white/[0.08] shadow-2xl p-6 bg-slate-900/95 backdrop-blur-xl">
+  <div className="ui-modal-overlay" onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}>
+    <div className="ui-modal" onClick={e => e.stopPropagation()}>
       <h3 className="text-white text-xl font-semibold mb-2">Reset PepTalk?</h3>
-      <p className="text-slate-300 text-sm mb-4">
+      <p className="text-gray-300 text-sm mb-4">
         This permanently deletes all weight, injections, measurements, photos, schedules, and journal entries on this device.
       </p>
 
-      <label className="flex items-start gap-3 rounded-xl p-3 mb-4 cursor-pointer border border-white/[0.06] bg-slate-800/70">
+      <label className="flex items-start gap-3 rounded-xl p-3 mb-4 cursor-pointer border border-white/[0.08] bg-[var(--bg-elevated)]">
         <input
           type="checkbox"
           checked={wipeConfirmChecked}
           onChange={(e) => setWipeConfirmChecked(e.target.checked)}
           className="mt-1"
         />
-        <span className="text-slate-200 text-sm">
+        <span className="text-gray-200 text-sm">
           I understand this cannot be undone.
         </span>
       </label>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 mt-4">
         <button
           onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}
-          className="flex-1 bg-slate-700/80 hover:bg-slate-600 text-white font-medium py-3 rounded-xl transition-colors"
+          className="flex-1 ui-btn-ghost py-3"
         >
           Cancel
         </button>
-
         <button
           disabled={!wipeConfirmChecked}
           onClick={wipeAllData}
-          className={`flex-1 font-medium py-3 rounded-xl ${
+          className={`flex-1 font-semibold py-3 rounded-xl transition-all ${
             wipeConfirmChecked
-              ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/40'
-              : 'bg-red-500/40 text-white/60 cursor-not-allowed'
+              ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/30'
+              : 'bg-red-500/30 text-white/50 cursor-not-allowed'
           }`}
         >
           Wipe Data
@@ -2651,6 +2875,37 @@ const wipeAllData = () => {
     </div>
   </div>
 )}
+
+      {/* Welcome / Update modal — shows when app version changes; "Do not show again" hides forever */}
+      {showWelcomeModal && (
+        <div className="ui-modal-overlay" onClick={() => { setShowWelcomeModal(false); try { localStorage.setItem('peptalk-welcome-version', APP_VERSION); if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true'); } catch (_) {} }}>
+          <div className="ui-modal max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2"><BookOpen className="h-6 w-6 text-gold-400" />Welcome to PepTalk</h3>
+              <button type="button" onClick={() => { setShowWelcomeModal(false); try { localStorage.setItem('peptalk-welcome-version', APP_VERSION); if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true'); } catch (_) {} }} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
+            </div>
+            <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} — How to use the app</p>
+            <div className="text-gray-300 text-sm space-y-3 mb-4 pr-2">
+              <p><strong className="text-white">Summary</strong> — Your dashboard. Use &quot;Log weight&quot; and &quot;Log injection&quot; for quick entries. View stats, goal date, milestones, and upcoming injections.</p>
+              <p><strong className="text-white">Weight</strong> — Log and edit weight entries. See your trend and chart.</p>
+              <p><strong className="text-white">Injections</strong> — Log doses (medication, amount, date, SubQ/IM, site, side effects). Keeps a full history.</p>
+              <p><strong className="text-white">Insights</strong> — Medication levels over time, phases, and when to dose next. Tap a medication to expand details.</p>
+              <p><strong className="text-white">Journal</strong> — Track how you feel, energy, hunger, and notes. Great for side effects and non-scale victories.</p>
+              <p><strong className="text-white">More</strong> — Body measurements &amp; progress photos, daily nutrition/hydration, calendar, <strong className="text-gold-400">Tools</strong> (calculators, schedules, titration, reminders, export/import), and Glucose &amp; A1C.</p>
+              {weightEntries.length === 0 && injectionEntries.length === 0 && (
+                <p className="bg-accent/10 border border-accent/20 rounded-lg p-2.5 text-gold-400 text-xs mt-2">Get started: set your goal weight in More → Tools, then log your first weight and injection from Summary.</p>
+              )}
+            </div>
+            <label className="flex items-start gap-3 rounded-xl p-3 mb-4 cursor-pointer border border-white/[0.08] bg-[var(--bg-card)]">
+              <input type="checkbox" checked={welcomeDontShowAgain} onChange={(e) => setWelcomeDontShowAgain(e.target.checked)} className="mt-1" />
+              <span className="text-gray-200 text-sm">Do not show this again (even after updates)</span>
+            </label>
+            <button type="button" onClick={() => { setShowWelcomeModal(false); try { localStorage.setItem('peptalk-welcome-version', APP_VERSION); if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true'); } catch (_) {} }} className="w-full ui-btn-primary py-3">
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes celebrate {
@@ -2686,11 +2941,11 @@ const wipeAllData = () => {
         }
         
         .btn-amber {
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+          background: linear-gradient(135deg, #e8b84c 0%, #c99b2e 100%);
+          box-shadow: 0 4px 12px rgba(232, 184, 76, 0.3);
         }
         .btn-amber:hover {
-          box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+          box-shadow: 0 6px 16px rgba(232, 184, 76, 0.4);
         }
         
         /* Card hover effects */
@@ -2742,129 +2997,196 @@ const wipeAllData = () => {
         }
       `}</style>
       
-      <div className="max-w-2xl mx-auto">
-        <header className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-white tracking-tight mb-0.5">PepTalk</h1>
-          <p className="text-slate-400 text-sm font-medium">Weight · Injections · Measurements · Tools</p>
+      <div className="max-w-2xl mx-auto px-1">
+        <header className="text-center mb-5">
+          <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
+          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Tools</p>
         </header>
 
-        {/* Upcoming Injections Alert - Shows ALL overdue/due medications with dismiss */}
+        {/* Upcoming Injections Alert */}
         {upcomingInjections
           .filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`))
-          .map((injection, idx) => (
-          <div key={injection.medication} className={`alert-enter mb-4 p-4 rounded-2xl flex items-center gap-3 border ${injection.isOverdue ? 'bg-red-500/15 border-red-500/40 backdrop-blur-sm' : 'bg-amber-500/15 border-amber-500/40 backdrop-blur-sm'}`}>
-            <Bell className={`h-5 w-5 ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
-            <div className="flex-1">
-              <div className={`font-medium ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`}>
+          .map((injection) => (
+          <div key={injection.medication} className={`alert-enter mb-3 ui-alert ${injection.isOverdue ? 'ui-alert-danger' : 'ui-alert-warning'}`}>
+            <Bell className={`h-5 w-5 shrink-0 ${injection.isOverdue ? 'text-red-400' : 'text-gold-400'}`} />
+            <div className="flex-1 min-w-0">
+              <div className={`font-semibold text-sm ${injection.isOverdue ? 'text-red-400' : 'text-gold-400'}`}>
                 {injection.isOverdue ? 'Injection Overdue' : 'Injection Due Today'}
               </div>
-              <div className="text-white text-sm">{injection.medication}</div>
+              <div className="text-white text-sm mt-0.5">{injection.medication}</div>
               {injection.isOverdue && (
-                <div className="text-slate-400 text-xs">{Math.abs(injection.daysUntil)} {Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue</div>
+                <div className="text-gray-400 text-xs mt-0.5">{Math.abs(injection.daysUntil)} {Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue</div>
               )}
             </div>
             <button
               onClick={() => setDismissedAlerts([...dismissedAlerts, `${injection.medication}-${injection.daysUntil}`])}
-              className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+              className="ui-btn-ghost p-2 rounded-lg"
             >
-              <X className={`h-4 w-4 ${injection.isOverdue ? 'text-red-400' : 'text-amber-400'}`} />
+              <X className="h-4 w-4" />
             </button>
           </div>
         ))}
 
-        {/* Tab Navigation - 3D pill bar */}
-        <div className="menu-3d flex rounded-2xl p-1.5 mb-6 overflow-x-auto bg-slate-800/70 backdrop-blur-xl">
-          {[
-            { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
-            { id: 'insights', icon: Activity, label: 'Insights' },
-            { id: 'weight', icon: Scale, label: 'Weight' },
-            { id: 'injections', icon: Syringe, label: 'Injections' },
-            { id: 'glucose', icon: Droplet, label: 'Glucose' },
-            { id: 'more', icon: MoreHorizontal, label: 'More' }
-          ].map(tab => (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowAddForm(false); }}
-              className={`menu-3d-item flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-2 rounded-xl font-medium transition-all duration-200 text-xs whitespace-nowrap ${activeTab === tab.id ? 'menu-3d-item-active bg-amber-500 text-slate-900 shadow-amber-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}>
-              <tab.icon className="h-4 w-4" />{tab.label}
-            </button>
-          ))}
+        {/* Tab Navigation */}
+        <div className="mb-4">
+          <div className="ui-tab-bar p-1 overflow-x-auto">
+            {[
+              { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
+              { id: 'weight', icon: Scale, label: 'Weight' },
+              { id: 'injections', icon: Syringe, label: 'Injections' },
+              { id: 'insights', icon: Activity, label: 'Insights' },
+              { id: 'journal', icon: BookOpen, label: 'Journal' },
+              { id: 'more', icon: MoreHorizontal, label: 'More' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setShowAddForm(false); }}
+                className={`ui-tab whitespace-nowrap ${activeTab === tab.id ? 'ui-tab-active' : ''}`}
+              >
+                <tab.icon className="h-4 w-4 shrink-0" />
+                <span className="truncate max-w-full text-[11px]">{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* SUMMARY TAB */}
         {activeTab === 'summary' && (
-          <div className="space-y-4 tab-enter">
-            {/* Time Range Selector - 3D */}
-            <div className="menu-3d flex justify-between items-center rounded-2xl p-1.5 bg-slate-800/60 backdrop-blur-sm">
-              {[{ id: '1m', label: '1 month' }, { id: '3m', label: '3 months' }, { id: '6m', label: '6 months' }, { id: '12m', label: '12 months' }, { id: 'all', label: 'All Time' }].map(range => (
-                <button key={range.id} onClick={() => setTimeRange(range.id)}
-                  className={`menu-3d-item flex-1 py-2 px-1 text-xs font-medium rounded-lg transition-all ${timeRange === range.id ? 'menu-3d-item-active text-amber-400 border-b-2 border-amber-400 bg-slate-700/40' : 'text-slate-400 hover:text-white'}`}>
+          <div key="summary" className="space-y-4 tab-enter">
+            {/* Time Range Selector */}
+            <div className="ui-segmented">
+              {[{ id: '1m', label: '1m' }, { id: '3m', label: '3m' }, { id: '6m', label: '6m' }, { id: '12m', label: '12m' }, { id: 'all', label: 'All' }].map(range => (
+                <button
+                  key={range.id}
+                  onClick={() => setTimeRange(range.id)}
+                  className={`ui-segmented-btn ${timeRange === range.id ? 'ui-segmented-btn-active' : ''}`}
+                >
                   {range.label}
                 </button>
               ))}
+            </div>
+
+            {/* Quick actions — log from Summary */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setActiveTab('weight'); setShowAddForm(true); }}
+                className="flex-1 ui-btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
+              >
+                <Scale className="h-4 w-4" />
+                Log weight
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
+                className="flex-1 ui-btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
+              >
+                <Syringe className="h-4 w-4" />
+                Log injection
+              </button>
             </div>
 
             {/* Week in review */}
             {(() => {
               const d = getWeeklyDigest();
               return (
-                <div className="rounded-2xl p-4 border border-amber-500/20 bg-gradient-to-r from-amber-500/10 to-amber-600/5 backdrop-blur-sm">
-                  <h3 className="text-amber-400/90 text-sm font-medium mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" />This week</h3>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-200 text-sm">
-                    <span><Scale className="h-3.5 w-3 inline mr-1 text-slate-400" />Weight {d.weightStr}</span>
-                    <span><Syringe className="h-3.5 w-3 inline mr-1 text-slate-400" />{d.injStr} injections</span>
-                    <span><Droplets className="h-3.5 w-3 inline mr-1 text-slate-400" />{d.hydrationStr} hydrated</span>
-                    {d.avgGlucose != null && <span className="text-emerald-400/90">Glucose avg {d.avgGlucose} mg/dL</span>}
-                    {d.avgGlucose == null && d.lastGlucose && <span className="text-emerald-400/90">Last glucose {d.lastGlucose.value} mg/dL</span>}
-                    {d.lastA1c && <span className="text-cyan-400/90">A1C {d.lastA1c.value}%</span>}
+                <div className="ui-card p-4 border-accent/20 bg-accent/5">
+                  <h3 className="text-gold-400 text-sm font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" />This week</h3>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-200 text-sm">
+                    <span><Scale className="h-3.5 w-3 inline mr-1 text-gray-400" />Weight {d.weightStr}</span>
+                    <span><Syringe className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.injStr} injections</span>
+                    <span><Droplets className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.hydrationStr} hydrated</span>
+                    {d.avgGlucose != null && <span className="text-green-500">Glucose avg {d.avgGlucose} mg/dL</span>}
+                    {d.avgGlucose == null && d.lastGlucose && <span className="text-green-500">Last glucose {d.lastGlucose.value} mg/dL</span>}
+                    {d.lastA1c && <span className="text-cyan-400">A1C {d.lastA1c.value}%</span>}
                   </div>
+                </div>
+              );
+            })()}
+
+            {/* Logging streak */}
+            {(() => {
+              const streak = getLoggingStreak();
+              if (streak.daysLoggedLast7 === 0 && streak.weeksInRow === 0) return null;
+              return (
+                <div className="text-gray-400 text-xs">
+                  {streak.daysLoggedLast7 > 0 && <span>Logged weight {streak.daysLoggedLast7} of last 7 days</span>}
+                  {streak.weeksInRow > 0 && streak.daysLoggedLast7 > 0 && ' · '}
+                  {streak.weeksInRow > 0 && <span>{streak.weeksInRow} week{streak.weeksInRow !== 1 ? 's' : ''} in a row</span>}
                 </div>
               );
             })()}
 
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold text-white">Weight Change</h2>
-              <span className="text-slate-400 text-sm">{getDateRangeLabel()}</span>
+              <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
             </div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Scale className="h-3 w-3" />Total change</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-emerald-400' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-slate-400">lbs</span></div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
+                <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
               </div>
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Activity className="h-3 w-3" />Current BMI</div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
                 <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
               </div>
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Scale className="h-3 w-3" />Weight</div>
-                <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-slate-400">lbs</span></div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
+                <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-emerald-400' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-slate-400">%</span></div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
+                <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
               </div>
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-emerald-400' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-slate-400">lbs/wk</span></div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
+                <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
               </div>
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm transition-shadow hover:shadow-card">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-medium mb-1"><Target className="h-3 w-3" />To goal</div>
-                <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-slate-400">lbs</span></div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
+                <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
               </div>
             </div>
 
+            {/* Goal weight + progress */}
+            {userProfile?.goalWeight && parseFloat(stats.current) > 0 && (() => {
+              const goal = parseFloat(userProfile.goalWeight);
+              const current = parseFloat(stats.current);
+              const filtered = getFilteredData(weightEntries);
+              const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
+              const totalToLose = startWeight - goal;
+              const progress = totalToLose > 0 ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
+              return (
+                <div className="ui-card p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-400 text-sm">Goal</span>
+                    <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>{stats.current} lbs now</span>
+                    <span>{stats.toGoal} to go</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Estimated Goal Date */}
             {stats.estimatedGoalDate && (
-              <div className="rounded-2xl p-4 border border-amber-500/25 bg-gradient-to-r from-amber-500/15 to-amber-600/10 backdrop-blur-sm">
+              <div className="ui-card p-4 border-accent/25 bg-accent/10">
                 <div className="flex items-center gap-3">
-                  <div className="bg-amber-500/20 p-2 rounded-lg border border-amber-500/30"><Target className="h-5 w-5 text-amber-400" /></div>
+                  <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
                   <div>
-                    <div className="text-amber-400 text-sm font-medium">Estimated Goal Date</div>
-                    <div className="text-white text-lg font-bold">{stats.estimatedGoalDate}</div>
-                    <div className="text-slate-400 text-xs">Based on your {stats.weeklyAvg} lbs/week average</div>
+                    <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
+                    <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
+                    <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
                   </div>
                 </div>
               </div>
@@ -2872,15 +3194,15 @@ const wipeAllData = () => {
 
             {/* On track? — compare to typical GLP-1 loss */}
             {getOnTrackInfo() && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-amber-400" />On track?</h3>
+              <div className="ui-card p-4">
+                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-gold-400" />On track?</h3>
                 {(() => {
                   const info = getOnTrackInfo();
                   const statusMsg = info.status === 'ahead' ? "You're ahead of typical loss — great progress." : info.status === 'slower' ? "You're losing slower than average. Normal early on or at lower doses." : "Your loss is in line with typical results for your medication.";
-                  const statusColor = info.status === 'ahead' ? 'text-emerald-400' : info.status === 'slower' ? 'text-amber-400' : 'text-emerald-400';
+                  const statusColor = info.status === 'ahead' ? 'text-green-500' : info.status === 'slower' ? 'text-gold-400' : 'text-green-500';
                   return (
                     <div className="space-y-2">
-                      <p className="text-slate-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
+                      <p className="text-gray-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
                       <p className={`text-sm font-medium ${statusColor}`}>{statusMsg}</p>
                     </div>
                   );
@@ -2890,19 +3212,19 @@ const wipeAllData = () => {
 
             {/* Your loss vs typical — cumulative weight loss chart */}
             {getYouVsTypicalChartData().length > 0 && (
-              <div className="rounded-2xl overflow-hidden border border-white/[0.06] bg-slate-800/40 backdrop-blur-sm">
+              <div className="ui-card overflow-hidden">
                 <div className="px-5 pt-5 pb-1">
-                  <h3 className="text-slate-300 text-sm font-medium mb-1">Your loss vs typical</h3>
-                  <p className="text-slate-500 text-xs mb-4">Cumulative lbs lost: you vs average for your medication (clinical trials).</p>
+                  <h3 className="text-gray-300 text-sm font-medium mb-1">Your loss vs typical</h3>
+                  <p className="text-gray-500 text-xs mb-4">Cumulative lbs lost: you vs average for your medication at your dose (clinical trials).</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <ComposedChart data={getYouVsTypicalChartData()} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="0" stroke="#334155" vertical={false} strokeOpacity={0.4} />
                       <XAxis dataKey="weekLabel" axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} interval="preserveStartEnd" minTickGap={24} />
                       <YAxis axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} width={32} domain={[0, 'auto']} tickFormatter={(v) => `${v}`} />
-                      <Tooltip contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.96)', border: '1px solid rgba(71, 85, 105, 0.5)', borderRadius: '10px', padding: '8px 12px' }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} formatter={(value) => [value != null ? value.toFixed(1) : '-', '']} labelFormatter={(label, payload) => payload?.[0]?.payload?.weekLabel ? `${payload[0].payload.weekLabel} — You: ${(payload[0].payload.userLoss ?? 0).toFixed(1)} lb, Typical: ${(payload[0].payload.typicalLoss ?? 0).toFixed(1)} lb` : label} />
-                      <Line type="monotone" dataKey="userLoss" name="You" stroke="#f59e0b" strokeWidth={2.5} dot={{ fill: '#f59e0b', r: 3 }} connectNulls />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.96)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '8px 12px' }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} formatter={(value) => [value != null ? value.toFixed(1) : '-', '']} labelFormatter={(label, payload) => payload?.[0]?.payload?.weekLabel ? `${payload[0].payload.weekLabel} — You: ${(payload[0].payload.userLoss ?? 0).toFixed(1)} lb, Typical: ${(payload[0].payload.typicalLoss ?? 0).toFixed(1)} lb` : label} />
+                      <Line type="monotone" dataKey="userLoss" name="You" stroke="#e8b84c" strokeWidth={2.5} dot={{ fill: '#e8b84c', r: 3 }} connectNulls />
                       <Line type="monotone" dataKey="typicalLoss" name="Typical" stroke="#64748b" strokeWidth={2} strokeDasharray="4 4" dot={{ fill: '#64748b', r: 2 }} connectNulls />
-                      <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => <span className="text-slate-300">{value}</span>} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => <span className="text-gray-300">{value}</span>} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -2911,14 +3233,14 @@ const wipeAllData = () => {
 
             {/* Milestones — 5 lb down, 10 lb down, ... */}
             {getMilestones().length > 0 && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-400" />Milestones</h3>
+              <div className="ui-card p-4">
+                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-gold-400" />Milestones</h3>
                 <div className="flex flex-wrap gap-2">
                   {getMilestones().map((m, i) => (
-                    <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.achieved ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-700/50 text-slate-400 border border-white/[0.04]'}`}>
-                      {m.achieved ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-slate-500 flex-shrink-0" />}
+                    <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.achieved ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-slate-700/50 text-gray-400 border border-white/[0.04]'}`}>
+                      {m.achieved ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-gray-500 flex-shrink-0" />}
                       <span>{m.label}</span>
-                      {!m.achieved && m.toGo > 0 && <span className="text-slate-500 text-xs">— {m.toGo.toFixed(0)} lb to go</span>}
+                      {!m.achieved && m.toGo > 0 && <span className="text-gray-500 text-xs">— {m.toGo.toFixed(0)} lb to go</span>}
                     </div>
                   ))}
                 </div>
@@ -2927,19 +3249,30 @@ const wipeAllData = () => {
 
             {/* Upcoming Injections */}
             {upcomingInjections.length > 0 && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Bell className="h-4 w-4 text-amber-400" />Upcoming Injections</h3>
+              <div className="ui-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-white font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-gold-400" />Upcoming Injections</h3>
+                  <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('notifications'); }} className="text-gold-400 hover:text-gold-300 text-xs font-medium flex items-center gap-1">
+                    <Bell className="h-3.5 w-3" />Remind me
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {upcomingInjections.slice(0, 3).map((inj, idx) => (
-                    <div key={idx} className="flex items-center justify-between rounded-xl p-3 border border-white/[0.04] bg-slate-700/40">
+                    <div key={idx} className="flex items-center justify-between rounded-lg p-3 ui-card-inner">
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(inj.medication)}20` }}>
                           <Syringe className="h-4 w-4" style={{ color: getMedicationColor(inj.medication) }} />
                         </div>
                         <span className="text-white">{inj.medication}</span>
                       </div>
-                      <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-amber-400' : 'text-slate-400'}`}>
-                        {inj.isOverdue ? `${Math.abs(inj.daysUntil)} days overdue` : inj.isDueToday ? 'Due today' : `In ${inj.daysUntil} days`}
+                      <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-gold-400' : 'text-gray-400'}`}>
+                        {inj.isOverdue
+                          ? `${Math.abs(inj.daysUntil)} ${Math.abs(inj.daysUntil) === 1 ? 'day' : 'days'} overdue`
+                          : inj.isDueToday
+                            ? 'Due today'
+                            : inj.daysUntil === 1
+                              ? 'Tomorrow'
+                              : `In ${inj.daysUntil} days`}
                       </div>
                     </div>
                   ))}
@@ -2952,8 +3285,8 @@ const wipeAllData = () => {
               const med = MEDICATIONS.find(m => m.name === p.medication);
               return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
             }).length > 0 && (
-              <div className="rounded-2xl p-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-sm">
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+              <div className="ui-card p-4 border-accent/20 bg-accent/5">
+                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
                   <Activity className="h-4 w-4 text-violet-400" />
                   Dose Tracking
                 </h3>
@@ -2979,28 +3312,28 @@ const wipeAllData = () => {
                   const isAhead = lastDose > recommendedDose;
                   
                   return (
-                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-800/50">
+                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.06] bg-[var(--bg-card)]">
                       <div className="text-white font-medium mb-3">{plan.medication}</div>
                       
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         {/* Last Dose Taken */}
                         <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-slate-400 text-xs mb-1">Last Dose Taken</div>
-                          <div className="text-2xl font-bold text-amber-400">
+                          <div className="text-gray-400 text-xs mb-1">Last Dose Taken</div>
+                          <div className="text-2xl font-bold text-gold-400">
                             {lastInjection.dose}{lastInjection.unit}
                           </div>
-                          <div className="text-slate-500 text-xs mt-1">
+                          <div className="text-gray-500 text-xs mt-1">
                             {new Date(parseLocalDate(lastInjection.date)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </div>
                         </div>
                         
                         {/* Recommended Dose */}
                         <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-slate-400 text-xs mb-1">Recommended Dose</div>
+                          <div className="text-gray-400 text-xs mb-1">Recommended Dose</div>
                           <div className="text-2xl font-bold text-violet-400">
                             {current.dose}{current.unit}
                           </div>
-                          <div className="text-slate-500 text-xs mt-1">
+                          <div className="text-gray-500 text-xs mt-1">
                             Step {current.step} of {plan.steps.length}
                           </div>
                         </div>
@@ -3014,16 +3347,16 @@ const wipeAllData = () => {
                             setActiveMoreSection('tools');
                             setActiveToolSection('titration');
                           }}
-                          className="w-full rounded-lg p-3 text-center text-sm bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors border border-amber-500/30"
+                          className="w-full rounded-lg p-3 text-center text-sm bg-accent/20 text-gold-400 hover:bg-accent/30 transition-colors border border-accent/30"
                         >
                           <div className="font-medium">Ready to increase?</div>
                           <div className="text-xs mt-1">Plan next dose at {current.dose}{current.unit}</div>
-                          <div className="text-xs text-amber-400/70 mt-1">Tap to view titration plan →</div>
+                          <div className="text-xs text-gold-400/70 mt-1">Tap to view titration plan →</div>
                         </button>
                       ) : (
                         <div className={`rounded-lg p-2 text-center text-sm ${
-                          isOnTrack ? 'bg-emerald-500/20 text-emerald-400' : 
-                          'bg-amber-500/20 text-amber-400'
+                          isOnTrack ? 'bg-green-500/20 text-green-500' : 
+                          'bg-accent/20 text-gold-400'
                         }`}>
                           {isOnTrack && '✓ On Track - Taking recommended dose'}
                           {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
@@ -3032,7 +3365,7 @@ const wipeAllData = () => {
                       
                       {/* Next Step Preview */}
                       {current.nextDose && !current.completed && (
-                        <div className="mt-2 text-xs text-slate-400 text-center">
+                        <div className="mt-2 text-xs text-gray-400 text-center">
                           Next: {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks
                         </div>
                       )}
@@ -3044,7 +3377,7 @@ const wipeAllData = () => {
 
             {/* Titration Progress */}
             {titrationPlans.length > 0 && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+              <div className="ui-card p-4">
                 <h3 className="text-white font-medium mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-violet-400" />Titration Progress</h3>
                 {titrationPlans.map(plan => {
                   const current = getCurrentTitrationDose(plan);
@@ -3053,16 +3386,16 @@ const wipeAllData = () => {
                     <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-700/40">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-white font-medium">{plan.medication}</span>
-                        {current.completed && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">Complete</span>}
+                        {current.completed && <span className="text-xs bg-green-500/20 text-green-500 px-2 py-1 rounded">Complete</span>}
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-2xl font-bold" style={{ color: getMedicationColor(plan.medication) }}>{current.dose}{current.unit}</div>
-                        {current.nextDose && <span className="text-slate-400 text-sm">→ {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks</span>}
+                        {current.nextDose && <span className="text-gray-400 text-sm">→ {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks</span>}
                       </div>
                       <div className="mt-2 bg-slate-600 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-amber-500" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
+                        <div className="h-2 rounded-full bg-accent" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
                       </div>
-                      <div className="text-slate-400 text-xs mt-1">Step {current.step} of {plan.steps.length}</div>
+                      <div className="text-gray-400 text-xs mt-1">Step {current.step} of {plan.steps.length}</div>
                     </div>
                   );
                 })}
@@ -3070,13 +3403,13 @@ const wipeAllData = () => {
             )}
 
             {/* Goal Weight Setting */}
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/50 backdrop-blur-sm">
+            <div className="ui-card p-4">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Goal Weight</span>
+                <span className="text-gray-400 text-sm">Goal Weight</span>
                 <div className="flex items-center gap-2">
                   <input type="number" value={userProfile.goalWeight || 200} onChange={(e) => { const p = { ...userProfile, goalWeight: parseFloat(e.target.value) }; setUserProfile(p); saveData('health-user-profile', p); }}
                     className="w-20 bg-slate-700/80 border border-white/[0.06] text-white rounded-xl px-2 py-1 text-center text-sm" />
-                  <span className="text-slate-400 text-sm">lbs</span>
+                  <span className="text-gray-400 text-sm">lbs</span>
                 </div>
               </div>
             </div>
@@ -3098,17 +3431,17 @@ const wipeAllData = () => {
               const currentWeight = lastPointWithWeight?.weight;
               const currentWeightDate = lastPointWithWeight?.fullDate;
               return (
-              <div className="rounded-2xl overflow-hidden border border-white/[0.06] bg-slate-800/40 backdrop-blur-sm">
+              <div className="ui-card overflow-hidden">
                 <div className="px-5 pt-5 pb-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                    <h3 className="text-slate-300 text-sm font-medium">Weight over time</h3>
+                    <h3 className="text-gray-300 text-sm font-medium">Weight over time</h3>
                     <div className="flex items-center gap-1">
                       {[4, 8, 12, 0].map((w) => (
                         <button
                           key={w || 'all'}
                           type="button"
                           onClick={() => setChartRangeWeeks(w)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${chartRangeWeeks === w ? 'bg-amber-500/25 text-amber-400' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${chartRangeWeeks === w ? 'bg-accent/25 text-gold-400' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
                         >
                           {w === 0 ? 'All' : `${w}w`}
                         </button>
@@ -3116,11 +3449,11 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={summaryData} margin={{ top: 8, right: 72, left: 8, bottom: 4 }}>
+                    <ComposedChart data={summaryData} margin={{ top: 8, right: 16, left: 104, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} />
-                          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                          <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.2} />
+                          <stop offset="100%" stopColor="#e8b84c" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="0" stroke="#334155" vertical={false} strokeOpacity={0.4} />
@@ -3149,17 +3482,17 @@ const wipeAllData = () => {
                         <ReferenceLine 
                           yAxisId="weight"
                           y={currentWeight} 
-                          stroke="#f59e0b" 
+                          stroke="#e8b84c" 
                           strokeWidth={1.5} 
                           strokeDasharray="4 4"
                           strokeOpacity={0.8}
-                          label={{ value: `Current: ${currentWeight} lbs`, position: 'right', fill: '#f59e0b', fontSize: 11, fontWeight: 600 }}
+                          label={{ value: `Current: ${currentWeight} lbs`, position: 'left', fill: '#e8b84c', fontSize: 11, fontWeight: 600 }}
                         />
                       )}
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: 'rgba(15, 23, 42, 0.96)', 
-                          border: '1px solid rgba(71, 85, 105, 0.5)', 
+                          backgroundColor: 'rgba(24, 24, 28, 0.96)', 
+                          border: '1px solid rgba(255,255,255,0.1)', 
                           borderRadius: '10px', 
                           padding: '10px 14px',
                           boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
@@ -3176,15 +3509,15 @@ const wipeAllData = () => {
                           if (!active || !payload?.length) return null;
                           const p = payload[0]?.payload;
                           return (
-                            <div className="rounded-lg bg-slate-900/95 border border-slate-600/50 px-3 py-2 shadow-xl min-w-[160px]">
-                              <div className="text-slate-300 text-sm font-medium mb-1.5">{label}</div>
+                            <div className="rounded-lg bg-[var(--bg-elevated)] border border-white/10 px-3 py-2 shadow-xl min-w-[160px]">
+                              <div className="text-gray-300 text-sm font-medium mb-1.5">{label}</div>
                               {p?.weight != null && <div className="text-white text-sm">Weight: {p.weight} lbs</div>}
-                              {p?.weightTrend != null && <div className="text-slate-400 text-xs">7-day avg: {p.weightTrend.toFixed(1)} lbs</div>}
+                              {p?.weightTrend != null && <div className="text-gray-400 text-xs">7-day avg: {p.weightTrend.toFixed(1)} lbs</div>}
                               {p?.injections?.length > 0 && (
                                 <div className="mt-2 pt-2 border-t border-slate-600/50">
-                                  <div className="text-emerald-400 text-xs font-medium mb-1">Injections</div>
+                                  <div className="text-green-500 text-xs font-medium mb-1">Injections</div>
                                   {p.injections.map((inj, i) => (
-                                    <div key={i} className="text-slate-200 text-xs">{inj.type} {inj.dose}{inj.unit}{(inj.route || inj.site) && <span className="text-slate-500"> · {[inj.route, inj.site].filter(Boolean).join(' ')}</span>}</div>
+                                    <div key={i} className="text-gray-200 text-xs">{inj.type} {inj.dose}{inj.unit}{(inj.route || inj.site) && <span className="text-gray-500"> · {[inj.route, inj.site].filter(Boolean).join(' ')}</span>}</div>
                                   ))}
                                 </div>
                               )}
@@ -3208,33 +3541,25 @@ const wipeAllData = () => {
                           yAxisId="weight" 
                           type="monotone" 
                           dataKey="weight" 
-                          stroke="#f59e0b" 
+                          stroke="#e8b84c" 
                           strokeWidth={2.5} 
                           dot={({ cx, cy, payload }) => {
                             if (payload.weight == null) return null;
                             if (!showAllDots && !payload.hasInjection) return null;
                             const isInjectionDay = payload.hasInjection;
-                            const isCurrentWeight = currentWeightDate != null && payload.fullDate === currentWeightDate;
                             const r = isInjectionDay ? 6 : 4;
                             return (
-                              <g>
-                                {isCurrentWeight && (
-                                  <text x={cx - 6} y={cy} textAnchor="end" dominantBaseline="middle" fill="#f59e0b" fontSize={11} fontWeight={600}>
-                                    {payload.weight}
-                                  </text>
-                                )}
-                                <circle 
-                                  cx={cx} 
-                                  cy={cy} 
-                                  r={r} 
-                                  fill="#0f172a" 
-                                  stroke={isInjectionDay ? '#10b981' : '#f59e0b'} 
-                                  strokeWidth={2}
-                                />
-                              </g>
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={r} 
+                                fill="#0f172a" 
+                                stroke={isInjectionDay ? '#10b981' : '#e8b84c'} 
+                                strokeWidth={2}
+                              />
                             );
                           }}
-                          activeDot={{ r: 6, stroke: '#f59e0b', strokeWidth: 2, fill: '#0f172a' }}
+                          activeDot={{ r: 6, stroke: '#e8b84c', strokeWidth: 2, fill: '#0f172a' }}
                           connectNulls 
                           name="Weight"
                         />
@@ -3258,20 +3583,20 @@ const wipeAllData = () => {
                     <div className="flex items-center gap-6">
                       <button 
                         onClick={() => setVisibleLines(prev => ({ ...prev, weight: !prev.weight }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.weight ? 'bg-amber-500/15 text-amber-400' : 'text-slate-500'}`}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.weight ? 'bg-accent/15 text-gold-400' : 'text-gray-500'}`}
                       >
-                        <span className={`w-2.5 h-2.5 rounded-full ${visibleLines.weight ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                        <span className={`w-2.5 h-2.5 rounded-full ${visibleLines.weight ? 'bg-gold-400' : 'bg-slate-600'}`} />
                         Weight
                       </button>
                       <button 
                         onClick={() => setVisibleLines(prev => ({ ...prev, trend: !prev.trend }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.trend !== false ? 'bg-slate-500/15 text-slate-300' : 'text-slate-500'}`}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.trend !== false ? 'bg-slate-500/15 text-gray-300' : 'text-gray-500'}`}
                       >
                         <span className={`inline-block w-5 h-0.5 rounded-full ${visibleLines.trend !== false ? 'bg-slate-400' : 'bg-slate-600'}`} />
                         7-day average
                       </button>
                     </div>
-                    <p className="text-slate-500 text-xs">Green ring = injection that day{!showAllDots && ' · Dots only on injection days when zoomed out'}</p>
+                    <p className="text-gray-500 text-xs">Green ring = injection that day{!showAllDots && ' · Dots only on injection days when zoomed out'}</p>
                   </div>
                 </div>
               </div>
@@ -3282,384 +3607,251 @@ const wipeAllData = () => {
 
         {/* INSIGHTS TAB */}
         {activeTab === 'insights' && (
-          <div className="space-y-4 tab-enter">
-            {/* Info Box - How Levels Work */}
-            <div className="rounded-2xl p-4 border border-amber-500/20 bg-amber-500/10 backdrop-blur-sm">
-              <div className="flex items-start gap-3">
-                <Activity className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h3 className="text-amber-400 font-medium mb-2">Understanding Medication Levels</h3>
-                  <div className="space-y-2 text-sm text-white">
-                    <p><strong>Why levels can be &gt;100%:</strong> When you inject regularly, new doses add to what's still in your system. This is called <span className="text-amber-400">"steady-state accumulation"</span> and it's exactly how these medications are designed to work!</p>
-                    <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-                      <div className="bg-slate-700/50 rounded-lg p-2 text-center">
-                        <div className="text-slate-400">Single Dose</div>
-                        <div className="text-white font-semibold mt-1">0-100%</div>
-                      </div>
-                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 text-center">
-                        <div className="text-yellow-400">Building Up</div>
-                        <div className="text-white font-semibold mt-1">100-150%</div>
-                      </div>
-                      <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2 text-center">
-                        <div className="text-emerald-400">Steady State ✓</div>
-                        <div className="text-white font-semibold mt-1">150-200%</div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2">💡 Steady state = optimal therapeutic level with consistent effects and fewer side effects.</p>
-                    <p className="text-xs text-slate-400 mt-2">📌 <strong>Route:</strong> Levels use your chosen route (SubQ vs IM). IM is modeled with faster absorption → earlier peak; the graph reflects this.</p>
-                  </div>
+          <div key="insights" className="space-y-4 tab-enter">
+            {/* Hero: simple headline */}
+            <div className="text-center pb-2">
+              <h2 className="text-xl font-bold text-white tracking-tight">Insights</h2>
+              <p className="text-gray-400 text-sm mt-1">Your medication levels at a glance</p>
+            </div>
+
+            {/* Side effects from logs */}
+            {getSideEffectsSummary().length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-semibold mb-2 text-sm">From your logs</h3>
+                <p className="text-gray-400 text-xs mb-2">Most mentioned side effects</p>
+                <div className="flex flex-wrap gap-2">
+                  {getSideEffectsSummary().map(se => (
+                    <span key={se} className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-1 rounded-lg">{se}</span>
+                  ))}
                 </div>
               </div>
+            )}
+
+            {/* How levels work — one line + optional expand */}
+            <div className="ui-card overflow-hidden">
+              <button type="button" onClick={() => setInsightsShowLevelsHelp(!insightsShowLevelsHelp)} className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition-colors">
+                <span className="text-gray-300 text-sm">Levels can be &gt;100% when doses build up (steady state). SubQ vs IM affects the curve.</span>
+                <ChevronDown className={`h-4 w-4 text-gray-500 flex-shrink-0 transition-transform ${insightsShowLevelsHelp ? 'rotate-180' : ''}`} />
+              </button>
+              {insightsShowLevelsHelp && (
+                <div className="px-4 pb-4 pt-0 border-t border-white/[0.04]">
+                  <p className="text-gray-400 text-xs mt-3">When you inject regularly, new doses add to what's still in your system — that's steady-state accumulation. 0–100% = single dose range; 100–150% = building up; 150–200% = steady state (optimal). Route (SubQ vs IM) is modeled so IM shows faster absorption.</p>
+                  <div className="flex gap-2 mt-3">
+                    <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center text-xs"><div className="text-gray-400">Single</div><div className="text-white font-medium">0–100%</div></div>
+                    <div className="flex-1 bg-yellow-500/10 rounded-lg p-2 text-center text-xs"><div className="text-yellow-400">Building</div><div className="text-white font-medium">100–150%</div></div>
+                    <div className="flex-1 bg-green-500/10 rounded-lg p-2 text-center text-xs"><div className="text-green-500">Steady ✓</div><div className="text-white font-medium">150–200%</div></div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {getMedicationInsights().length === 0 ? (
-              <div className="rounded-2xl p-10 text-center border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <Activity className="h-16 w-16 mx-auto mb-4 text-slate-500" />
-                <h3 className="text-white font-semibold text-lg mb-2">No Recent Injections</h3>
-                <p className="text-slate-400 mb-6">Log an injection to see your medication levels and insights</p>
-                <button onClick={() => setActiveTab('injections')} className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-6 py-3 rounded-xl font-medium shadow-lg shadow-amber-500/30 transition-all">
-                  Log Injection
+              <div className="ui-card p-8 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
+                  <Activity className="h-7 w-7 text-gray-400" />
+                </div>
+                <h3 className="text-white font-semibold mb-1">No medication data yet</h3>
+                <p className="text-gray-400 text-sm mb-5">Log an injection to see levels and when to dose next.</p>
+                <button onClick={() => setActiveTab('injections')} className="ui-btn-primary px-5 py-2.5 text-sm">
+                  Log injection
                 </button>
               </div>
             ) : (
               <>
                 {/* Active Medications Overview */}
-                {getMedicationInsights().map(insight => (
-                  <div key={insight.medication} className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                    {/* Header */}
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: insight.color }}></div>
-                          <h3 className="text-white font-semibold text-lg">{insight.medication}</h3>
-                        </div>
-                        <p className="text-slate-400 text-sm">{insight.category}</p>
+                {getMedicationInsights().map(insight => {
+                  const isExpanded = insightsExpandedMed === insight.medication;
+                  const levelNum = parseFloat(insight.currentLevel);
+                  const statusLabel = levelNum >= 150 ? 'Steady state' : levelNum >= 100 ? 'Building up' : 'Single dose range';
+                  const statusColor = levelNum >= 150 ? 'text-green-500' : levelNum >= 100 ? 'text-gold-400' : 'text-gray-400';
+                  return (
+                  <div key={insight.medication} className="ui-card overflow-hidden">
+                    {/* Compact header — always visible */}
+                    <button type="button" onClick={() => setInsightsExpandedMed(isExpanded ? null : insight.medication)} className="w-full px-4 py-4 flex items-center gap-4 text-left hover:bg-white/[0.03] transition-colors">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${insight.color}22` }}>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: insight.color }} />
                       </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-bold text-white">{insight.currentLevel}%</div>
-                        <div className="text-slate-400 text-xs mb-1">Current Level</div>
-                        {parseFloat(insight.currentLevel) > 100 ? (
-                          <div className="text-emerald-400 text-xs font-medium">
-                            ✓ {parseFloat(insight.currentLevel) >= 150 ? 'Steady State' : 'Building Up'}
-                          </div>
-                        ) : (
-                          <div className="text-amber-400 text-xs">Single Dose Range</div>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-white truncate">{insight.medication}</div>
+                        <div className="text-gray-400 text-xs mt-0.5">{insight.hoursAgo < 24 ? `Last dose ${insight.hoursAgo}h ago` : `Last dose ${(insight.hoursAgo / 24).toFixed(1)} days ago`} · {insight.lastDose}{insight.lastUnit}</div>
                       </div>
-                    </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-2xl font-bold text-white">{insight.currentLevel}%</div>
+                        <div className={`text-xs font-medium ${statusColor}`}>{statusLabel}</div>
+                      </div>
+                      <ChevronDown className={`h-5 w-5 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
 
-                    {/* Phase Status */}
-                    <div className="mb-4 p-3 rounded-lg bg-slate-700/50">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className={`text-sm font-medium ${insight.phaseColor}`}>● {insight.phase}</div>
-                          <div className="text-slate-400 text-xs mt-1">
-                            {insight.hoursAgo < 24 ? `${insight.hoursAgo}h ago` : `${(insight.hoursAgo / 24).toFixed(1)} days ago`}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-white text-sm">{insight.lastDose}{insight.lastUnit}</div>
-                          <div className="text-slate-400 text-xs">Last dose</div>
-                        </div>
-                      </div>
+                    {/* Expanded content */}
+                    {isExpanded && (
+                    <div className="px-4 pb-4 pt-0 border-t border-white/[0.06] space-y-4">
+                    {/* Phase + next dose one-liner */}
+                    <div className="flex flex-wrap items-center gap-2 pt-3">
+                      <span className={`text-sm font-medium ${insight.phaseColor}`}>● {insight.phase}</span>
+                      {insight.nextInjection && (
+                        <span className="text-gray-400 text-xs">Next: {new Date(insight.nextInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      )}
                     </div>
 
                     {insight.effectProfile?.splitDoseTip && (
-                      <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                        <p className="text-amber-200/90 text-xs">💡 {insight.effectProfile.splitDoseTip}</p>
-                      </div>
+                      <p className="text-gold-400 text-xs bg-accent/10 border border-accent/20 rounded-lg p-2.5">💡 {insight.effectProfile.splitDoseTip}</p>
                     )}
 
                     {/* Medication Level Chart */}
                     {getMedicationLevelChartData(insight.medication).length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-white text-sm font-medium mb-2">Medication Level (Last 14 Days)</h4>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <LineChart data={getMedicationLevelChartData(insight.medication)}>
+                      <div className="mb-3">
+                        <h4 className="text-gray-400 text-xs font-medium mb-2">Level (last 14 days)</h4>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <LineChart data={getMedicationLevelChartData(insight.medication)} margin={{ top: 8, right: 20, left: 0, bottom: 4 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                             {/* Reference zones */}
                             <ReferenceArea y1={0} y2={100} fill="#475569" fillOpacity={0.1} />
                             <ReferenceArea y1={100} y2={150} fill="#eab308" fillOpacity={0.1} />
                             <ReferenceArea y1={150} y2={200} fill="#10b981" fillOpacity={0.1} />
-                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} />
-                            <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => `${v}%`} domain={[0, 200]} ticks={[0, 50, 100, 150, 200]} />
+                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} tickMargin={4} interval="preserveStartEnd" />
+                            <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => `${v}%`} domain={[0, 200]} ticks={[0, 50, 100, 150, 200]} width={36} />
                             <Tooltip 
-                              contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', backdropFilter: 'blur(12px)' }}
+                              contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(12px)' }}
                               formatter={(value) => [`${value}%`, 'Level']}
                             />
-                            <Line type="monotone" dataKey="level" stroke={insight.color} strokeWidth={3} dot={{ fill: insight.color, r: 4 }} />
+                            <Line
+                              type="monotone"
+                              dataKey="level"
+                              stroke={insight.color}
+                              strokeWidth={3}
+                              dot={(props) => {
+                                const { cx, cy, payload } = props;
+                                if (payload.level == null) return null;
+                                const isInjectionDay = payload.injectionDay;
+                                return (
+                                  <g>
+                                    {isInjectionDay && (
+                                      <circle cx={cx} cy={cy} r={8} fill="none" stroke="#10b981" strokeWidth={2} strokeDasharray="3 2" />
+                                    )}
+                                    <circle cx={cx} cy={cy} r={isInjectionDay ? 5 : 4} fill={insight.color} stroke={isInjectionDay ? '#10b981' : 'transparent'} strokeWidth={isInjectionDay ? 2 : 0} />
+                                  </g>
+                                );
+                              }}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
-                        {/* Legend for zones */}
-                        <div className="flex gap-3 mt-2 text-xs justify-center">
-                          <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 bg-slate-600 rounded"></div>
-                            <span className="text-slate-400">Single Dose</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                            <span className="text-slate-400">Building</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 bg-emerald-500 rounded"></div>
-                            <span className="text-slate-400">Steady State</span>
+                        <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-white/[0.06]">
+                          <div className="flex items-center gap-1.5 text-gray-400 text-xs">
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border-2 border-dashed border-green-500 bg-transparent" style={{ borderStyle: 'dashed' }} />
+                            <span><strong className="text-gray-300">Green ring</strong> = day you logged an injection</span>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Phase Timeline */}
+                    {/* Phase progress — compact */}
                     {insight.currentPhase && insight.timeline && (
-                      <div className="mb-4">
-                        <h4 className="text-white text-sm font-medium mb-3">Medication Phase Timeline</h4>
-                        
-                        {/* Visual Phase Progress Bar */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-2">
-                            {insight.timeline.phases.map((phase, idx) => (
-                              <div key={idx} className="flex-1 flex flex-col items-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${
-                                  idx === insight.currentPhase.phaseIndex 
-                                    ? `${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border-2 scale-110` 
-                                    : idx < insight.currentPhase.phaseIndex 
-                                    ? 'bg-slate-600 border-2 border-slate-500' 
-                                    : 'bg-slate-800 border-2 border-slate-700'
-                                }`}>
-                                  {idx === insight.currentPhase.phaseIndex ? insight.currentPhase.icon : idx < insight.currentPhase.phaseIndex ? '✓' : phase.icon}
-                                </div>
-                                <div className={`text-[10px] mt-1 text-center ${
-                                  idx === insight.currentPhase.phaseIndex ? insight.currentPhase.color : 'text-slate-500'
-                                }`}>
-                                  {phase.name}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="relative h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div 
-                              className={`absolute h-full ${insight.currentPhase.bgColor} transition-all`}
-                              style={{ 
-                                width: `${((insight.currentPhase.phaseIndex + 1) / insight.currentPhase.totalPhases) * 100}%` 
-                              }}
-                            />
-                          </div>
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          {insight.timeline.phases.map((phase, idx) => (
+                            <div key={idx} className={`text-[10px] ${idx === insight.currentPhase.phaseIndex ? insight.currentPhase.color : 'text-gray-500'}`}>{phase.name}</div>
+                          ))}
                         </div>
+                        <div className="relative h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div className={`absolute h-full ${insight.currentPhase.bgColor} transition-all`} style={{ width: `${((insight.currentPhase.phaseIndex + 1) / insight.currentPhase.totalPhases) * 100}%` }} />
+                        </div>
+                        <p className="text-gray-400 text-xs mt-2">{insight.currentPhase.description}</p>
+                      </div>
+                    )}
 
-                        {/* Current Phase Detail Card */}
-                        <div className={`${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border rounded-xl p-4`}>
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-2xl">{insight.currentPhase.icon}</span>
-                            <div>
-                              <h5 className={`${insight.currentPhase.color} font-semibold text-lg`}>{insight.currentPhase.name}</h5>
-                              <p className="text-slate-400 text-xs">{insight.currentPhase.description}</p>
+                    {/* Phase detail card — overhauled */}
+                    {insight.currentPhase && (
+                      <div className="ui-card overflow-hidden">
+                        {/* Header: phase name + injection date highlight */}
+                        <div className={`${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border-b border-inherit px-4 py-3`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl" aria-hidden>{insight.currentPhase.icon}</span>
+                              <h5 className={`${insight.currentPhase.color} font-semibold text-base`}>{insight.currentPhase.name}</h5>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <span className="text-gray-400">Injection recorded</span>
+                              <span className="px-2 py-0.5 rounded-md bg-green-500/25 text-green-400 font-medium border border-green-500/40">
+                                {insight.lastInjection ? new Date(insight.lastInjection).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '—'}
+                              </span>
                             </div>
                           </div>
-
-                          {/* What's Happening */}
-                          <div className="mb-3">
-                            <h6 className="text-white text-xs font-medium mb-1.5">🔬 What's Happening:</h6>
-                            <ul className="space-y-1">
+                        </div>
+                        <div className="p-4 space-y-4">
+                          <section>
+                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
+                              <Zap className="h-3.5 w-3 text-gold-400/80" />
+                              What&apos;s happening
+                            </h6>
+                            <ul className="space-y-1.5 pl-0.5">
                               {insight.currentPhase.whatsHappening.map((item, i) => (
-                                <li key={i} className="text-slate-300 text-xs flex items-start gap-1.5">
-                                  <span className="text-slate-500 mt-0.5">•</span>
+                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
+                                  <span className="text-gold-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
                                   <span>{item}</span>
                                 </li>
                               ))}
                             </ul>
-                          </div>
-
-                          {/* What to Expect */}
-                          <div className="mb-3">
-                            <h6 className="text-white text-xs font-medium mb-1.5">👁️ What to Expect:</h6>
-                            <ul className="space-y-1">
+                          </section>
+                          <section className="pt-3 border-t border-white/[0.06]">
+                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
+                              <Activity className="h-3.5 w-3 text-cyan-400/80" />
+                              What to expect
+                            </h6>
+                            <ul className="space-y-1.5 pl-0.5">
                               {insight.currentPhase.whatToExpect.map((item, i) => (
-                                <li key={i} className="text-slate-300 text-xs flex items-start gap-1.5">
-                                  <span className="text-slate-500 mt-0.5">•</span>
+                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
+                                  <span className="text-cyan-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
                                   <span>{item}</span>
                                 </li>
                               ))}
                             </ul>
-                          </div>
-
-                          {/* Tips */}
-                          <div>
-                            <h6 className="text-white text-xs font-medium mb-1.5">💡 Tips for This Phase:</h6>
-                            <ul className="space-y-1">
+                          </section>
+                          <section className="pt-3 border-t border-white/[0.06]">
+                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
+                              <CheckCircle className="h-3.5 w-3 text-green-500/80" />
+                              Tips for this phase
+                            </h6>
+                            <ul className="space-y-1.5 pl-0.5">
                               {insight.currentPhase.tips.map((tip, i) => (
-                                <li key={i} className="text-slate-300 text-xs flex items-start gap-1.5">
-                                  <span className="text-slate-500 mt-0.5">•</span>
+                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
+                                  <span className="text-green-500/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
                                   <span>{tip}</span>
                                 </li>
                               ))}
                             </ul>
-                          </div>
+                          </section>
                         </div>
                       </div>
                     )}
 
-                    {/* Timeline Info */}
-                    <div className="flex gap-2 text-xs">
-                      <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center">
-                        <div className="text-slate-400">Peak Effects</div>
-                        <div className="text-white font-medium mt-1">{insight.effectProfile?.peakEffects ?? 'Varies'}</div>
-                      </div>
-                      {insight.nextInjection && (
-                        <div className="flex-1 bg-amber-500/10 border border-amber-500/25 rounded-lg p-2 text-center">
-                          <div className="text-slate-400">Next Dose</div>
-                          <div className="text-white font-medium mt-1">
-                            {new Date(insight.nextInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Next Injection Recommendation - Based on Actual Data */}
+                    {/* Next dose reminder — one line */}
                     {(() => {
                       const medication = MEDICATIONS.find(m => m.name === insight.medication);
                       if (!medication) return null;
-                      
                       const hoursAgo = parseFloat(insight.hoursAgo);
-                      const expectedFrequencyHours = medication.defaultSchedule * 24; // Convert days to hours
-                      const expectedFrequencyDays = medication.defaultSchedule;
-                      
-                      // Calculate days since last injection
-                      const daysSinceInjection = hoursAgo / 24;
-                      
-                      // Calculate if overdue and by how much
+                      const expectedFrequencyHours = medication.defaultSchedule * 24;
                       const hoursOverdue = hoursAgo - expectedFrequencyHours;
-                      const daysOverdue = hoursOverdue / 24;
-                      
-                      // Calculate days until typical next injection
-                      const hoursUntilTypical = expectedFrequencyHours - hoursAgo;
-                      const daysUntilTypical = hoursUntilTypical / 24;
-                      
-                      // Determine urgency based on phase, time elapsed, and typical frequency
-                      let urgencyLevel = 'good';
-                      let urgencyColor = 'bg-emerald-500/10 border-emerald-500/30';
-                      let urgencyTextColor = 'text-emerald-400';
-                      let urgencyIcon = '✓';
-                      let urgencyMessage = '';
-                      
-                      if (hoursOverdue > 24) {
-                        // CRITICAL: More than 1 day overdue
-                        urgencyLevel = 'critical';
-                        urgencyColor = 'bg-red-500/10 border-red-500/30';
-                        urgencyTextColor = 'text-red-400';
-                        urgencyIcon = '⚠️';
-                        urgencyMessage = `OVERDUE by ${Math.ceil(daysOverdue)} day${Math.ceil(daysOverdue) > 1 ? 's' : ''}`;
-                      } else if (hoursOverdue > 0 || insight.phase === 'Trough') {
-                        // CRITICAL: Overdue today or in Trough phase
-                        urgencyLevel = 'critical';
-                        urgencyColor = 'bg-red-500/10 border-red-500/30';
-                        urgencyTextColor = 'text-red-400';
-                        urgencyIcon = '⚠️';
-                        urgencyMessage = hoursOverdue > 0 ? 'Inject TODAY (Overdue)' : 'Inject TODAY';
-                      } else if (daysUntilTypical <= 1 || insight.phase === 'Declining') {
-                        // SOON: Tomorrow or in Declining phase
-                        urgencyLevel = 'soon';
-                        urgencyColor = 'bg-yellow-500/10 border-yellow-500/30';
-                        urgencyTextColor = 'text-yellow-400';
-                        urgencyIcon = '📅';
-                        urgencyMessage = daysUntilTypical < 1 ? 'Inject within 24 hours' : 'Inject TOMORROW';
-                      } else if (daysUntilTypical <= 2) {
-                        // PLAN: 2 days away
-                        urgencyLevel = 'plan';
-                        urgencyColor = 'bg-cyan-500/10 border-cyan-500/30';
-                        urgencyTextColor = 'text-amber-400';
-                        urgencyIcon = '📝';
-                        urgencyMessage = `Plan injection in ${Math.ceil(daysUntilTypical)} days`;
-                      } else {
-                        // GOOD: 3+ days away
-                        urgencyLevel = 'good';
-                        urgencyColor = 'bg-emerald-500/10 border-emerald-500/30';
-                        urgencyTextColor = 'text-emerald-400';
-                        urgencyIcon = '✓';
-                        urgencyMessage = `Next injection in ${Math.ceil(daysUntilTypical)} days`;
-                      }
-                      
+                      const daysUntilTypical = (expectedFrequencyHours - hoursAgo) / 24;
+                      let urgencyColor = 'bg-green-500/10 border-green-500/20';
+                      let urgencyText = `Next dose in ~${Math.ceil(daysUntilTypical)} days`;
+                      if (hoursOverdue > 24) { urgencyColor = 'bg-red-500/10 border-red-500/30'; urgencyText = `Overdue by ${Math.ceil(hoursOverdue / 24)} day(s) — inject soon`; }
+                      else if (hoursOverdue > 0 || insight.phase === 'Trough') { urgencyColor = 'bg-red-500/10 border-red-500/30'; urgencyText = 'Inject today'; }
+                      else if (daysUntilTypical <= 1) { urgencyColor = 'bg-yellow-500/10 border-yellow-500/30'; urgencyText = 'Inject tomorrow or within 24h'; }
+                      else if (daysUntilTypical <= 2) { urgencyColor = 'bg-cyan-500/10 border-cyan-500/30'; urgencyText = `Plan in ${Math.ceil(daysUntilTypical)} days`; }
                       return (
-                        <div className={`${urgencyColor} border rounded-lg p-3 mt-3`}>
-                          <div className="flex items-start gap-2">
-                            <span className="text-xl">{urgencyIcon}</span>
-                            <div className="flex-1">
-                              <h5 className={`${urgencyTextColor} text-sm font-semibold mb-1`}>
-                                {urgencyMessage}
-                              </h5>
-                              <div className="text-xs text-slate-300 space-y-1">
-                                {urgencyLevel === 'critical' && (
-                                  <>
-                                    <p>You're in <strong>{insight.phase}</strong> phase. Last injection was <strong>{daysSinceInjection.toFixed(1)} days ago</strong>.</p>
-                                    <p>Typical frequency for {insight.medication}: Every {expectedFrequencyDays} days.</p>
-                                    <p className="font-medium">Inject as soon as possible to maintain therapeutic levels!</p>
-                                  </>
-                                )}
-                                {urgencyLevel === 'soon' && (
-                                  <>
-                                    <p>You're in <strong>{insight.phase}</strong> phase. Last injection was <strong>{daysSinceInjection.toFixed(1)} days ago</strong>.</p>
-                                    <p>Medication levels are declining. Plan to inject within the next 24 hours.</p>
-                                    <p>Consistent timing = optimal steady state!</p>
-                                  </>
-                                )}
-                                {urgencyLevel === 'plan' && (
-                                  <>
-                                    <p>Currently in <strong>{insight.phase}</strong> phase. Last injection: <strong>{daysSinceInjection.toFixed(1)} days ago</strong>.</p>
-                                    <p>Medication still highly effective. Typical {insight.medication} schedule: Every {expectedFrequencyDays} days.</p>
-                                    <p>Mark your calendar for {Math.ceil(daysUntilTypical)} days from now.</p>
-                                  </>
-                                )}
-                                {urgencyLevel === 'good' && (
-                                  <>
-                                    <p>You're in <strong>{insight.phase}</strong> phase. Optimal therapeutic range!</p>
-                                    <p>Last injection: <strong>{daysSinceInjection.toFixed(1)} days ago</strong>. Typical frequency: Every {expectedFrequencyDays} days.</p>
-                                    <p>Next injection due in approximately {Math.ceil(daysUntilTypical)} days.</p>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                        <div className={`${urgencyColor} border rounded-lg px-3 py-2 text-sm text-gray-200`}>{urgencyText}</div>
                       );
                     })()}
 
-                    {/* Medication-Specific Insights */}
-                    <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3 mt-3">
-                      <h5 className="text-cyan-400 text-xs font-medium mb-2 flex items-center gap-1">
-                        <Activity className="h-3 w-3" />
-                        Personalized Insights
-                      </h5>
-                      <ul className="space-y-1.5 text-xs text-white">
-                        {parseFloat(insight.currentLevel) >= 150 && (
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-emerald-400 mt-0.5">●</span>
-                            <span>You're at steady state ({insight.currentLevel}%) - optimal therapeutic level for consistent results</span>
-                          </li>
-                        )}
-                        {parseFloat(insight.currentLevel) >= 100 && parseFloat(insight.currentLevel) < 150 && (
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-yellow-400 mt-0.5">●</span>
-                            <span>Building to steady state ({insight.currentLevel}%) - effects stabilizing over next doses</span>
-                          </li>
-                        )}
-                        {parseFloat(insight.currentLevel) < 50 && (
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-orange-400 mt-0.5">●</span>
-                            <span>Levels declining ({insight.currentLevel}%) - plan your next injection to maintain benefits</span>
-                          </li>
-                        )}
-                        {insight.currentPhase && (
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-amber-400 mt-0.5">●</span>
-                            <span>Currently {parseFloat(insight.currentPhase.hoursIntoPhase).toFixed(0)}h into {insight.currentPhase.name} phase</span>
-                          </li>
-                        )}
-                        <li className="flex items-start gap-1.5">
-                          <span className="text-amber-400 mt-0.5">●</span>
-                          <span>Track side effects in Journal tab to identify patterns with {insight.medication} timing</span>
-                        </li>
-                      </ul>
+                    {/* One-line insight */}
+                    <p className="text-gray-400 text-xs">
+                      {levelNum >= 150 ? 'Steady state — optimal level.' : levelNum >= 100 ? 'Building up — keep consistent dosing.' : levelNum < 50 ? 'Levels low — plan next dose.' : 'Track side effects in Journal to spot patterns.'}
+                    </p>
                     </div>
+                    )}
                   </div>
-                ))}
+                );
+                })}
               </>
             )}
           </div>
@@ -3667,50 +3859,50 @@ const wipeAllData = () => {
 
         {/* WEIGHT TAB */}
         {activeTab === 'weight' && (
-          <div className="space-y-4 tab-enter">
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+          <div key="weight" className="space-y-4 tab-enter">
+            <div className="ui-card p-4">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Your Height (for BMI)</span>
+                <span className="text-gray-400 text-sm">Your Height (for BMI)</span>
                 <div className="flex items-center gap-2">
                   <input type="number" value={userProfile.height} onChange={(e) => { const p = { ...userProfile, height: parseFloat(e.target.value) }; setUserProfile(p); saveData('health-user-profile', p); }}
                     className="w-16 bg-slate-700 text-white rounded px-2 py-1 text-center text-sm" />
-                  <span className="text-slate-400 text-sm">inches</span>
+                  <span className="text-gray-400 text-sm">inches</span>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <div className="text-slate-400 text-sm mb-1">Current Weight</div>
-                <div className="text-2xl font-bold text-white">{stats.current} <span className="text-sm text-slate-400">lbs</span></div>
+              <div className="ui-card p-4">
+                <div className="text-gray-400 text-sm mb-1">Current Weight</div>
+                <div className="text-2xl font-bold text-white">{stats.current} <span className="text-sm text-gray-400">lbs</span></div>
               </div>
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <div className="text-slate-400 text-sm mb-1">BMI</div>
+              <div className="ui-card p-4">
+                <div className="text-gray-400 text-sm mb-1">BMI</div>
                 <div className={`text-2xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
                 <div className={`text-xs ${bmiCategory.color}`}>{bmiCategory.label}</div>
               </div>
             </div>
 
-            <div className="rounded-2xl p-4 border border-amber-500/20 bg-amber-500/5 backdrop-blur-sm">
-              <p className="text-slate-300 text-sm mb-2">For best results, use our Calorie / TDEE calculator to align your intake with your goals.</p>
-              <button onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-amber-400 hover:text-amber-300 text-sm font-medium flex items-center gap-2">
+            <div className="rounded-2xl p-4 border border-accent/20 bg-accent/5 backdrop-blur-sm">
+              <p className="text-gray-300 text-sm mb-2">For best results, use our Calorie / TDEE calculator to align your intake with your goals.</p>
+              <button onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-gold-400 hover:text-gold-400 text-sm font-medium flex items-center gap-2">
                 <Calculator className="h-4 w-4" /> Open Calorie & TDEE Calculator
               </button>
             </div>
 
             {showAddForm && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+              <div className="ui-card p-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-white font-medium">{editingWeight ? 'Edit Entry' : 'Add Weight'}</h3>
-                  <button onClick={resetWeightForm} className="text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
+                  <button onClick={resetWeightForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-slate-400 text-sm block mb-1">Weight (lbs)</label>
+                    <label className="text-gray-400 text-sm block mb-1">Weight (lbs)</label>
                     <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="Enter weight" />
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-1">Date</label>
+                    <label className="text-gray-400 text-sm block mb-1">Date</label>
                     <input type="date" value={weightDate} onChange={(e) => setWeightDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                   </div>
                   <button onClick={addOrUpdateWeight} className="w-full btn-primary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingWeight ? 'Update' : 'Add Entry'}</button>
@@ -3718,19 +3910,19 @@ const wipeAllData = () => {
               </div>
             )}
 
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+            <div className="ui-card p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-white font-medium">History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
               </div>
               {weightEntries.length === 0 ? (
                 <div className="text-center py-12 px-4">
                   <div className="relative mb-4">
-                    <div className="absolute inset-0 bg-emerald-500/10 blur-2xl rounded-full"></div>
-                    <Scale className="h-16 w-16 mx-auto text-emerald-400 relative animate-bounce" style={{ animationDuration: '3s' }} />
+                    <div className="absolute inset-0 bg-green-500/10 blur-2xl rounded-full"></div>
+                    <Scale className="h-16 w-16 mx-auto text-green-500 relative animate-bounce" style={{ animationDuration: '3s' }} />
                   </div>
                   <h3 className="text-white font-medium mb-2">Track Your Progress</h3>
-                  <p className="text-slate-400 text-sm mb-4">Start logging your weight to see your journey unfold</p>
+                  <p className="text-gray-400 text-sm mb-4">Start logging your weight to see your journey unfold</p>
                   <button 
                     onClick={() => setShowAddForm(true)} 
                     className="btn-primary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
@@ -3747,12 +3939,12 @@ const wipeAllData = () => {
                         <div className="bg-pink-500/20 p-2 rounded-lg"><Scale className="h-5 w-5 text-pink-400" /></div>
                         <div>
                           <div className="text-white font-medium">{entry.weight} lbs</div>
-                          <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                          <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                         </div>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingWeight(entry); setWeight(entry.weight.toString()); setWeightDate(entry.date); setShowAddForm(true); }} className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
-                        <button onClick={() => deleteWeight(entry.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => { setEditingWeight(entry); setWeight(entry.weight.toString()); setWeightDate(entry.date); setShowAddForm(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
+                        <button onClick={() => deleteWeight(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                   ))}
@@ -3761,19 +3953,19 @@ const wipeAllData = () => {
             </div>
 
             {/* Fasting Window Tracker - Separate Section */}
-            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4">
+            <div className="bg-gradient-to-br from-accent/10 to-gold-600/10 border border-accent/30 rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-amber-500/20 rounded-lg">
-                    <Clock className="h-5 w-5 text-amber-400" />
+                  <div className="p-2 bg-accent/20 rounded-lg">
+                    <Clock className="h-5 w-5 text-gold-400" />
                   </div>
                   <div>
                     <h3 className="text-white font-medium">Fasting Window Tracker</h3>
-                    <p className="text-slate-400 text-xs">Track your daily intermittent fasting</p>
+                    <p className="text-gray-400 text-xs">Track your daily intermittent fasting</p>
                   </div>
                 </div>
                 {!showFastingForm && (
-                  <button onClick={() => setShowFastingForm(true)} className="bg-amber-500 hover:bg-amber-600 text-white p-2 rounded-lg">
+                  <button onClick={() => setShowFastingForm(true)} className="bg-accent hover:bg-gold-600 text-white p-2 rounded-lg">
                     <Plus className="h-5 w-5" />
                   </button>
                 )}
@@ -3782,9 +3974,9 @@ const wipeAllData = () => {
               {/* Fasting Stats Summary */}
               {fastingEntries.length > 0 && (
                 <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                    <div className="text-slate-400 text-xs">Current Streak</div>
-                    <div className="text-2xl font-bold text-amber-400">
+                  <div className="bg-[var(--bg-card)] rounded-lg p-3 text-center">
+                    <div className="text-gray-400 text-xs">Current Streak</div>
+                    <div className="text-2xl font-bold text-gold-400">
                       {(() => {
                         const sorted = [...fastingEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
                         let streak = 0;
@@ -3798,35 +3990,35 @@ const wipeAllData = () => {
                         return streak;
                       })()}
                     </div>
-                    <div className="text-slate-500 text-xs">days</div>
+                    <div className="text-gray-500 text-xs">days</div>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                    <div className="text-slate-400 text-xs">Avg Window</div>
-                    <div className="text-2xl font-bold text-amber-400">
+                  <div className="bg-[var(--bg-card)] rounded-lg p-3 text-center">
+                    <div className="text-gray-400 text-xs">Avg Window</div>
+                    <div className="text-2xl font-bold text-gold-400">
                       {fastingEntries.length > 0 ? Math.round(fastingEntries.reduce((sum, e) => sum + e.fastingHours, 0) / fastingEntries.length) : 0}
                     </div>
-                    <div className="text-slate-500 text-xs">hours</div>
+                    <div className="text-gray-500 text-xs">hours</div>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                    <div className="text-slate-400 text-xs">Total Days</div>
-                    <div className="text-2xl font-bold text-amber-400">{fastingEntries.length}</div>
-                    <div className="text-slate-500 text-xs">logged</div>
+                  <div className="bg-[var(--bg-card)] rounded-lg p-3 text-center">
+                    <div className="text-gray-400 text-xs">Total Days</div>
+                    <div className="text-2xl font-bold text-gold-400">{fastingEntries.length}</div>
+                    <div className="text-gray-500 text-xs">logged</div>
                   </div>
                 </div>
               )}
 
               {/* Fasting Form */}
               {showFastingForm && (
-                <div className="bg-slate-800/50 rounded-xl p-4 mb-4">
+                <div className="bg-[var(--bg-card)] rounded-xl p-4 mb-4">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="text-white font-medium">{editingFasting ? 'Edit Fasting' : 'Log Fasting Window'}</h4>
-                    <button onClick={resetFastingForm} className="text-slate-400 hover:text-white">
+                    <button onClick={resetFastingForm} className="text-gray-400 hover:text-white">
                       <X className="h-5 w-5" />
                     </button>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <label className="text-slate-400 text-sm block mb-1">Fasting Window</label>
+                      <label className="text-gray-400 text-sm block mb-1">Fasting Window</label>
                       <div className="flex gap-2 items-center">
                         <input 
                           type="number" 
@@ -3838,12 +4030,12 @@ const wipeAllData = () => {
                           className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3 text-center text-2xl font-bold" 
                           placeholder="14" 
                         />
-                        <span className="text-slate-400 text-xl">/</span>
-                        <div className="flex-1 bg-slate-700/50 text-slate-400 rounded-lg px-4 py-3 text-center text-2xl font-bold">
+                        <span className="text-gray-400 text-xl">/</span>
+                        <div className="flex-1 bg-slate-700/50 text-gray-400 rounded-lg px-4 py-3 text-center text-2xl font-bold">
                           {fastingHours ? 24 - parseInt(fastingHours) : '10'}
                         </div>
                       </div>
-                      <p className="text-slate-500 text-xs mt-2">
+                      <p className="text-gray-500 text-xs mt-2">
                         {fastingHours && parseInt(fastingHours) >= 1 && parseInt(fastingHours) <= 23 ? (
                           <>Fast for {fastingHours} hours, eat for {24 - parseInt(fastingHours)} hours</>
                         ) : (
@@ -3852,7 +4044,7 @@ const wipeAllData = () => {
                       </p>
                     </div>
                     <div>
-                      <label className="text-slate-400 text-sm block mb-1">Date</label>
+                      <label className="text-gray-400 text-sm block mb-1">Date</label>
                       <input 
                         type="date" 
                         value={fastingDate} 
@@ -3876,11 +4068,11 @@ const wipeAllData = () => {
                 {fastingEntries.length === 0 ? (
                   <div className="text-center py-10 px-4">
                     <div className="relative mb-4">
-                      <div className="absolute inset-0 bg-amber-500/10 blur-2xl rounded-full"></div>
-                      <Clock className="h-16 w-16 mx-auto text-amber-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
+                      <div className="absolute inset-0 bg-accent/10 blur-2xl rounded-full"></div>
+                      <Clock className="h-16 w-16 mx-auto text-gold-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
                     </div>
                     <h3 className="text-white font-medium mb-2">Start Fasting Tracker</h3>
-                    <p className="text-slate-400 text-sm mb-4">Log your intermittent fasting windows and build streaks!</p>
+                    <p className="text-gray-400 text-sm mb-4">Log your intermittent fasting windows and build streaks!</p>
                     <button 
                       onClick={() => setShowFastingForm(true)} 
                       className="btn-amber text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
@@ -3892,21 +4084,21 @@ const wipeAllData = () => {
                 ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {[...fastingEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3 group">
+                      <div key={entry.id} className="flex items-center justify-between bg-[var(--bg-card)] rounded-lg p-3 group">
                         <div className="flex items-center gap-3">
-                          <div className="bg-amber-500/20 p-2 rounded-lg">
-                            <Clock className="h-5 w-5 text-amber-400" />
+                          <div className="bg-accent/20 p-2 rounded-lg">
+                            <Clock className="h-5 w-5 text-gold-400" />
                           </div>
                           <div>
                             <div className="text-white font-medium flex items-center gap-2">
                               <span className="text-2xl">{entry.fastingHours}</span>
-                              <span className="text-slate-400">/</span>
-                              <span className="text-slate-400 text-xl">{24 - entry.fastingHours}</span>
-                              <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded ml-1">
+                              <span className="text-gray-400">/</span>
+                              <span className="text-gray-400 text-xl">{24 - entry.fastingHours}</span>
+                              <span className="text-xs bg-accent/20 text-gold-400 px-2 py-0.5 rounded ml-1">
                                 {entry.fastingHours}/{24 - entry.fastingHours}
                               </span>
                             </div>
-                            <div className="text-slate-400 text-sm">
+                            <div className="text-gray-400 text-sm">
                               {parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                             </div>
                           </div>
@@ -3919,13 +4111,13 @@ const wipeAllData = () => {
                               setFastingDate(entry.date); 
                               setShowFastingForm(true); 
                             }} 
-                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg"
+                            className="p-2 text-gray-400 hover:text-white hover:bg-slate-700 rounded-lg"
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
                           <button 
                             onClick={() => deleteFasting(entry.id)} 
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg"
+                            className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-700 rounded-lg"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -3941,23 +4133,23 @@ const wipeAllData = () => {
 
         {/* INJECTIONS TAB */}
         {activeTab === 'injections' && (
-          <div className="space-y-4 tab-enter">
+          <div key="injections" className="space-y-4 tab-enter">
             <div className="grid grid-cols-4 gap-2">
               {['GLP-1', 'Peptide', 'Hormone', 'Other'].map(cat => {
                 const count = injectionEntries.filter(e => { const med = MEDICATIONS.find(m => m.name === e.type); return med?.category === cat || (cat === 'Other' && (!med || med.category === 'Other' || med.category === 'Triple Agonist' || med.category === 'GLP-1/GIP')); }).length;
-                return <div key={cat} className="bg-slate-800 rounded-xl p-2 text-center"><div className="text-lg font-bold text-white">{count}</div><div className="text-xs text-slate-400 truncate">{cat}</div></div>;
+                return <div key={cat} className="bg-[var(--bg-card)] rounded-xl p-2 text-center"><div className="text-lg font-bold text-white">{count}</div><div className="text-xs text-gray-400 truncate">{cat}</div></div>;
               })}
             </div>
 
             {showAddForm && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+              <div className="ui-card p-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-white font-medium">{editingInjection ? 'Edit Injection' : 'Log Injection'}</h3>
-                  <button onClick={resetInjectionForm} className="text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
+                  <button onClick={resetInjectionForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
                 </div>
                 <div className="space-y-4">
                   <div className="relative">
-                    <label className="text-slate-400 text-sm block mb-1">Medication</label>
+                    <label className="text-gray-400 text-sm block mb-1">Medication</label>
                     <button onClick={() => setShowMedDropdown(!showMedDropdown)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 text-left flex items-center justify-between">
                       <span style={{ color: getMedicationColor(injectionType) }}>{injectionType}</span>
                       <ChevronDown className={`h-5 w-5 transition-transform ${showMedDropdown ? 'rotate-180' : ''}`} />
@@ -3967,7 +4159,7 @@ const wipeAllData = () => {
                         <input type="text" placeholder="Search..." value={medSearchTerm} onChange={(e) => setMedSearchTerm(e.target.value)} className="w-full bg-slate-600 text-white px-4 py-2 rounded-t-lg" autoFocus />
                         {Object.entries(groupedMedications).map(([category, meds]) => (
                           <div key={category}>
-                            <div className="px-4 py-1 text-xs font-medium text-slate-400 bg-slate-800">{category}</div>
+                            <div className="px-4 py-1 text-xs font-medium text-gray-400 bg-[var(--bg-card)]">{category}</div>
                             {meds.map(med => <button key={med.name} onClick={() => { setInjectionType(med.name); setShowMedDropdown(false); setMedSearchTerm(''); }} className="w-full px-4 py-2 text-left hover:bg-slate-600 flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: med.color }}></div><span className="text-white">{med.name}</span></button>)}
                           </div>
                         ))}
@@ -3975,7 +4167,7 @@ const wipeAllData = () => {
                     )}
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-1">Dose</label>
+                    <label className="text-gray-400 text-sm block mb-1">Dose</label>
                     <div className="flex gap-2">
                       <input type="number" step="0.01" value={injectionDose} onChange={(e) => setInjectionDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="Amount" />
                       <select value={injectionUnit} onChange={(e) => setInjectionUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-3">
@@ -3984,32 +4176,68 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-1">Date</label>
+                    <label className="text-gray-400 text-sm block mb-1">Date</label>
                     <input type="date" value={injectionDate} onChange={(e) => setInjectionDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                   </div>
+                  {!editingInjection && (() => {
+                    const availableVials = vials.filter(v => v.medication === injectionType && (v.remainingMg ?? v.totalMg) > 0);
+                    if (availableVials.length === 0) return null;
+                    return (
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Use from vial (optional)</label>
+                        <select value={selectedVialId != null ? String(selectedVialId) : ''} onChange={(e) => setSelectedVialId(e.target.value ? Number(e.target.value) : null)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
+                          <option value="">None</option>
+                          {availableVials.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {(v.remainingMg ?? v.totalMg).toFixed(1)} mg left{v.expiry ? ` · Exp ${v.expiry}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedVialId && injectionDose && (() => {
+                          const v = vials.find(x => x.id === selectedVialId);
+                          const remaining = v ? (v.remainingMg ?? v.totalMg) : 0;
+                          const deduct = toDoseMg({ dose: injectionDose, unit: injectionUnit });
+                          const after = Math.max(0, remaining - deduct);
+                          return <p className="text-gray-500 text-xs mt-1">After this dose: {after.toFixed(1)} mg remaining</p>;
+                        })()}
+                      </div>
+                    );
+                  })()}
                   <div>
-                    <label className="text-slate-400 text-sm block mb-2">Route <span className="text-amber-400">*</span></label>
+                    <label className="text-gray-400 text-sm block mb-2">Route <span className="text-gold-400">*</span></label>
                     <div className="flex gap-2">
                       {INJECTION_ROUTES.map((route) => (
-                        <button key={route} type="button" onClick={() => setInjectionRoute(route)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${injectionRoute === route ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{route === 'SubQ' ? 'SubQ (subcutaneous)' : 'IM (intramuscular)'}</button>
+                        <button key={route} type="button" onClick={() => setInjectionRoute(route)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${injectionRoute === route ? 'bg-accent text-gray-900' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{route === 'SubQ' ? 'SubQ (subcutaneous)' : 'IM (intramuscular)'}</button>
                       ))}
                     </div>
-                    <p className="text-slate-500 text-xs mt-1">IM absorbs faster → earlier peak; level curve reflects route.</p>
+                    <p className="text-gray-500 text-xs mt-1">IM absorbs faster → earlier peak; level curve reflects route.</p>
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-2">Body location</label>
+                    <label className="text-gray-400 text-sm block mb-2">Body location</label>
+                    {!editingInjection && (() => {
+                      const suggested = getSuggestedInjectionSite(injectionType);
+                      if (suggested && suggested !== injectionSite) {
+                        return (
+                          <div className="flex items-center justify-between gap-2 mb-2 p-2 rounded-lg bg-accent/10 border border-accent/20">
+                            <span className="text-gray-300 text-xs">Rotate: try <strong className="text-gold-400">{suggested}</strong></span>
+                            <button type="button" onClick={() => setInjectionSite(suggested)} className="text-xs font-medium text-accent hover:text-gold-400 whitespace-nowrap">Use suggested</button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <div className="grid grid-cols-3 gap-2">
-                      {BODY_LOCATIONS.map(loc => <button key={loc} type="button" onClick={() => setInjectionSite(loc)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === loc ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{loc}</button>)}
+                      {BODY_LOCATIONS.map(loc => <button key={loc} type="button" onClick={() => setInjectionSite(loc)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === loc ? 'bg-accent text-gray-900' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{loc}</button>)}
                     </div>
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-2">Side Effects</label>
+                    <label className="text-gray-400 text-sm block mb-2">Side Effects</label>
                     <div className="flex flex-wrap gap-2">
-                      {SIDE_EFFECTS.map(effect => <button key={effect} onClick={() => toggleSideEffect(effect)} className={`px-3 py-1 rounded-full text-xs transition-all ${selectedSideEffects.includes(effect) ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{effect}</button>)}
+                      {SIDE_EFFECTS.map(effect => <button key={effect} onClick={() => toggleSideEffect(effect)} className={`px-3 py-1 rounded-full text-xs transition-all ${selectedSideEffects.includes(effect) ? 'bg-orange-500 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{effect}</button>)}
                     </div>
                   </div>
                   <div>
-                    <label className="text-slate-400 text-sm block mb-1">Notes</label>
+                    <label className="text-gray-400 text-sm block mb-1">Notes</label>
                     <textarea value={injectionNotes} onChange={(e) => setInjectionNotes(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 resize-none" rows={2} placeholder="Optional notes..." />
                   </div>
                   <button onClick={addOrUpdateInjection} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingInjection ? 'Update' : 'Log Injection'}</button>
@@ -4017,13 +4245,13 @@ const wipeAllData = () => {
               </div>
             )}
 
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+            <div className="ui-card p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-white font-medium">History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
               </div>
               {injectionEntries.length === 0 ? (
-                <div className="text-center py-8 text-slate-400"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
+                <div className="text-center py-8 text-gray-400"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {injectionEntries.map((entry) => (
@@ -4032,15 +4260,15 @@ const wipeAllData = () => {
                         <div className="flex items-start gap-3">
                           <div className="p-2 rounded-lg mt-1" style={{ backgroundColor: `${getMedicationColor(entry.type)}20` }}><Syringe className="h-5 w-5" style={{ color: getMedicationColor(entry.type) }} /></div>
                           <div className="flex-1">
-                            <div className="flex items-center gap-2"><span className="text-white font-medium">{entry.type}</span><span className="text-slate-300">{entry.dose} {entry.unit}</span></div>
-                            <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-2">• {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
+                            <div className="flex items-center gap-2"><span className="text-white font-medium">{entry.type}</span><span className="text-gray-300">{entry.dose} {entry.unit}</span></div>
+                            <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-2">• {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
                             {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{entry.sideEffects.map(effect => <span key={effect} className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">{effect}</span>)}</div>}
-                            {entry.notes && <div className="text-sm text-slate-400 mt-2 italic">{entry.notes}</div>}
+                            {entry.notes && <div className="text-sm text-gray-400 mt-2 italic">{entry.notes}</div>}
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setShowAddForm(true); }} className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
-                          <button onClick={() => deleteInjection(entry.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setShowAddForm(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => deleteInjection(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
                     </div>
@@ -4051,17 +4279,1041 @@ const wipeAllData = () => {
           </div>
         )}
 
-        {/* GLUCOSE TAB - same prominence as Weight & Injections */}
-        {activeTab === 'glucose' && (
-          <div className="space-y-4 tab-enter">
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Droplet className="h-6 w-6 text-emerald-400" />Glucose & A1C</h2>
-              <p className="text-slate-400 text-sm mb-4">Log blood sugar and A1C. Shown in &quot;This week&quot; on Summary.</p>
+        {/* JOURNAL TAB — promoted from More for quick access to feelings & side effects */}
+        {activeTab === 'journal' && (
+          <div key="journal" className="space-y-4 tab-enter">
+            {showAddForm && (
+              <div className="ui-card p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-white font-medium">{editingJournal ? 'Edit Entry' : 'New Journal Entry'}</h3>
+                  <button onClick={resetJournalForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-1">Date</label>
+                    <input type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-2">How are you feeling?</label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'happy', icon: Smile, color: 'text-green-500', label: 'Great' },
+                        { value: 'neutral', icon: Meh, color: 'text-gray-400', label: 'Okay' },
+                        { value: 'sad', icon: Frown, color: 'text-gold-400', label: 'Rough' }
+                      ].map(mood => (
+                        <button key={mood.value} onClick={() => setJournalMood(mood.value)}
+                          className={`flex-1 py-3 rounded-lg transition-all ${journalMood === mood.value ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-650'}`}>
+                          <mood.icon className={`h-6 w-6 mx-auto ${mood.color}`} />
+                          <div className="text-xs text-gray-400 mt-1">{mood.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-1">Energy Level: {journalEnergy}/10</label>
+                    <input type="range" min="1" max="10" value={journalEnergy} onChange={(e) => setJournalEnergy(parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-1">Hunger Level: {journalHunger}/10</label>
+                    <input type="range" min="1" max="10" value={journalHunger} onChange={(e) => setJournalHunger(parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-1">Notes & Observations</label>
+                    <textarea value={journalContent} onChange={(e) => setJournalContent(e.target.value)}
+                      className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 min-h-32" placeholder="How did you feel today? Any side effects? Non-scale victories?" />
+                  </div>
+                  <button onClick={addOrUpdateJournal} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">
+                    {editingJournal ? 'Update Entry' : 'Save Entry'}
+                  </button>
+                </div>
+              </div>
+            )}
 
-              {/* Log Glucose */}
+            <div className="ui-card p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-white font-medium flex items-center gap-2"><BookOpen className="h-4 w-4 text-violet-400" />Journal Entries</h3>
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
+              </div>
+              {journalEntries.length === 0 ? (
+                <div className="text-center py-12 px-4">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-violet-500/10 blur-2xl rounded-full"></div>
+                    <BookOpen className="h-16 w-16 mx-auto text-violet-400 relative" style={{ animation: 'float 3s ease-in-out infinite' }} />
+                  </div>
+                  <h3 className="text-white font-medium mb-2">Start Your Journal</h3>
+                  <p className="text-gray-400 text-sm mb-4">Track feelings, side effects, and victories</p>
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="btn-secondary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Write First Entry
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {[...journalEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
+                    <div key={entry.id} className="bg-slate-700/50 rounded-lg p-4 group">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          {entry.mood === 'happy' && <Smile className="h-5 w-5 text-green-500" />}
+                          {entry.mood === 'neutral' && <Meh className="h-5 w-5 text-gray-400" />}
+                          {entry.mood === 'sad' && <Frown className="h-5 w-5 text-gold-400" />}
+                          <span className="text-white font-medium">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingJournal(entry); setJournalDate(entry.date); setJournalContent(entry.content); setJournalMood(entry.mood); setJournalEnergy(entry.energy); setJournalHunger(entry.hunger); setShowAddForm(true); }}
+                            className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => deleteJournal(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 mb-2 text-sm">
+                        <div className="flex items-center gap-1 text-gray-400">
+                          <Zap className="h-4 w-4" />
+                          <span>Energy: {entry.energy}/10</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-400">
+                          <Activity className="h-4 w-4" />
+                          <span>Hunger: {entry.hunger}/10</span>
+                        </div>
+                      </div>
+                      <p className="text-white whitespace-pre-wrap">{entry.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* MORE TAB */}
+        {activeTab === 'more' && (
+          <div key="more" className="space-y-4 tab-enter">
+            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
+              {[
+                { id: 'body', icon: Ruler, label: 'Body' },
+                { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
+                { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
+                { id: 'tools', icon: Wrench, label: 'Tools' },
+                { id: 'glucose', icon: Droplet, label: 'Glucose' }
+              ].map(section => (
+                <button key={section.id} onClick={() => setActiveMoreSection(section.id)}
+                  className={`menu-3d-item flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                  <section.icon className="h-4 w-4" />{section.label}
+                </button>
+              ))}
+            </div>
+            {activeMoreSection === 'body' && (
+          <div className="space-y-4">
+            {/* Measurement Stats */}
+            {Object.keys(measurementStats).length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(measurementStats).map(([type, data]) => (
+                  <div key={type} className="ui-card p-3">
+                    <div className="text-gray-400 text-xs">{type}</div>
+                    <div className="text-xl font-bold text-white">{data.current}"</div>
+                    <div className={`text-xs ${parseFloat(data.change) < 0 ? 'text-green-500' : parseFloat(data.change) > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                      {parseFloat(data.change) > 0 ? '+' : ''}{data.change}"
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Body Measurements Chart */}
+            {measurementEntries.length > 0 && getMeasurementChartData().length > 0 && (
+              <div className="bg-[var(--bg-card)] rounded-xl p-4">
+                <h3 className="text-white font-medium mb-3">Measurement Progress</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={getMeasurementChartData()}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
+                    <YAxis stroke="#94a3b8" fontSize={10} unit='"' />
+                    <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(12px)' }} />
+                    <Legend wrapperStyle={{ fontSize: '10px' }} />
+                    {MEASUREMENT_TYPES.map((type, idx) => {
+                      const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#e8b84c', '#10b981', '#3b82f6', '#ef4444', '#a855f7', '#14b8a6', '#f97316'];
+                      return <Line key={type} type="monotone" dataKey={type} stroke={colors[idx % colors.length]} strokeWidth={2} dot={{ r: 4 }} connectNulls name={type} />;
+                    })}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Add Measurement Form */}
+            {showAddForm && (
+              <div className="ui-card p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-white font-medium">Add Measurement</h3>
+                  <button onClick={resetMeasurementForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-2">Body Part</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {MEASUREMENT_TYPES.map(type => <button key={type} onClick={() => setMeasurementType(type)} className={`p-2 rounded-lg text-sm transition-all ${measurementType === type ? 'bg-cyan-500 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{type}</button>)}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-1">Measurement (inches)</label>
+                    <input type="number" step="0.25" value={measurementValue} onChange={(e) => setMeasurementValue(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 34.5" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-sm block mb-1">Date</label>
+                    <input type="date" value={measurementDate} onChange={(e) => setMeasurementDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
+                  </div>
+                  <button onClick={addMeasurement} className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-medium py-3 rounded-lg">Add Measurement</button>
+                </div>
+              </div>
+            )}
+
+            {/* Progress Photos */}
+            <div className="ui-card p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-white font-medium flex items-center gap-2"><Camera className="h-4 w-4 text-gold-400" />Progress Photos</h3>
+                <button onClick={() => photoInputRef.current?.click()} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>
+                <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+              </div>
+              {progressPhotos.length === 0 ? (
+                <div className="text-center py-12 px-4">
+                  <div className="relative mb-4">
+                    <div className="absolute inset-0 bg-pink-500/10 blur-2xl rounded-full"></div>
+                    <Camera className="h-16 w-16 mx-auto text-pink-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
+                  </div>
+                  <h3 className="text-white font-medium mb-2">Document Your Journey</h3>
+                  <p className="text-gray-400 text-sm mb-4">Visual progress is the best motivation!</p>
+                  <button 
+                    onClick={() => document.querySelector('input[type="file"]').click()} 
+                    className="bg-gradient-to-r from-pink-500 to-rose-600 shadow-lg shadow-pink-500/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Add First Photo
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {progressPhotos.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map(photo => (
+                    <div key={photo.id} className="relative group">
+                      <img src={photo.data} alt="Progress" className="w-full h-24 object-cover rounded-lg" />
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg">{parseLocalDate(photo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                      <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3 w-3 text-white" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Measurement History */}
+            <div className="ui-card p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-white font-medium">Measurement History</h3>
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
+              </div>
+              {measurementEntries.length === 0 ? (
+                <div className="text-center py-8 text-gray-400"><Ruler className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No measurements yet</p></div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {measurementEntries.map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-accent/20 p-2 rounded-lg border border-accent/20"><Ruler className="h-5 w-5 text-gold-400" /></div>
+                        <div>
+                          <div className="text-white font-medium">{entry.type}: {entry.value}"</div>
+                          <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                        </div>
+                      </div>
+                      <button onClick={() => deleteMeasurement(entry.id)} className="p-2 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+            )}
+            {activeMoreSection === 'daily' && (
+          <div className="space-y-4">
+            <div className="ui-card p-4">
+              <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-gold-400" /><UtensilsCrossed className="h-4 w-4 text-gold-400" />Daily — Hydration, Protein & Nutrition</h3>
+              <p className="text-gray-500 text-xs mb-3">Hydration and protein today are calculated from your meal entries below. Add optional extra water if you don’t log drinks as meals.</p>
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <label className="text-gray-400 text-xs">Extra water (oz)</label>
+                <input type="number" min="0" step="1" value={extraHydrationOz} onChange={(e) => setExtraHydrationOz(e.target.value)} className="w-20 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                <button onClick={saveExtraHydration} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium px-3 py-2 rounded-lg">Save</button>
+                <button onClick={() => { setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-gold-400 hover:text-gold-400 text-sm font-medium flex items-center gap-1">
+                  <Calculator className="h-4 w-4" /> TDEE calculator
+                </button>
+              </div>
+              <p className="text-gray-400 text-sm mb-4">Today: <span className="text-sky-400">{hydrationToday} oz</span> hydration · <span className="text-gold-400">{proteinToday} g</span> protein</p>
+
+              <div className="border-t border-white/[0.06] pt-4 mt-4">
+                <h4 className="text-gray-300 text-sm font-medium mb-2 flex items-center gap-2"><UtensilsCrossed className="h-4 w-4" />Meals & calories</h4>
+                <p className="text-gray-500 text-xs mb-3">Add meals or snacks; hydration and protein today update from these entries. Use &quot;Estimate macros&quot; for quick add from a short description.</p>
+                <div className="flex gap-2 mb-3">
+                  <input type="text" value={mealDescription} onChange={(e) => setMealDescription(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="e.g. 2 eggs, chicken salad, water 16 oz" />
+                  <button type="button" onClick={applyMealEstimate} className="bg-accent/80 hover:bg-accent text-gray-900 text-sm font-medium px-3 py-2 rounded-lg whitespace-nowrap">Estimate macros</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="col-span-2">
+                    <label className="text-gray-400 text-xs block mb-1">Label (e.g. Breakfast)</label>
+                    <input type="text" value={nutritionLabel} onChange={(e) => setNutritionLabel(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="Breakfast, Lunch, Snack…" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Calories</label>
+                    <input type="number" min="0" step="1" value={nutritionCalories} onChange={(e) => setNutritionCalories(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Protein (g)</label>
+                    <input type="number" min="0" step="1" value={nutritionProtein} onChange={(e) => setNutritionProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Carbs (g)</label>
+                    <input type="number" min="0" step="1" value={nutritionCarbs} onChange={(e) => setNutritionCarbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Fat (g)</label>
+                    <input type="number" min="0" step="1" value={nutritionFat} onChange={(e) => setNutritionFat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Water (oz) — for drinks</label>
+                    <input type="number" min="0" step="1" value={nutritionHydrationOz} onChange={(e) => setNutritionHydrationOz(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                  </div>
+                </div>
+                <button onClick={addNutritionEntry} className="w-full bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium py-2 rounded-lg mb-4">Add entry</button>
+
+                {(todayDaily?.meals?.length ?? 0) > 0 && (
+                  <>
+                    <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                      {(todayDaily?.meals ?? []).map((meal) => (
+                        <div key={meal.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2 text-sm group">
+                          <div>
+                            <span className="text-white font-medium">{meal.label}</span>
+                            <span className="text-gray-400 ml-2">{meal.calories} cal</span>
+                            {(meal.protein > 0 || meal.carbs > 0 || meal.fat > 0) && (
+                              <span className="text-gray-500 text-xs ml-2">P {meal.protein}g · C {meal.carbs}g · F {meal.fat}g</span>
+                            )}
+                            {(meal.hydrationOz ?? 0) > 0 && (
+                              <span className="text-sky-400 text-xs ml-2">{meal.hydrationOz} oz</span>
+                            )}
+                          </div>
+                          <button type="button" onClick={() => deleteNutritionEntry(meal.id)} className="p-1.5 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-lg bg-slate-700/60 px-3 py-2 text-sm border border-white/[0.04]">
+                      <span className="text-gray-400">Today&apos;s totals: </span>
+                      <span className="text-white font-medium">{(todayDaily?.meals ?? []).reduce((s, m) => s + (m.calories || 0), 0)} cal</span>
+                      <span className="text-gray-400 mx-2">·</span>
+                      <span className="text-gold-400">P {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.protein || 0), 0)}g</span>
+                      <span className="text-gray-400 mx-2">·</span>
+                      <span className="text-green-500">C {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.carbs || 0), 0)}g</span>
+                      <span className="text-gray-400 mx-2">·</span>
+                      <span className="text-violet-400">F {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.fat || 0), 0)}g</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+            </div>
+          </div>
+            )}
+            {activeMoreSection === 'tools' && (
+          <div className="space-y-4">
+            {/* Tool Section Selector - 3D */}
+            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
+              {[
+                { id: 'calculator', label: 'Calculators' }, 
+                { id: 'schedule', label: 'Schedules' }, 
+                { id: 'titration', label: 'Titration' }, 
+                { id: 'notifications', label: 'Notifications' }, 
+                { id: 'vials', label: 'Vials' },
+                { id: 'data', label: 'Data' }
+              ].map(section => (
+                <button key={section.id} onClick={() => setActiveToolSection(section.id)}
+                  className={`menu-3d-item flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                  {section.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Calculators Section */}
+            {activeToolSection === 'calculator' && (
+              <>
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Calculator className="h-5 w-5 text-gold-400" />Dose Calculator</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml)</label>
+                      <input type="number" step="0.01" value={calcConcentration} onChange={(e) => setCalcConcentration(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2.5" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Desired Dose</label>
+                      <div className="flex gap-2">
+                        <input type="number" step="0.01" value={calcDesiredDose} onChange={(e) => setCalcDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 0.5" />
+                        <select value={calcDesiredUnit} onChange={(e) => setCalcDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
+                      </div>
+                    </div>
+                    <button onClick={calculateDose} className="w-full btn-secondary text-white font-medium py-2 rounded-lg transform hover:scale-105 transition-all">Calculate</button>
+                    {calcResult && (
+                      <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                        <div className="text-2xl font-bold text-green-500">{calcResult.ml} mL</div>
+                        <div className="text-gray-400 text-sm">or</div>
+                        <div className="text-xl font-bold text-violet-400">{calcResult.units} units</div>
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-white/5">
+                      <button type="button" onClick={() => setShowCalculatorUnitRef(!showCalculatorUnitRef)} className="text-gray-400 hover:text-gold-400 text-xs font-medium flex items-center gap-1">
+                        {showCalculatorUnitRef ? 'Hide' : 'Show'} unit reference
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCalculatorUnitRef ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showCalculatorUnitRef && (
+                        <div className="mt-2 space-y-1 text-sm">
+                          <div className="flex justify-between text-gray-400"><span>1 mL</span><span className="text-white">= 100 units</span></div>
+                          <div className="flex justify-between text-gray-400"><span>1 mg</span><span className="text-white">= 1000 mcg</span></div>
+                          <div className="flex justify-between text-gray-400"><span>0.5 mL</span><span className="text-white">= 50 units</span></div>
+                          <div className="flex justify-between text-gray-400"><span>0.1 mL</span><span className="text-white">= 10 units</span></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-green-500" />Reconstitution Calculator</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Vial (peptide in vial)</label>
+                      <div className="flex gap-2">
+                        <input type="number" step="0.1" value={reconPeptideAmount} onChange={(e) => setReconPeptideAmount(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 5" title="Total peptide in the vial" />
+                        <select value={reconPeptideUnit} onChange={(e) => setReconPeptideUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">BAC Water (mL)</label>
+                      <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" title="Bacteriostatic water volume added to the vial" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Desired Dose</label>
+                      <div className="flex gap-2">
+                        <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 250" />
+                        <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mcg">mcg</option><option value="mg">mg</option></select>
+                      </div>
+                    </div>
+                    <button onClick={calculateReconstitution} className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg">Calculate</button>
+                    {reconResult && (
+                      <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+                        <div className="text-gray-400 text-xs">Concentration: {reconResult.concentration} mg/mL</div>
+                        <div className="text-2xl font-bold text-green-500 mt-1">{reconResult.ml} mL</div>
+                        <div className="text-gray-400 text-sm">or</div>
+                        <div className="text-xl font-bold text-violet-400">{reconResult.units} units</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-gold-400" />Calorie / TDEE Calculator</h3>
+                  <p className="text-gray-400 text-sm mb-3">Estimates BMR and total daily energy expenditure.</p>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Age</label>
+                        <input type="number" min="15" max="120" value={tdeeAge} onChange={(e) => setTdeeAge(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="30" />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Gender</label>
+                        <select value={tdeeGender} onChange={(e) => setTdeeGender(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Weight (lbs)</label>
+                      <input type="number" step="0.1" value={tdeeWeightLbs} onChange={(e) => setTdeeWeightLbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 180" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Height (inches)</label>
+                      <input type="number" step="0.1" value={tdeeHeightIn} onChange={(e) => setTdeeHeightIn(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 70" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Activity level</label>
+                      <select value={tdeeActivity} onChange={(e) => setTdeeActivity(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                        <option value="sedentary">Sedentary (little/no exercise)</option>
+                        <option value="light">Light (1–3 days/week)</option>
+                        <option value="moderate">Moderate (3–5 days/week)</option>
+                        <option value="active">Active (6–7 days/week)</option>
+                        <option value="very">Very active (intense daily)</option>
+                      </select>
+                    </div>
+                    <button onClick={calculateTDEE} className="w-full bg-accent hover:bg-gold-600 text-gray-900 font-medium py-2 rounded-lg">Calculate TDEE</button>
+                    {tdeeResult && (
+                      <div className="bg-slate-700/50 rounded-lg p-4 text-center space-y-1">
+                        <div className="text-gray-400 text-xs">BMR (basal metabolic rate)</div>
+                        <div className="text-xl font-bold text-gold-400">{tdeeResult.bmr} cal/day</div>
+                        <div className="text-gray-400 text-xs mt-2">TDEE (maintenance)</div>
+                        <div className="text-2xl font-bold text-green-500">{tdeeResult.tdee} cal/day</div>
+                        <div className="text-gray-500 text-xs mt-1">Deficit -500 ≈ {tdeeResult.tdee - 500} cal for ~1 lb/wk loss</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Schedules Section */}
+            {activeToolSection === 'schedule' && (
+              <div className="space-y-4">
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Bell className="h-5 w-5 text-gold-400" />Add Injection Schedule</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Medication</label>
+                      <select value={scheduleMed} onChange={(e) => { setScheduleMed(e.target.value); const med = MEDICATIONS.find(m => m.name === e.target.value); if (med) setScheduleFrequency(med.defaultSchedule); }}
+                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
+                        {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
+                      </select>
+                      {MEDICATION_EFFECT_PROFILES[scheduleMed]?.splitDoseTip && (
+                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
+                          <p className="text-gray-300 text-xs mb-2">{MEDICATION_EFFECT_PROFILES[scheduleMed].splitDoseTip}</p>
+                          <button
+                            type="button"
+                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 4]); setScheduleFrequency(3); }}
+                            className="text-xs font-medium text-gold-400 hover:text-gold-400"
+                          >
+                            Use twice weekly (split dose) → Mon & Thu
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Start Date</label>
+                      <input type="date" value={scheduleStartDate} onChange={(e) => setScheduleStartDate(e.target.value)} 
+                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
+                    </div>
+                    
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Schedule Type</label>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setScheduleType('recurring')}
+                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'recurring' ? 'bg-accent text-white' : 'bg-slate-700 text-gray-400'}`}
+                        >
+                          Every X Days
+                        </button>
+                        <button 
+                          onClick={() => setScheduleType('specific_days')}
+                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'specific_days' ? 'bg-accent text-white' : 'bg-slate-700 text-gray-400'}`}
+                        >
+                          Specific Days
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {scheduleType === 'recurring' && (
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Frequency (days)</label>
+                        <input type="number" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(parseInt(e.target.value))} 
+                          className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 7" />
+                        <p className="text-gray-500 text-xs mt-1">Inject every {scheduleFrequency} day{scheduleFrequency > 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+                    
+                    {scheduleType === 'specific_days' && (
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-2">Select Days of Week</label>
+                        <div className="grid grid-cols-7 gap-2">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                if (selectedDays.includes(idx)) {
+                                  setSelectedDays(selectedDays.filter(d => d !== idx));
+                                } else {
+                                  setSelectedDays([...selectedDays, idx].sort());
+                                }
+                              }}
+                              className={`py-2 px-1 rounded-lg text-xs transition-all ${
+                                selectedDays.includes(idx) 
+                                  ? 'bg-accent text-white font-medium' 
+                                  : 'bg-slate-700 text-gray-400'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          ))}
+                        </div>
+                        {selectedDays.length > 0 && (
+                          <p className="text-gray-400 text-xs mt-2">
+                            Selected: {selectedDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    <button onClick={addSchedule} className="w-full bg-accent hover:bg-gold-600 text-white font-medium py-3 rounded-lg">
+                      Save Schedule
+                    </button>
+                  </div>
+                </div>
+
+                {schedules.length > 0 && (
+                  <div className="ui-card p-4">
+                    <h3 className="text-white font-medium mb-3">Active Schedules</h3>
+                    <div className="space-y-2">
+                      {schedules.map(schedule => (
+                        <div key={schedule.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(schedule.medication)}20` }}>
+                              <Syringe className="h-4 w-4" style={{ color: getMedicationColor(schedule.medication) }} />
+                            </div>
+                            <div>
+                              <div className="text-white font-medium">{schedule.medication}</div>
+                              <div className="text-gray-400 text-sm">
+                                {schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0 
+                                  ? `${schedule.specificDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`
+                                  : `Every ${schedule.frequencyDays} days`}
+                              </div>
+                              {schedule.startDate && (
+                                <div className="text-gray-500 text-xs">Started: {new Date(schedule.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                              )}
+                            </div>
+                          </div>
+                          <button onClick={() => deleteSchedule(schedule.id)} className="p-2 text-gray-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Titration Section */}
+            {activeToolSection === 'titration' && (
+              <div className="space-y-4">
+                {/* Titration Guidance */}
+                <div className="rounded-2xl p-4 border border-accent/20 bg-gradient-to-br from-accent/10 to-gold-600/5 backdrop-blur-sm">
+                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-violet-400" />
+                    Titration Guidelines
+                  </h3>
+                  
+                  <div className="space-y-3 text-sm">
+                    {/* GLP-1 Guidance */}
+                    <div className="bg-[var(--bg-card)] rounded-lg p-3">
+                      <div className="text-violet-400 font-medium mb-1">GLP-1 Medications</div>
+                      <div className="text-gray-300 text-xs space-y-1">
+                        <p><strong>Semaglutide:</strong> Start 0.25mg → 0.5mg → 1mg → 1.7mg → 2.4mg (4 weeks each)</p>
+                        <p><strong>Tirzepatide:</strong> Start 2.5mg → 5mg → 7.5mg → 10mg → 12.5mg → 15mg (4 weeks each)</p>
+                        <p><strong>Retatrutide:</strong> Start 1mg → 2mg → 4mg → 8mg → 12mg (4-8 weeks each)</p>
+                        <p className="text-gray-400 mt-2">💡 Increase only if tolerating well with minimal side effects</p>
+                      </div>
+                    </div>
+
+                    {/* Hormone Guidance */}
+                    <div className="bg-[var(--bg-card)] rounded-lg p-3">
+                      <div className="text-gold-400 font-medium mb-1">Testosterone (TRT)</div>
+                      <div className="text-gray-300 text-xs space-y-1">
+                        <p><strong>Typical Start:</strong> 100-150mg/week split into 2 doses</p>
+                        <p><strong>Titration:</strong> Adjust by 25-50mg based on blood work every 6-8 weeks</p>
+                        <p><strong>Target:</strong> Mid-normal testosterone levels (500-800 ng/dL)</p>
+                        <p className="text-gray-400 mt-2">⚠️ Requires regular blood work - adjust based on labs!</p>
+                      </div>
+                    </div>
+
+                    {/* Peptide Guidance */}
+                    <div className="bg-[var(--bg-card)] rounded-lg p-3">
+                      <div className="text-green-500 font-medium mb-1">Peptides (BPC-157, TB-500)</div>
+                      <div className="text-gray-300 text-xs space-y-1">
+                        <p><strong>BPC-157:</strong> Typically 250-500mcg daily, no titration needed</p>
+                        <p><strong>TB-500:</strong> 2-5mg twice weekly, can increase if needed</p>
+                        <p className="text-gray-400 mt-2">💡 Most peptides don't require gradual titration</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-accent/10 border border-accent/30 rounded-lg p-2 text-xs">
+                      <p className="text-gold-400 font-medium">⚠️ Important</p>
+                      <p className="text-gray-300 mt-1">
+                        These are general guidelines. Always follow your healthcare provider's specific titration protocol.
+                        Monitor for side effects and adjust pace accordingly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-violet-400" />Create Titration Plan</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Medication</label>
+                      <select value={titrationMed} onChange={(e) => setTitrationMed(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
+                        {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-2">Dose Steps</label>
+                      {titrationSteps.map((step, idx) => (
+                        <div key={idx} className="flex gap-2 mb-2">
+                          <input type="number" step="0.1" value={step.dose} onChange={(e) => { const updated = [...titrationSteps]; updated[idx].dose = e.target.value; setTitrationSteps(updated); }}
+                            className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="Dose" />
+                          <select value={step.unit} onChange={(e) => { const updated = [...titrationSteps]; updated[idx].unit = e.target.value; setTitrationSteps(updated); }}
+                            className="bg-slate-700 text-white rounded-lg px-2 py-2 text-sm"><option value="mg">mg</option><option value="mcg">mcg</option></select>
+                          <input type="number" value={step.weeks} onChange={(e) => { const updated = [...titrationSteps]; updated[idx].weeks = parseInt(e.target.value); setTitrationSteps(updated); }}
+                            className="w-16 bg-slate-700 text-white rounded-lg px-2 py-2 text-sm text-center" />
+                          <span className="text-gray-400 text-sm self-center">wks</span>
+                          {titrationSteps.length > 1 && <button onClick={() => setTitrationSteps(titrationSteps.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300"><X className="h-4 w-4" /></button>}
+                        </div>
+                      ))}
+                      <button onClick={() => setTitrationSteps([...titrationSteps, { dose: '', weeks: 4, unit: 'mg' }])} className="text-violet-400 text-sm hover:text-violet-300">+ Add Step</button>
+                    </div>
+                    <button onClick={saveTitrationPlan} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">Save Titration Plan</button>
+                  </div>
+                </div>
+
+                {titrationPlans.length > 0 && (
+                  <div className="ui-card p-4">
+                    <h3 className="text-white font-medium mb-3">Active Titration Plans</h3>
+                    {titrationPlans.map(plan => {
+                      const current = getCurrentTitrationDose(plan);
+                      return (
+                        <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-700/40">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="text-white font-medium">{plan.medication}</div>
+                              <div className="text-gray-400 text-xs">Started {new Date(plan.startDate).toLocaleDateString()}</div>
+                            </div>
+                            <button onClick={() => deleteTitrationPlan(plan.id)} className="text-gray-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {plan.steps.map((step, idx) => (
+                              <div key={idx} className={`px-2 py-1 rounded text-xs ${current && idx + 1 === current.step ? 'bg-violet-500 text-white' : 'bg-slate-600 text-gray-300'}`}>
+                                {step.dose}{step.unit} × {step.weeks}wk
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Notifications Section */}
+            {activeToolSection === 'notifications' && (
+              <div className="space-y-4">
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-gold-400" />
+                    Push Notifications
+                  </h3>
+
+                  {/* Permission Status */}
+                  <div className={`rounded-lg p-4 mb-4 ${
+                    notificationPermission === 'granted' ? 'bg-green-500/20 border border-green-500/30' :
+                    notificationPermission === 'denied' ? 'bg-red-500/20 border border-red-500/30' :
+                    'bg-slate-700/50 border border-slate-600'
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="text-white font-medium">Notification Permission</div>
+                        <div className="text-gray-400 text-sm">
+                          {notificationPermission === 'granted' && 'Notifications enabled! You\'ll receive injection reminders.'}
+                          {notificationPermission === 'denied' && (Capacitor.isNativePlatform() ? 'Notifications blocked. Enable in device Settings → Apps → PepTalk → Notifications.' : 'Notifications blocked. Enable in browser settings.')}
+                          {notificationPermission === 'default' && 'Allow notifications to get injection reminders.'}
+                        </div>
+                      </div>
+                      {notificationPermission !== 'granted' && notificationPermission !== 'denied' && (
+                        <button 
+                          onClick={requestNotificationPermission}
+                          className="bg-accent hover:bg-gold-600 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap"
+                        >
+                          Enable
+                        </button>
+                      )}
+                    </div>
+                    {notificationPermission === 'denied' && (
+                      <div className="text-xs text-gray-400 mt-2">
+                        {Capacitor.isNativePlatform() ? 'To enable: Settings → Apps → PepTalk → Notifications → Allow' : 'To enable: Open browser settings → Permissions → Notifications → Allow for this site'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notification Settings */}
+                  {notificationPermission === 'granted' && (
+                    <div className="space-y-4">
+                      {/* Injection Reminders */}
+                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="text-white font-medium">Injection Reminders</div>
+                            <div className="text-gray-400 text-sm">Get notified when injections are due</div>
+                          </div>
+                          <button
+                            onClick={() => updateNotificationSettings({ injectionReminders: !notificationSettings.injectionReminders })}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                              notificationSettings.injectionReminders ? 'bg-accent' : 'bg-slate-600'
+                            }`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              notificationSettings.injectionReminders ? 'right-1' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {notificationSettings.injectionReminders && (
+                          <div>
+                            <label className="text-gray-400 text-sm block mb-1">Reminder Time</label>
+                            <input
+                              type="time"
+                              value={notificationSettings.reminderTime}
+                              onChange={(e) => updateNotificationSettings({ reminderTime: e.target.value })}
+                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
+                            />
+                            <p className="text-gray-500 text-xs mt-1">You'll be notified at this time on injection days</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Overdue Alerts */}
+                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-white font-medium">Overdue Alerts</div>
+                            <div className="text-gray-400 text-sm">Get alerted when injections are overdue</div>
+                          </div>
+                          <button
+                            onClick={() => updateNotificationSettings({ overdueAlerts: !notificationSettings.overdueAlerts })}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                              notificationSettings.overdueAlerts ? 'bg-red-500' : 'bg-slate-600'
+                            }`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              notificationSettings.overdueAlerts ? 'right-1' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Weight Log Reminders */}
+                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="text-white font-medium">Weight Log Reminders</div>
+                            <div className="text-gray-400 text-sm">Daily reminder to log your weight</div>
+                          </div>
+                          <button
+                            onClick={() => updateNotificationSettings({ weightReminders: !notificationSettings.weightReminders })}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                              notificationSettings.weightReminders ? 'bg-pink-500' : 'bg-slate-600'
+                            }`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              notificationSettings.weightReminders ? 'right-1' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {notificationSettings.weightReminders && (
+                          <div>
+                            <label className="text-gray-400 text-sm block mb-1">Reminder Time</label>
+                            <input
+                              type="time"
+                              value={notificationSettings.weightReminderTime}
+                              onChange={(e) => updateNotificationSettings({ weightReminderTime: e.target.value })}
+                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
+                            />
+                            <p className="text-gray-500 text-xs mt-1">Daily reminder to log your morning weight</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Test Notification */}
+                      <button
+                        onClick={() => showNotification({
+                          title: '🎉 Test Notification',
+                          body: 'Notifications are working! You\'ll receive injection reminders like this.',
+                          tag: 'test'
+                        })}
+                        className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all"
+                      >
+                        Send Test Notification
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Vials / Inventory Section */}
+            {activeToolSection === 'vials' && (
+              <div className="space-y-4">
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Syringe className="h-5 w-5 text-gold-400" />Vial inventory</h3>
+                  <p className="text-gray-400 text-sm mb-4">Track vials by total mg. When you log an injection you can deduct from a vial; remaining amount updates automatically.</p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Medication</label>
+                      <select value={vialMedication} onChange={(e) => setVialMedication(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                        {MEDICATIONS.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Total amount (mg)</label>
+                      <input type="number" step="0.01" min="0" value={vialTotalMg} onChange={(e) => setVialTotalMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 5" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Expiry date (optional)</label>
+                      <input type="date" value={vialExpiry} onChange={(e) => setVialExpiry(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const total = parseFloat(vialTotalMg);
+                        if (!vialTotalMg || isNaN(total) || total <= 0) return;
+                        const newVial = { id: Date.now(), medication: vialMedication, totalMg: total, remainingMg: total, expiry: vialExpiry || null };
+                        const updated = [...vials, newVial];
+                        setVials(updated);
+                        saveData('health-vials', updated);
+                        setVialTotalMg('');
+                        setVialExpiry('');
+                      }}
+                      className="w-full ui-btn-primary py-2.5"
+                    >
+                      Add vial
+                    </button>
+                  </div>
+                </div>
+                {vials.length > 0 && (
+                  <div className="ui-card p-4">
+                    <h4 className="text-white font-medium mb-3">Your vials</h4>
+                    <div className="space-y-2">
+                      {vials.map(v => {
+                        const rem = v.remainingMg ?? v.totalMg;
+                        const isLow = rem <= 0;
+                        return (
+                          <div key={v.id} className={`flex items-center justify-between rounded-lg p-3 ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/50'}`}>
+                            <div>
+                              <span className="text-white font-medium">{v.medication}</span>
+                              <span className="text-gray-400 text-sm ml-2">{rem.toFixed(1)} / {v.totalMg} mg</span>
+                              {v.expiry && <span className="text-gray-500 text-xs ml-2">Exp {v.expiry}</span>}
+                            </div>
+                            <button onClick={() => { const updated = vials.filter(x => x.id !== v.id); setVials(updated); saveData('health-vials', updated); }} className="p-2 text-gray-400 hover:text-red-400 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Data Management Section */}
+            {activeToolSection === 'data' && (
+              <div className="space-y-4">
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-gold-400" />
+                    Export & Import Data
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    {/* Export — choose format then export */}
+                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                        <FileDown className="h-5 w-5 text-gold-400" />
+                        Export data
+                      </h4>
+                      <p className="text-gray-400 text-sm mb-3">
+                        Choose the type of export you need, then tap Export.
+                      </p>
+                      <div className="mb-4">
+                        <label className="text-gray-400 text-xs block mb-2">Export as</label>
+                        <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 border border-white/[0.06]">
+                          <option value="json">JSON Backup — full backup, import later</option>
+                          <option value="csv">CSV — weight & injections (spreadsheets)</option>
+                        </select>
+                      </div>
+                      <button onClick={runExport} className="w-full bg-accent hover:bg-gold-600 text-gray-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 shadow-accent/20">
+                        <FileDown className="h-5 w-5" />
+                        {exportFormat === 'json' ? 'Export backup (JSON)' : 'Download CSV'}
+                      </button>
+                    </div>
+
+                    {/* Import Section */}
+                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                      <h4 className="text-white font-medium mb-2">Import Data</h4>
+                      <p className="text-gray-400 text-sm mb-3">
+                        Restore data from a backup file.
+                      </p>
+                      <div className="bg-accent/20 border border-accent/50 rounded-lg p-3 mb-3">
+                        <p className="text-gold-400 text-sm flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Warning: This will replace all current data!</span>
+                        </p>
+                      </div>
+                      <label className="w-full bg-accent hover:bg-gold-400 text-gray-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 cursor-pointer shadow-gold-glow">
+                        <Plus className="h-5 w-5" />
+                        Import Data File
+                        <input type="file" accept=".json" onChange={importData} className="hidden" />
+                      </label>
+                    </div>
+{/* Danger Zone */}
+<div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+  <h4 className="text-white font-medium mb-2">Danger Zone</h4>
+  <p className="text-gray-300 text-sm mb-3">
+    Permanently deletes all saved PepTalk data on this device.
+  </p>
+  <button
+    onClick={() => { setShowWipeConfirm(true); setWipeConfirmChecked(false); }}
+    className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-lg"
+  >
+    Wipe All Data
+  </button>
+</div>
+                    {/* Data Summary */}
+                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                      <h4 className="text-white font-medium mb-3">Current Data Summary</h4>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Weight entries:</span>
+                          <span className="text-white font-medium">{weightEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Injections:</span>
+                          <span className="text-white font-medium">{injectionEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Measurements:</span>
+                          <span className="text-white font-medium">{measurementEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Progress photos:</span>
+                          <span className="text-white font-medium">{progressPhotos.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Journal entries:</span>
+                          <span className="text-white font-medium">{journalEntries.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Schedules:</span>
+                          <span className="text-white font-medium">{schedules.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+            )}
+            {activeMoreSection === 'glucose' && (
+          <div className="space-y-4 tab-enter">
+            <div className="ui-card p-4">
+              <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Droplet className="h-6 w-6 text-green-500" />Glucose & A1C</h2>
+              <p className="text-gray-400 text-sm mb-4">Log blood sugar and A1C. Shown in &quot;This week&quot; on Summary.</p>
               <div className="mb-4">
                 {!showGlucoseForm ? (
-                  <button onClick={() => setShowGlucoseForm(true)} className="w-full py-3 rounded-xl border-2 border-dashed border-slate-500 text-slate-400 hover:text-white hover:border-emerald-500/50 text-sm font-medium flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Log glucose</button>
+                  <button onClick={() => setShowGlucoseForm(true)} className="w-full py-3 rounded-xl border-2 border-dashed border-gray-500 text-gray-400 hover:text-white hover:border-emerald-500/50 text-sm font-medium flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Log glucose</button>
                 ) : (
                   <div className="rounded-xl p-4 bg-slate-700/50 space-y-3">
                     <div className="flex gap-2">
@@ -4074,16 +5326,15 @@ const wipeAllData = () => {
                     </div>
                     <input type="date" value={glucoseDate} onChange={(e) => setGlucoseDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                     <div className="flex gap-2">
-                      <button onClick={addGlucose} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-medium">Add</button>
-                      <button onClick={() => { setShowGlucoseForm(false); setGlucoseValue(''); }} className="px-4 py-3 text-slate-400 hover:text-white rounded-lg">Cancel</button>
+                      <button onClick={addGlucose} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-medium">Add</button>
+                      <button onClick={() => { setShowGlucoseForm(false); setGlucoseValue(''); }} className="px-4 py-3 text-gray-400 hover:text-white rounded-lg">Cancel</button>
                     </div>
                   </div>
                 )}
               </div>
-
               {glucoseEntries.length > 0 && (
                 <>
-                  <h3 className="text-slate-300 font-medium mb-2">Glucose trend (last 14 days)</h3>
+                  <h3 className="text-gray-300 font-medium mb-2">Glucose trend (last 14 days)</h3>
                   <div className="mb-4 h-44">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={(() => {
@@ -4110,29 +5361,27 @@ const wipeAllData = () => {
                   <div className="space-y-1 max-h-40 overflow-y-auto">
                     {sortByDateDesc(glucoseEntries).slice(0, 20).map(e => (
                       <div key={e.id} className="flex items-center justify-between py-2 border-b border-white/5">
-                        <span className="text-slate-300">{parseLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {e.type === 'fasting' ? 'Fasting' : e.type === 'post_meal' ? 'Post-meal' : 'Random'}</span>
+                        <span className="text-gray-300">{parseLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {e.type === 'fasting' ? 'Fasting' : e.type === 'post_meal' ? 'Post-meal' : 'Random'}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-white font-medium">{e.value} mg/dL</span>
-                          <button onClick={() => deleteGlucose(e.id)} className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-600"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => deleteGlucose(e.id)} className="p-2 text-gray-400 hover:text-red-400 rounded-lg hover:bg-slate-600"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
                     ))}
                   </div>
                 </>
               )}
-
-              {/* A1C */}
               <div className="mt-6 pt-4 border-t border-white/10">
-                <h3 className="text-slate-300 font-medium mb-2">A1C</h3>
+                <h3 className="text-gray-300 font-medium mb-2">A1C</h3>
                 {!showA1cForm ? (
-                  <button onClick={() => setShowA1cForm(true)} className="w-full py-3 rounded-xl border-2 border-dashed border-slate-500 text-slate-400 hover:text-white hover:border-cyan-500/50 text-sm font-medium flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Log A1C</button>
+                  <button onClick={() => setShowA1cForm(true)} className="w-full py-3 rounded-xl border-2 border-dashed border-gray-500 text-gray-400 hover:text-white hover:border-cyan-500/50 text-sm font-medium flex items-center gap-2"><Plus className="h-4 w-4" />Log A1C</button>
                 ) : (
                   <div className="rounded-xl p-4 bg-slate-700/50 space-y-3">
                     <input type="number" step="0.1" min="4" max="15" value={a1cValue} onChange={(e) => setA1cValue(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 text-lg" placeholder="A1C %" />
                     <input type="date" value={a1cDate} onChange={(e) => setA1cDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                     <div className="flex gap-2">
                       <button onClick={addA1c} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white py-3 rounded-lg font-medium">Add</button>
-                      <button onClick={() => { setShowA1cForm(false); setA1cValue(''); }} className="px-4 py-3 text-slate-400 hover:text-white rounded-lg">Cancel</button>
+                      <button onClick={() => { setShowA1cForm(false); setA1cValue(''); }} className="px-4 py-3 text-gray-400 hover:text-white rounded-lg">Cancel</button>
                     </div>
                   </div>
                 )}
@@ -4140,10 +5389,10 @@ const wipeAllData = () => {
                   <div className="mt-3 space-y-1">
                     {sortByDateDesc(a1cEntries).map(e => (
                       <div key={e.id} className="flex items-center justify-between py-2 border-b border-white/5">
-                        <span className="text-slate-300">{parseLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <span className="text-gray-300">{parseLocalDate(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-cyan-400 font-medium">{e.value}%</span>
-                          <button onClick={() => deleteA1c(e.id)} className="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-600"><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => deleteA1c(e.id)} className="p-2 text-gray-400 hover:text-red-400 rounded-lg hover:bg-slate-600"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
                     ))}
@@ -4152,971 +5401,10 @@ const wipeAllData = () => {
               </div>
             </div>
           </div>
-        )}
-
-        {/* MORE TAB */}
-        {activeTab === 'more' && (
-          <div className="space-y-4 tab-enter">
-            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-slate-800/70 backdrop-blur-sm">
-              {[
-                { id: 'body', icon: Ruler, label: 'Body' },
-                { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
-                { id: 'journal', icon: BookOpen, label: 'Journal' },
-                { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
-                { id: 'tools', icon: Wrench, label: 'Tools' }
-              ].map(section => (
-                <button key={section.id} onClick={() => setActiveMoreSection(section.id)}
-                  className={`menu-3d-item flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-amber-500 text-slate-900 shadow-amber-500/20' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                  <section.icon className="h-4 w-4" />{section.label}
-                </button>
-              ))}
-            </div>
-            {activeMoreSection === 'body' && (
-          <div className="space-y-4">
-            {/* Measurement Stats */}
-            {Object.keys(measurementStats).length > 0 && (
-              <div className="grid grid-cols-2 gap-3">
-                {Object.entries(measurementStats).map(([type, data]) => (
-                  <div key={type} className="rounded-2xl p-3 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                    <div className="text-slate-400 text-xs">{type}</div>
-                    <div className="text-xl font-bold text-white">{data.current}"</div>
-                    <div className={`text-xs ${parseFloat(data.change) < 0 ? 'text-emerald-400' : parseFloat(data.change) > 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                      {parseFloat(data.change) > 0 ? '+' : ''}{data.change}"
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Body Measurements Chart */}
-            {measurementEntries.length > 0 && getMeasurementChartData().length > 0 && (
-              <div className="bg-slate-800/50 rounded-xl p-4">
-                <h3 className="text-white font-medium mb-3">Measurement Progress</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={getMeasurementChartData()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
-                    <YAxis stroke="#94a3b8" fontSize={10} unit='"' />
-                    <Tooltip contentStyle={{ backgroundColor: 'rgba(30, 41, 59, 0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', backdropFilter: 'blur(12px)' }} />
-                    <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    {MEASUREMENT_TYPES.map((type, idx) => {
-                      const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#a855f7', '#14b8a6', '#f97316'];
-                      return <Line key={type} type="monotone" dataKey={type} stroke={colors[idx % colors.length]} strokeWidth={2} dot={{ r: 4 }} connectNulls name={type} />;
-                    })}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Add Measurement Form */}
-            {showAddForm && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-white font-medium">Add Measurement</h3>
-                  <button onClick={resetMeasurementForm} className="text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">Body Part</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {MEASUREMENT_TYPES.map(type => <button key={type} onClick={() => setMeasurementType(type)} className={`p-2 rounded-lg text-sm transition-all ${measurementType === type ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{type}</button>)}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-1">Measurement (inches)</label>
-                    <input type="number" step="0.25" value={measurementValue} onChange={(e) => setMeasurementValue(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 34.5" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-1">Date</label>
-                    <input type="date" value={measurementDate} onChange={(e) => setMeasurementDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                  </div>
-                  <button onClick={addMeasurement} className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-medium py-3 rounded-lg">Add Measurement</button>
-                </div>
-              </div>
-            )}
-
-            {/* Progress Photos */}
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium flex items-center gap-2"><Camera className="h-4 w-4 text-amber-400" />Progress Photos</h3>
-                <button onClick={() => photoInputRef.current?.click()} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>
-                <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-              </div>
-              {progressPhotos.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <div className="relative mb-4">
-                    <div className="absolute inset-0 bg-pink-500/10 blur-2xl rounded-full"></div>
-                    <Camera className="h-16 w-16 mx-auto text-pink-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
-                  </div>
-                  <h3 className="text-white font-medium mb-2">Document Your Journey</h3>
-                  <p className="text-slate-400 text-sm mb-4">Visual progress is the best motivation!</p>
-                  <button 
-                    onClick={() => document.querySelector('input[type="file"]').click()} 
-                    className="bg-gradient-to-r from-pink-500 to-rose-600 shadow-lg shadow-pink-500/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
-                  >
-                    <Camera className="h-4 w-4" />
-                    Add First Photo
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {progressPhotos.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map(photo => (
-                    <div key={photo.id} className="relative group">
-                      <img src={photo.data} alt="Progress" className="w-full h-24 object-cover rounded-lg" />
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg">{parseLocalDate(photo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                      <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3 w-3 text-white" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Measurement History */}
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium">Measurement History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
-              </div>
-              {measurementEntries.length === 0 ? (
-                <div className="text-center py-8 text-slate-400"><Ruler className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No measurements yet</p></div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {measurementEntries.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-amber-500/20 p-2 rounded-lg border border-amber-500/20"><Ruler className="h-5 w-5 text-amber-400" /></div>
-                        <div>
-                          <div className="text-white font-medium">{entry.type}: {entry.value}"</div>
-                          <div className="text-slate-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                        </div>
-                      </div>
-                      <button onClick={() => deleteMeasurement(entry.id)} className="p-2 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-            )}
-            {activeMoreSection === 'daily' && (
-          <div className="space-y-4">
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-amber-400" /><UtensilsCrossed className="h-4 w-4 text-amber-400" />Daily — Hydration, Protein & Nutrition</h3>
-              <p className="text-slate-500 text-xs mb-3">Hydration and protein today are calculated from your meal entries below. Add optional extra water if you don’t log drinks as meals.</p>
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <label className="text-slate-400 text-xs">Extra water (oz)</label>
-                <input type="number" min="0" step="1" value={extraHydrationOz} onChange={(e) => setExtraHydrationOz(e.target.value)} className="w-20 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                <button onClick={saveExtraHydration} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium px-3 py-2 rounded-lg">Save</button>
-                <button onClick={() => { setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-amber-400 hover:text-amber-300 text-sm font-medium flex items-center gap-1">
-                  <Calculator className="h-4 w-4" /> TDEE calculator
-                </button>
-              </div>
-              <p className="text-slate-400 text-sm mb-4">Today: <span className="text-sky-400">{hydrationToday} oz</span> hydration · <span className="text-amber-400">{proteinToday} g</span> protein</p>
-
-              <div className="border-t border-white/[0.06] pt-4 mt-4">
-                <h4 className="text-slate-300 text-sm font-medium mb-2 flex items-center gap-2"><UtensilsCrossed className="h-4 w-4" />Meals & calories</h4>
-                <p className="text-slate-500 text-xs mb-3">Add meals or snacks; hydration and protein today update from these entries. Use &quot;Estimate macros&quot; for quick add from a short description.</p>
-                <div className="flex gap-2 mb-3">
-                  <input type="text" value={mealDescription} onChange={(e) => setMealDescription(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="e.g. 2 eggs, chicken salad, water 16 oz" />
-                  <button type="button" onClick={applyMealEstimate} className="bg-amber-500/80 hover:bg-amber-500 text-slate-900 text-sm font-medium px-3 py-2 rounded-lg whitespace-nowrap">Estimate macros</button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div className="col-span-2">
-                    <label className="text-slate-400 text-xs block mb-1">Label (e.g. Breakfast)</label>
-                    <input type="text" value={nutritionLabel} onChange={(e) => setNutritionLabel(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="Breakfast, Lunch, Snack…" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-xs block mb-1">Calories</label>
-                    <input type="number" min="0" step="1" value={nutritionCalories} onChange={(e) => setNutritionCalories(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-xs block mb-1">Protein (g)</label>
-                    <input type="number" min="0" step="1" value={nutritionProtein} onChange={(e) => setNutritionProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-xs block mb-1">Carbs (g)</label>
-                    <input type="number" min="0" step="1" value={nutritionCarbs} onChange={(e) => setNutritionCarbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-xs block mb-1">Fat (g)</label>
-                    <input type="number" min="0" step="1" value={nutritionFat} onChange={(e) => setNutritionFat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-xs block mb-1">Water (oz) — for drinks</label>
-                    <input type="number" min="0" step="1" value={nutritionHydrationOz} onChange={(e) => setNutritionHydrationOz(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                </div>
-                <button onClick={addNutritionEntry} className="w-full bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium py-2 rounded-lg mb-4">Add entry</button>
-
-                {(todayDaily?.meals?.length ?? 0) > 0 && (
-                  <>
-                    <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                      {(todayDaily?.meals ?? []).map((meal) => (
-                        <div key={meal.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2 text-sm group">
-                          <div>
-                            <span className="text-white font-medium">{meal.label}</span>
-                            <span className="text-slate-400 ml-2">{meal.calories} cal</span>
-                            {(meal.protein > 0 || meal.carbs > 0 || meal.fat > 0) && (
-                              <span className="text-slate-500 text-xs ml-2">P {meal.protein}g · C {meal.carbs}g · F {meal.fat}g</span>
-                            )}
-                            {(meal.hydrationOz ?? 0) > 0 && (
-                              <span className="text-sky-400 text-xs ml-2">{meal.hydrationOz} oz</span>
-                            )}
-                          </div>
-                          <button type="button" onClick={() => deleteNutritionEntry(meal.id)} className="p-1.5 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="rounded-lg bg-slate-700/60 px-3 py-2 text-sm border border-white/[0.04]">
-                      <span className="text-slate-400">Today&apos;s totals: </span>
-                      <span className="text-white font-medium">{(todayDaily?.meals ?? []).reduce((s, m) => s + (m.calories || 0), 0)} cal</span>
-                      <span className="text-slate-400 mx-2">·</span>
-                      <span className="text-amber-400">P {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.protein || 0), 0)}g</span>
-                      <span className="text-slate-400 mx-2">·</span>
-                      <span className="text-emerald-400">C {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.carbs || 0), 0)}g</span>
-                      <span className="text-slate-400 mx-2">·</span>
-                      <span className="text-violet-400">F {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.fat || 0), 0)}g</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-            </div>
-          </div>
-            )}
-            {activeMoreSection === 'tools' && (
-          <div className="space-y-4">
-            {/* Tool Section Selector - 3D */}
-            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-slate-800/70 backdrop-blur-sm">
-              {[
-                { id: 'calculator', label: 'Calculators' }, 
-                { id: 'schedule', label: 'Schedules' }, 
-                { id: 'titration', label: 'Titration' }, 
-                { id: 'notifications', label: 'Notifications' }, 
-                { id: 'data', label: 'Data' }
-              ].map(section => (
-                <button key={section.id} onClick={() => setActiveToolSection(section.id)}
-                  className={`menu-3d-item flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'menu-3d-item-active bg-amber-500 text-slate-900' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                  {section.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Calculators Section (also show when 'glucose' was removed from Tools) */}
-            {(activeToolSection === 'calculator' || activeToolSection === 'glucose') && (
-              <>
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Calculator className="h-5 w-5 text-amber-400" />Dose Calculator</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Concentration (mg/ml)</label>
-                      <input type="number" step="0.01" value={calcConcentration} onChange={(e) => setCalcConcentration(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2.5" />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Desired Dose</label>
-                      <div className="flex gap-2">
-                        <input type="number" step="0.01" value={calcDesiredDose} onChange={(e) => setCalcDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 0.5" />
-                        <select value={calcDesiredUnit} onChange={(e) => setCalcDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
-                      </div>
-                    </div>
-                    <button onClick={calculateDose} className="w-full btn-secondary text-white font-medium py-2 rounded-lg transform hover:scale-105 transition-all">Calculate</button>
-                    {calcResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-emerald-400">{calcResult.ml} mL</div>
-                        <div className="text-slate-400 text-sm">or</div>
-                        <div className="text-xl font-bold text-violet-400">{calcResult.units} units</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-emerald-400" />Reconstitution Calculator</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Vial (peptide in vial)</label>
-                      <div className="flex gap-2">
-                        <input type="number" step="0.1" value={reconPeptideAmount} onChange={(e) => setReconPeptideAmount(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 5" title="Total peptide in the vial" />
-                        <select value={reconPeptideUnit} onChange={(e) => setReconPeptideUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">BAC Water (mL)</label>
-                      <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" title="Bacteriostatic water volume added to the vial" />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Desired Dose</label>
-                      <div className="flex gap-2">
-                        <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 250" />
-                        <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mcg">mcg</option><option value="mg">mg</option></select>
-                      </div>
-                    </div>
-                    <button onClick={calculateReconstitution} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 rounded-lg">Calculate</button>
-                    {reconResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center">
-                        <div className="text-slate-400 text-xs">Concentration: {reconResult.concentration} mg/mL</div>
-                        <div className="text-2xl font-bold text-emerald-400 mt-1">{reconResult.ml} mL</div>
-                        <div className="text-slate-400 text-sm">or</div>
-                        <div className="text-xl font-bold text-violet-400">{reconResult.units} units</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-amber-400" />Calorie / TDEE Calculator</h3>
-                  <p className="text-slate-400 text-sm mb-3">Estimates BMR and total daily energy expenditure.</p>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-slate-400 text-sm block mb-1">Age</label>
-                        <input type="number" min="15" max="120" value={tdeeAge} onChange={(e) => setTdeeAge(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="30" />
-                      </div>
-                      <div>
-                        <label className="text-slate-400 text-sm block mb-1">Gender</label>
-                        <select value={tdeeGender} onChange={(e) => setTdeeGender(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
-                          <option value="male">Male</option>
-                          <option value="female">Female</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Weight (lbs)</label>
-                      <input type="number" step="0.1" value={tdeeWeightLbs} onChange={(e) => setTdeeWeightLbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 180" />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Height (inches)</label>
-                      <input type="number" step="0.1" value={tdeeHeightIn} onChange={(e) => setTdeeHeightIn(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 70" />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Activity level</label>
-                      <select value={tdeeActivity} onChange={(e) => setTdeeActivity(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
-                        <option value="sedentary">Sedentary (little/no exercise)</option>
-                        <option value="light">Light (1–3 days/week)</option>
-                        <option value="moderate">Moderate (3–5 days/week)</option>
-                        <option value="active">Active (6–7 days/week)</option>
-                        <option value="very">Very active (intense daily)</option>
-                      </select>
-                    </div>
-                    <button onClick={calculateTDEE} className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-medium py-2 rounded-lg">Calculate TDEE</button>
-                    {tdeeResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center space-y-1">
-                        <div className="text-slate-400 text-xs">BMR (basal metabolic rate)</div>
-                        <div className="text-xl font-bold text-amber-400">{tdeeResult.bmr} cal/day</div>
-                        <div className="text-slate-400 text-xs mt-2">TDEE (maintenance)</div>
-                        <div className="text-2xl font-bold text-emerald-400">{tdeeResult.tdee} cal/day</div>
-                        <div className="text-slate-500 text-xs mt-1">Deficit -500 ≈ {tdeeResult.tdee - 500} cal for ~1 lb/wk loss</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Schedules Section */}
-            {activeToolSection === 'schedule' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Bell className="h-5 w-5 text-amber-400" />Add Injection Schedule</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Medication</label>
-                      <select value={scheduleMed} onChange={(e) => { setScheduleMed(e.target.value); const med = MEDICATIONS.find(m => m.name === e.target.value); if (med) setScheduleFrequency(med.defaultSchedule); }}
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
-                        {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
-                      </select>
-                      {MEDICATION_EFFECT_PROFILES[scheduleMed]?.splitDoseTip && (
-                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
-                          <p className="text-slate-300 text-xs mb-2">{MEDICATION_EFFECT_PROFILES[scheduleMed].splitDoseTip}</p>
-                          <button
-                            type="button"
-                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 4]); setScheduleFrequency(3); }}
-                            className="text-xs font-medium text-amber-400 hover:text-amber-300"
-                          >
-                            Use twice weekly (split dose) → Mon & Thu
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Start Date</label>
-                      <input type="date" value={scheduleStartDate} onChange={(e) => setScheduleStartDate(e.target.value)} 
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                    </div>
-                    
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Schedule Type</label>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => setScheduleType('recurring')}
-                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'recurring' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'}`}
-                        >
-                          Every X Days
-                        </button>
-                        <button 
-                          onClick={() => setScheduleType('specific_days')}
-                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'specific_days' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'}`}
-                        >
-                          Specific Days
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {scheduleType === 'recurring' && (
-                      <div>
-                        <label className="text-slate-400 text-sm block mb-1">Frequency (days)</label>
-                        <input type="number" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(parseInt(e.target.value))} 
-                          className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 7" />
-                        <p className="text-slate-500 text-xs mt-1">Inject every {scheduleFrequency} day{scheduleFrequency > 1 ? 's' : ''}</p>
-                      </div>
-                    )}
-                    
-                    {scheduleType === 'specific_days' && (
-                      <div>
-                        <label className="text-slate-400 text-sm block mb-2">Select Days of Week</label>
-                        <div className="grid grid-cols-7 gap-2">
-                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                if (selectedDays.includes(idx)) {
-                                  setSelectedDays(selectedDays.filter(d => d !== idx));
-                                } else {
-                                  setSelectedDays([...selectedDays, idx].sort());
-                                }
-                              }}
-                              className={`py-2 px-1 rounded-lg text-xs transition-all ${
-                                selectedDays.includes(idx) 
-                                  ? 'bg-amber-500 text-white font-medium' 
-                                  : 'bg-slate-700 text-slate-400'
-                              }`}
-                            >
-                              {day}
-                            </button>
-                          ))}
-                        </div>
-                        {selectedDays.length > 0 && (
-                          <p className="text-slate-400 text-xs mt-2">
-                            Selected: {selectedDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    
-                    <button onClick={addSchedule} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 rounded-lg">
-                      Save Schedule
-                    </button>
-                  </div>
-                </div>
-
-                {schedules.length > 0 && (
-                  <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                    <h3 className="text-white font-medium mb-3">Active Schedules</h3>
-                    <div className="space-y-2">
-                      {schedules.map(schedule => (
-                        <div key={schedule.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(schedule.medication)}20` }}>
-                              <Syringe className="h-4 w-4" style={{ color: getMedicationColor(schedule.medication) }} />
-                            </div>
-                            <div>
-                              <div className="text-white font-medium">{schedule.medication}</div>
-                              <div className="text-slate-400 text-sm">
-                                {schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0 
-                                  ? `${schedule.specificDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`
-                                  : `Every ${schedule.frequencyDays} days`}
-                              </div>
-                              {schedule.startDate && (
-                                <div className="text-slate-500 text-xs">Started: {new Date(schedule.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                              )}
-                            </div>
-                          </div>
-                          <button onClick={() => deleteSchedule(schedule.id)} className="p-2 text-slate-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Titration Section */}
-            {activeToolSection === 'titration' && (
-              <div className="space-y-4">
-                {/* Titration Guidance */}
-                <div className="rounded-2xl p-4 border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-violet-400" />
-                    Titration Guidelines
-                  </h3>
-                  
-                  <div className="space-y-3 text-sm">
-                    {/* GLP-1 Guidance */}
-                    <div className="bg-slate-800/50 rounded-lg p-3">
-                      <div className="text-violet-400 font-medium mb-1">GLP-1 Medications</div>
-                      <div className="text-slate-300 text-xs space-y-1">
-                        <p><strong>Semaglutide:</strong> Start 0.25mg → 0.5mg → 1mg → 1.7mg → 2.4mg (4 weeks each)</p>
-                        <p><strong>Tirzepatide:</strong> Start 2.5mg → 5mg → 7.5mg → 10mg → 12.5mg → 15mg (4 weeks each)</p>
-                        <p><strong>Retatrutide:</strong> Start 1mg → 2mg → 4mg → 8mg → 12mg (4-8 weeks each)</p>
-                        <p className="text-slate-400 mt-2">💡 Increase only if tolerating well with minimal side effects</p>
-                      </div>
-                    </div>
-
-                    {/* Hormone Guidance */}
-                    <div className="bg-slate-800/50 rounded-lg p-3">
-                      <div className="text-amber-400 font-medium mb-1">Testosterone (TRT)</div>
-                      <div className="text-slate-300 text-xs space-y-1">
-                        <p><strong>Typical Start:</strong> 100-150mg/week split into 2 doses</p>
-                        <p><strong>Titration:</strong> Adjust by 25-50mg based on blood work every 6-8 weeks</p>
-                        <p><strong>Target:</strong> Mid-normal testosterone levels (500-800 ng/dL)</p>
-                        <p className="text-slate-400 mt-2">⚠️ Requires regular blood work - adjust based on labs!</p>
-                      </div>
-                    </div>
-
-                    {/* Peptide Guidance */}
-                    <div className="bg-slate-800/50 rounded-lg p-3">
-                      <div className="text-emerald-400 font-medium mb-1">Peptides (BPC-157, TB-500)</div>
-                      <div className="text-slate-300 text-xs space-y-1">
-                        <p><strong>BPC-157:</strong> Typically 250-500mcg daily, no titration needed</p>
-                        <p><strong>TB-500:</strong> 2-5mg twice weekly, can increase if needed</p>
-                        <p className="text-slate-400 mt-2">💡 Most peptides don't require gradual titration</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-xs">
-                      <p className="text-amber-400 font-medium">⚠️ Important</p>
-                      <p className="text-slate-300 mt-1">
-                        These are general guidelines. Always follow your healthcare provider's specific titration protocol.
-                        Monitor for side effects and adjust pace accordingly.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-violet-400" />Create Titration Plan</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-1">Medication</label>
-                      <select value={titrationMed} onChange={(e) => setTitrationMed(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
-                        {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-slate-400 text-sm block mb-2">Dose Steps</label>
-                      {titrationSteps.map((step, idx) => (
-                        <div key={idx} className="flex gap-2 mb-2">
-                          <input type="number" step="0.1" value={step.dose} onChange={(e) => { const updated = [...titrationSteps]; updated[idx].dose = e.target.value; setTitrationSteps(updated); }}
-                            className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="Dose" />
-                          <select value={step.unit} onChange={(e) => { const updated = [...titrationSteps]; updated[idx].unit = e.target.value; setTitrationSteps(updated); }}
-                            className="bg-slate-700 text-white rounded-lg px-2 py-2 text-sm"><option value="mg">mg</option><option value="mcg">mcg</option></select>
-                          <input type="number" value={step.weeks} onChange={(e) => { const updated = [...titrationSteps]; updated[idx].weeks = parseInt(e.target.value); setTitrationSteps(updated); }}
-                            className="w-16 bg-slate-700 text-white rounded-lg px-2 py-2 text-sm text-center" />
-                          <span className="text-slate-400 text-sm self-center">wks</span>
-                          {titrationSteps.length > 1 && <button onClick={() => setTitrationSteps(titrationSteps.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300"><X className="h-4 w-4" /></button>}
-                        </div>
-                      ))}
-                      <button onClick={() => setTitrationSteps([...titrationSteps, { dose: '', weeks: 4, unit: 'mg' }])} className="text-violet-400 text-sm hover:text-violet-300">+ Add Step</button>
-                    </div>
-                    <button onClick={saveTitrationPlan} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">Save Titration Plan</button>
-                  </div>
-                </div>
-
-                {titrationPlans.length > 0 && (
-                  <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                    <h3 className="text-white font-medium mb-3">Active Titration Plans</h3>
-                    {titrationPlans.map(plan => {
-                      const current = getCurrentTitrationDose(plan);
-                      return (
-                        <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-700/40">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="text-white font-medium">{plan.medication}</div>
-                              <div className="text-slate-400 text-xs">Started {new Date(plan.startDate).toLocaleDateString()}</div>
-                            </div>
-                            <button onClick={() => deleteTitrationPlan(plan.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {plan.steps.map((step, idx) => (
-                              <div key={idx} className={`px-2 py-1 rounded text-xs ${current && idx + 1 === current.step ? 'bg-violet-500 text-white' : 'bg-slate-600 text-slate-300'}`}>
-                                {step.dose}{step.unit} × {step.weeks}wk
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Notifications Section */}
-            {activeToolSection === 'notifications' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-                    <Bell className="h-5 w-5 text-amber-400" />
-                    Push Notifications
-                  </h3>
-
-                  {/* Permission Status */}
-                  <div className={`rounded-lg p-4 mb-4 ${
-                    notificationPermission === 'granted' ? 'bg-emerald-500/20 border border-emerald-500/30' :
-                    notificationPermission === 'denied' ? 'bg-red-500/20 border border-red-500/30' :
-                    'bg-slate-700/50 border border-slate-600'
-                  }`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <div className="text-white font-medium">Notification Permission</div>
-                        <div className="text-slate-400 text-sm">
-                          {notificationPermission === 'granted' && 'Notifications enabled! You\'ll receive injection reminders.'}
-                          {notificationPermission === 'denied' && (Capacitor.isNativePlatform() ? 'Notifications blocked. Enable in device Settings → Apps → PepTalk → Notifications.' : 'Notifications blocked. Enable in browser settings.')}
-                          {notificationPermission === 'default' && 'Allow notifications to get injection reminders.'}
-                        </div>
-                      </div>
-                      {notificationPermission !== 'granted' && notificationPermission !== 'denied' && (
-                        <button 
-                          onClick={requestNotificationPermission}
-                          className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap"
-                        >
-                          Enable
-                        </button>
-                      )}
-                    </div>
-                    {notificationPermission === 'denied' && (
-                      <div className="text-xs text-slate-400 mt-2">
-                        {Capacitor.isNativePlatform() ? 'To enable: Settings → Apps → PepTalk → Notifications → Allow' : 'To enable: Open browser settings → Permissions → Notifications → Allow for this site'}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Notification Settings */}
-                  {notificationPermission === 'granted' && (
-                    <div className="space-y-4">
-                      {/* Injection Reminders */}
-                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <div className="text-white font-medium">Injection Reminders</div>
-                            <div className="text-slate-400 text-sm">Get notified when injections are due</div>
-                          </div>
-                          <button
-                            onClick={() => updateNotificationSettings({ injectionReminders: !notificationSettings.injectionReminders })}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                              notificationSettings.injectionReminders ? 'bg-amber-500' : 'bg-slate-600'
-                            }`}
-                          >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                              notificationSettings.injectionReminders ? 'right-1' : 'left-1'
-                            }`} />
-                          </button>
-                        </div>
-                        {notificationSettings.injectionReminders && (
-                          <div>
-                            <label className="text-slate-400 text-sm block mb-1">Reminder Time</label>
-                            <input
-                              type="time"
-                              value={notificationSettings.reminderTime}
-                              onChange={(e) => updateNotificationSettings({ reminderTime: e.target.value })}
-                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
-                            />
-                            <p className="text-slate-500 text-xs mt-1">You'll be notified at this time on injection days</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Overdue Alerts */}
-                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-white font-medium">Overdue Alerts</div>
-                            <div className="text-slate-400 text-sm">Get alerted when injections are overdue</div>
-                          </div>
-                          <button
-                            onClick={() => updateNotificationSettings({ overdueAlerts: !notificationSettings.overdueAlerts })}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                              notificationSettings.overdueAlerts ? 'bg-red-500' : 'bg-slate-600'
-                            }`}
-                          >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                              notificationSettings.overdueAlerts ? 'right-1' : 'left-1'
-                            }`} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Weight Log Reminders */}
-                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <div className="text-white font-medium">Weight Log Reminders</div>
-                            <div className="text-slate-400 text-sm">Daily reminder to log your weight</div>
-                          </div>
-                          <button
-                            onClick={() => updateNotificationSettings({ weightReminders: !notificationSettings.weightReminders })}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                              notificationSettings.weightReminders ? 'bg-pink-500' : 'bg-slate-600'
-                            }`}
-                          >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                              notificationSettings.weightReminders ? 'right-1' : 'left-1'
-                            }`} />
-                          </button>
-                        </div>
-                        {notificationSettings.weightReminders && (
-                          <div>
-                            <label className="text-slate-400 text-sm block mb-1">Reminder Time</label>
-                            <input
-                              type="time"
-                              value={notificationSettings.weightReminderTime}
-                              onChange={(e) => updateNotificationSettings({ weightReminderTime: e.target.value })}
-                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
-                            />
-                            <p className="text-slate-500 text-xs mt-1">Daily reminder to log your morning weight</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Test Notification */}
-                      <button
-                        onClick={() => showNotification({
-                          title: '🎉 Test Notification',
-                          body: 'Notifications are working! You\'ll receive injection reminders like this.',
-                          tag: 'test'
-                        })}
-                        className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all"
-                      >
-                        Send Test Notification
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Data Management Section */}
-            {activeToolSection === 'data' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-amber-400" />
-                    Export & Import Data
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    {/* Export — choose format then export */}
-                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
-                        <FileDown className="h-5 w-5 text-amber-400" />
-                        Export data
-                      </h4>
-                      <p className="text-slate-400 text-sm mb-3">
-                        Choose the type of export you need, then tap Export.
-                      </p>
-                      <div className="mb-4">
-                        <label className="text-slate-400 text-xs block mb-2">Export as</label>
-                        <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 border border-white/[0.06]">
-                          <option value="json">JSON Backup — full backup, import later</option>
-                          <option value="doctor">Constitute calculator — Print / Save as PDF</option>
-                          <option value="csv">CSV — weight & injections (spreadsheets)</option>
-                        </select>
-                      </div>
-                      <button onClick={runExport} className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 shadow-amber-500/20">
-                        <FileDown className="h-5 w-5" />
-                        {exportFormat === 'json' ? 'Export backup (JSON)' : exportFormat === 'doctor' ? 'Open Constitute calculator (Print/PDF)' : 'Download CSV'}
-                      </button>
-                    </div>
-
-                    {/* Import Section */}
-                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                      <h4 className="text-white font-medium mb-2">Import Data</h4>
-                      <p className="text-slate-400 text-sm mb-3">
-                        Restore data from a backup file.
-                      </p>
-                      <div className="bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 mb-3">
-                        <p className="text-amber-400 text-sm flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4" />
-                          <span>Warning: This will replace all current data!</span>
-                        </p>
-                      </div>
-                      <label className="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 cursor-pointer shadow-gold-glow">
-                        <Plus className="h-5 w-5" />
-                        Import Data File
-                        <input type="file" accept=".json" onChange={importData} className="hidden" />
-                      </label>
-                    </div>
-{/* Danger Zone */}
-<div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-  <h4 className="text-white font-medium mb-2">Danger Zone</h4>
-  <p className="text-slate-300 text-sm mb-3">
-    Permanently deletes all saved PepTalk data on this device.
-  </p>
-  <button
-    onClick={() => { setShowWipeConfirm(true); setWipeConfirmChecked(false); }}
-    className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-lg"
-  >
-    Wipe All Data
-  </button>
-</div>
-                    {/* Data Summary */}
-                    <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                      <h4 className="text-white font-medium mb-3">Current Data Summary</h4>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Weight entries:</span>
-                          <span className="text-white font-medium">{weightEntries.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Injections:</span>
-                          <span className="text-white font-medium">{injectionEntries.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Measurements:</span>
-                          <span className="text-white font-medium">{measurementEntries.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Progress photos:</span>
-                          <span className="text-white font-medium">{progressPhotos.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Journal entries:</span>
-                          <span className="text-white font-medium">{journalEntries.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Schedules:</span>
-                          <span className="text-white font-medium">{schedules.length}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Reference */}
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <h3 className="text-white font-medium mb-3">Quick Reference</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between text-slate-400"><span>1 mL</span><span className="text-white">= 100 units</span></div>
-                <div className="flex justify-between text-slate-400"><span>1 mg</span><span className="text-white">= 1000 mcg</span></div>
-                <div className="flex justify-between text-slate-400"><span>0.5 mL</span><span className="text-white">= 50 units</span></div>
-                <div className="flex justify-between text-slate-400"><span>0.1 mL</span><span className="text-white">= 10 units</span></div>
-              </div>
-            </div>
-          </div>
-            )}
-            {activeMoreSection === 'journal' && (
-          <div className="space-y-4">
-            {showAddForm && (
-              <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-white font-medium">{editingJournal ? 'Edit Entry' : 'New Journal Entry'}</h3>
-                  <button onClick={resetJournalForm} className="text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-1">Date</label>
-                    <input type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">How are you feeling?</label>
-                    <div className="flex gap-2">
-                      {[
-                        { value: 'happy', icon: Smile, color: 'text-emerald-400', label: 'Great' },
-                        { value: 'neutral', icon: Meh, color: 'text-slate-400', label: 'Okay' },
-                        { value: 'sad', icon: Frown, color: 'text-amber-400', label: 'Rough' }
-                      ].map(mood => (
-                        <button key={mood.value} onClick={() => setJournalMood(mood.value)}
-                          className={`flex-1 py-3 rounded-lg transition-all ${journalMood === mood.value ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-650'}`}>
-                          <mood.icon className={`h-6 w-6 mx-auto ${mood.color}`} />
-                          <div className="text-xs text-slate-400 mt-1">{mood.label}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-1">Energy Level: {journalEnergy}/10</label>
-                    <input type="range" min="1" max="10" value={journalEnergy} onChange={(e) => setJournalEnergy(parseInt(e.target.value))}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-1">Hunger Level: {journalHunger}/10</label>
-                    <input type="range" min="1" max="10" value={journalHunger} onChange={(e) => setJournalHunger(parseInt(e.target.value))}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-1">Notes & Observations</label>
-                    <textarea value={journalContent} onChange={(e) => setJournalContent(e.target.value)}
-                      className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 min-h-32" placeholder="How did you feel today? Any side effects? Non-scale victories?" />
-                  </div>
-                  <button onClick={addOrUpdateJournal} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">
-                    {editingJournal ? 'Update Entry' : 'Save Entry'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium flex items-center gap-2"><BookOpen className="h-4 w-4 text-violet-400" />Journal Entries</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
-              </div>
-              {journalEntries.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <div className="relative mb-4">
-                    <div className="absolute inset-0 bg-violet-500/10 blur-2xl rounded-full"></div>
-                    <BookOpen className="h-16 w-16 mx-auto text-violet-400 relative" style={{ animation: 'float 3s ease-in-out infinite' }} />
-                  </div>
-                  <h3 className="text-white font-medium mb-2">Start Your Journal</h3>
-                  <p className="text-slate-400 text-sm mb-4">Track feelings, side effects, and victories</p>
-                  <button 
-                    onClick={() => setShowAddForm(true)} 
-                    className="btn-secondary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Write First Entry
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {[...journalEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
-                    <div key={entry.id} className="bg-slate-700/50 rounded-lg p-4 group">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-2">
-                          {entry.mood === 'happy' && <Smile className="h-5 w-5 text-emerald-400" />}
-                          {entry.mood === 'neutral' && <Meh className="h-5 w-5 text-slate-400" />}
-                          {entry.mood === 'sad' && <Frown className="h-5 w-5 text-amber-400" />}
-                          <span className="text-white font-medium">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingJournal(entry); setJournalDate(entry.date); setJournalContent(entry.content); setJournalMood(entry.mood); setJournalEnergy(entry.energy); setJournalHunger(entry.hunger); setShowAddForm(true); }}
-                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
-                          <button onClick={() => deleteJournal(entry.id)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 mb-2 text-sm">
-                        <div className="flex items-center gap-1 text-slate-400">
-                          <Zap className="h-4 w-4" />
-                          <span>Energy: {entry.energy}/10</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-slate-400">
-                          <Activity className="h-4 w-4" />
-                          <span>Hunger: {entry.hunger}/10</span>
-                        </div>
-                      </div>
-                      <p className="text-white whitespace-pre-wrap">{entry.content}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
             )}
             {activeMoreSection === 'calendar' && (
           <div className="space-y-4">
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+            <div className="ui-card p-4">
               <div className="flex justify-between items-center mb-4">
                 <button onClick={() => { const newMonth = new Date(calendarMonth); newMonth.setMonth(newMonth.getMonth() - 1); setCalendarMonth(newMonth); }}
                   className="p-2 text-white hover:bg-slate-700 rounded-lg">←</button>
@@ -5127,13 +5415,13 @@ const wipeAllData = () => {
               
               <div className="grid grid-cols-7 gap-1 mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center text-slate-400 text-xs font-medium py-2">{day}</div>
+                  <div key={day} className="text-center text-gray-400 text-xs font-medium py-2">{day}</div>
                 ))}
               </div>
               
               <div className="grid grid-cols-7 gap-1">
                 {getCalendarDays().map((day, idx) => (
-                  <div key={idx} className={`min-h-16 p-1 rounded-lg border ${day.isToday ? 'border-amber-500 bg-amber-500/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-slate-800/20'}`}>
+                  <div key={idx} className={`min-h-16 p-1 rounded-lg border ${day.isToday ? 'border-accent bg-accent/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-[var(--bg-card)]/20'}`}>
                     <div className={`text-xs ${day.isCurrentMonth ? 'text-white' : 'text-slate-600'}`}>{day.date.getDate()}</div>
                     {day.injections.length > 0 && (
                       <div className="mt-1 space-y-0.5">
@@ -5142,7 +5430,7 @@ const wipeAllData = () => {
                             {inj.dose}{inj.unit}
                           </div>
                         ))}
-                        {day.injections.length > 2 && <div className="text-[9px] text-slate-400 px-1">+{day.injections.length - 2}</div>}
+                        {day.injections.length > 2 && <div className="text-[9px] text-gray-400 px-1">+{day.injections.length - 2}</div>}
                       </div>
                     )}
                   </div>
@@ -5150,7 +5438,7 @@ const wipeAllData = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl p-4 border border-white/[0.06] bg-slate-800/60 backdrop-blur-sm">
+            <div className="ui-card p-4">
               <h3 className="text-white font-medium mb-3">Adherence Summary</h3>
               <div className="grid grid-cols-2 gap-3">
                 {schedules.map(schedule => {
@@ -5165,7 +5453,7 @@ const wipeAllData = () => {
                         <span className="text-white text-sm font-medium">{schedule.medication}</span>
                       </div>
                       <div className="text-2xl font-bold text-white">{adherence}%</div>
-                      <div className="text-xs text-slate-400">{actualInjections} of ~{expectedInjections} this month</div>
+                      <div className="text-xs text-gray-400">{actualInjections} of ~{expectedInjections} this month</div>
                     </div>
                   );
                 })}
@@ -5176,7 +5464,7 @@ const wipeAllData = () => {
           </div>
         )}
       </div>
-      <footer className="py-3 text-center text-slate-500 text-xs border-t border-white/[0.04]">
+      <footer className="py-3 text-center text-gray-500 text-xs border-t border-white/[0.04]">
         PepTalk v{APP_VERSION}
       </footer>
     </div>
