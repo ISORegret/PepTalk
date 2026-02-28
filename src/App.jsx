@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
-const APP_VERSION = '1.0.7';
+const APP_VERSION = '1.0.8';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
@@ -14,8 +14,8 @@ const MEDICATIONS = [
   { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
-  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168 },
-  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168 },
+  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true },
+  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168, preConstituted: true },
   { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 33, peakHours: 12, effectDuration: 72 },
   { name: 'BPC-157', category: 'Peptide', color: '#e8b84c', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 240, peakHours: 24, effectDuration: 168 },
@@ -1100,7 +1100,7 @@ const PepTalk = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationMessage, setCelebrationMessage] = useState('');
-  const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200 });
+  const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
   const [showCalculatorUnitRef, setShowCalculatorUnitRef] = useState(false);
@@ -1113,7 +1113,12 @@ const PepTalk = () => {
   const [vials, setVials] = useState([]);
   const [vialMedication, setVialMedication] = useState('Semaglutide');
   const [vialTotalMg, setVialTotalMg] = useState('');
+  const [vialUnit, setVialUnit] = useState('mg');
+  const [vialBacWaterMl, setVialBacWaterMl] = useState(''); // ml of bac water used for reconstitution
+  const [vialConcentrationForMl, setVialConcentrationForMl] = useState(''); // mg/ml when vial size is entered in ml
   const [vialExpiry, setVialExpiry] = useState('');
+  const [vialReconstituted, setVialReconstituted] = useState(false);
+  const [vialReconstitutedDate, setVialReconstitutedDate] = useState('');
 
   
   // Graph visibility state
@@ -1217,7 +1222,7 @@ const PepTalk = () => {
   const [mealDescription, setMealDescription] = useState('');
 
   // More tab sub-section (when using 5 tabs)
-  const [activeMoreSection, setActiveMoreSection] = useState('body');
+  const [activeMoreSection, setActiveMoreSection] = useState('profile');
 
   // Journal form states
   const [journalDate, setJournalDate] = useState(getTodayLocal());
@@ -1231,6 +1236,7 @@ const PepTalk = () => {
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const photoInputRef = useRef(null);
+  const moreSectionRefs = useRef({});
 
   useEffect(() => { loadData(); }, []);
 
@@ -1251,12 +1257,19 @@ const PepTalk = () => {
     }
   }, [isLoading]);
 
-  // Reschedule local (push) notifications when app loads and reminders are on
+  // Reschedule local (push) notifications when app loads and any reminder is on
   useEffect(() => {
-    if (!isLoading && notificationPermission === 'granted' && notificationSettings.injectionReminders) {
+    if (!isLoading && notificationPermission === 'granted' && (notificationSettings.injectionReminders || notificationSettings.weightReminders)) {
       scheduleLocalInjectionReminders();
     }
-  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime]);
+  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime]);
+
+  // When on More tab, scroll the active section tab into view so Profile isn’t hidden off-screen
+  useEffect(() => {
+    if (activeTab !== 'more' || !activeMoreSection) return;
+    const el = moreSectionRefs.current[activeMoreSection];
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeTab, activeMoreSection]);
   
   // Celebration trigger function
   const celebrate = (message) => {
@@ -1288,7 +1301,10 @@ const PepTalk = () => {
         setWeightEntries(sortWeightByDateAsc(parsed));
       }
       if (injectionData) setInjectionEntries(JSON.parse(injectionData));
-      if (profileData) setUserProfile(JSON.parse(profileData));
+      if (profileData) {
+        const parsed = JSON.parse(profileData);
+        setUserProfile({ height: 70, goalWeight: 200, ...parsed, hydrationGoalOz: parsed.hydrationGoalOz ?? 64 });
+      }
       if (measurementData) setMeasurementEntries(JSON.parse(measurementData));
       if (photoData) setProgressPhotos(JSON.parse(photoData));
       if (scheduleData) setSchedules(JSON.parse(scheduleData));
@@ -1451,27 +1467,41 @@ const PepTalk = () => {
         await LocalNotifications.cancel({ notifications: pending.notifications.map(n => ({ id: n.id })) });
       }
       const settings = settingsOverride ?? notificationSettings;
-      if (!settings.injectionReminders) return;
       const [hr, min] = (settings.reminderTime || '09:00').split(':').map(Number);
-      const upcoming = getNextInjections();
       const notifications = [];
       let id = 1;
-      upcoming.forEach(injection => {
-        if (injection.daysUntil < 0 || injection.daysUntil > 14) return;
+      if (settings.injectionReminders) {
+        const upcoming = getNextInjections();
+        upcoming.forEach(injection => {
+          if (injection.daysUntil < 0 || injection.daysUntil > 14) return;
+          const at = new Date();
+          at.setDate(at.getDate() + injection.daysUntil);
+          at.setHours(hr, min, 0, 0);
+          if (at.getTime() <= Date.now()) return;
+          notifications.push({
+            id,
+            title: injection.isOverdue ? '⚠️ Injection Overdue' : '💉 Injection Reminder',
+            body: injection.isOverdue
+              ? `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`
+              : `Time to inject ${injection.medication}!`,
+            schedule: { at, allowWhileIdle: true }
+          });
+          id++;
+        });
+      }
+      // Weigh-in reminder: daily at weightReminderTime (id 50)
+      if (settings.weightReminders && (settings.weightReminderTime || '07:00')) {
+        const [wh, wm] = (settings.weightReminderTime || '07:00').split(':').map(Number);
         const at = new Date();
-        at.setDate(at.getDate() + injection.daysUntil);
-        at.setHours(hr, min, 0, 0);
-        if (at.getTime() <= Date.now()) return;
+        at.setHours(wh, wm, 0, 0);
+        if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 1);
         notifications.push({
-          id,
-          title: injection.isOverdue ? '⚠️ Injection Overdue' : '💉 Injection Reminder',
-          body: injection.isOverdue
-            ? `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`
-            : `Time to inject ${injection.medication}!`,
+          id: 50,
+          title: '⚖️ Weigh-in Reminder',
+          body: 'Time to log your weight',
           schedule: { at, allowWhileIdle: true }
         });
-        id++;
-      });
+      }
       if (notifications.length) await LocalNotifications.schedule({ notifications });
     } catch (e) {
       console.warn('Local notifications:', e);
@@ -1587,17 +1617,24 @@ const PepTalk = () => {
 
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
-    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects };
-    let updated = editingInjection 
+    const doseMg = toDoseMg({ dose: injectionDose, unit: injectionUnit });
+    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects, vialId: selectedVialId || undefined };
+    let updated = editingInjection
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
       : [...injectionEntries, { id: Date.now(), ...entryData }];
     updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
     setInjectionEntries(updated);
     saveData('health-injection-entries', updated);
-    // Deduct from vial if one was selected (new log only)
-    if (!editingInjection && selectedVialId) {
-      const doseMg = toDoseMg({ dose: injectionDose, unit: injectionUnit });
-      const updatedVials = vials.map(v => v.id === selectedVialId ? { ...v, remainingMg: Math.max(0, (v.remainingMg ?? v.totalMg) - doseMg) } : v);
+    // Vial: add back old dose when editing, then deduct new dose if a vial is selected
+    let updatedVials = [...vials];
+    if (editingInjection?.vialId) {
+      const oldDoseMg = toDoseMg({ dose: editingInjection.dose, unit: editingInjection.unit || 'mg' });
+      updatedVials = updatedVials.map(v => v.id === editingInjection.vialId ? { ...v, remainingMg: (v.remainingMg ?? v.totalMg) + oldDoseMg } : v);
+    }
+    if (selectedVialId) {
+      updatedVials = updatedVials.map(v => v.id === selectedVialId ? { ...v, remainingMg: Math.max(0, (v.remainingMg ?? v.totalMg) - doseMg) } : v);
+    }
+    if (editingInjection?.vialId || selectedVialId) {
       setVials(updatedVials);
       saveData('health-vials', updatedVials);
     }
@@ -1986,7 +2023,7 @@ const wipeAllData = () => {
   setGlucoseEntries([]);
   setA1cEntries([]);
   setVials([]);
-  setUserProfile({ height: 70, goalWeight: 200 });
+  setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
 
   setShowWipeConfirm(false);
   setWipeConfirmChecked(false);
@@ -2303,6 +2340,25 @@ const wipeAllData = () => {
     return sorted.slice(0, 5).map(([name]) => name);
   };
 
+  // Side effects by day in cycle (we only log on injection day = day 0)
+  const getSideEffectsByDayInCycle = (medicationName) => {
+    const entries = injectionEntries.filter(e => e.type === medicationName && (e.sideEffects?.length ?? 0) > 0);
+    const day0 = {};
+    entries.forEach(entry => {
+      (entry.sideEffects || []).forEach(se => {
+        day0[se] = (day0[se] || 0) + 1;
+      });
+    });
+    return { day0 };
+  };
+
+  // Typical dose in mg for a medication (from most recent injection)
+  const getTypicalDoseMg = (medicationName) => {
+    const last = injectionEntries.filter(e => e.type === medicationName).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
+    if (!last) return null;
+    return toDoseMg({ dose: last.dose, unit: last.unit || 'mg' });
+  };
+
   const getCurrentTitrationDose = (plan) => {
     if (!plan.steps || plan.steps.length === 0) return null;
     const startDate = new Date(plan.startDate);
@@ -2542,6 +2598,19 @@ const wipeAllData = () => {
     if (inj.unit === 'units') return dose / 100;
     if (inj.unit === 'IU') return dose / 1000;
     return dose; // mg
+  };
+
+  // Convert vial amount + unit to mg for storage/deduction
+  const vialAmountToMg = (amount, unit, concentrationMgPerMl) => {
+    const a = parseFloat(amount);
+    if (isNaN(a) || a <= 0) return 0;
+    if (unit === 'mg') return a;
+    if (unit === 'mcg') return a / 1000;
+    if (unit === 'ml') {
+      const c = parseFloat(concentrationMgPerMl);
+      return a * (isNaN(c) || c <= 0 ? 1 : c); // assume 1 mg/ml if not set
+    }
+    return a; // units, IU: treat as mg equivalent
   };
 
   // Effective hours for decay: IM absorbs faster so dose "enters" sooner (earlier peak)
@@ -3086,6 +3155,134 @@ const wipeAllData = () => {
               </button>
             </div>
 
+            {/* Low-vial alert: remaining &lt; typical dose */}
+            {vials.length > 0 && (() => {
+              const low = vials.filter(v => {
+                const rem = v.remainingMg ?? v.totalMg;
+                if (rem <= 0) return false;
+                const typical = getTypicalDoseMg(v.medication);
+                return typical != null && rem < typical;
+              });
+              if (low.length === 0) return null;
+              return (
+                <div className="ui-card p-4 border-amber-500/30 bg-amber-500/10">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-amber-400 font-medium text-sm">Vial low — less than one dose left</h3>
+                      <ul className="text-gray-300 text-xs mt-1 space-y-0.5 list-disc list-inside">
+                        {low.map(v => {
+                          const rem = (v.remainingMg ?? v.totalMg).toFixed(1);
+                          const typical = getTypicalDoseMg(v.medication);
+                          return <li key={v.id}>{v.medication}: {rem} mg left (your usual dose is ~{typical?.toFixed(1)} mg)</li>;
+                        })}
+                      </ul>
+                      <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-amber-400 hover:text-amber-300 text-xs mt-2 font-medium">Manage vials in More → Tools</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Your vials — remaining volume on Summary */}
+            {vials.length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
+                <div className="space-y-2">
+                  {vials.map(v => {
+                    const remMg = v.remainingMg ?? v.totalMg;
+                    const totalMg = v.totalMg;
+                    const conc = v.concentration;
+                    const remMl = conc > 0 ? remMg / conc : null;
+                    const totalMl = conc > 0 ? totalMg / conc : null;
+                    const isLow = remMg <= 0;
+                    return (
+                      <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
+                        <span className="text-white font-medium">{v.medication}</span>
+                        <span className="text-gray-400">
+                          {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
+                          {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">· {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
+              </div>
+            )}
+
+            {/* Weight Change — stats and estimated goal date (above Goal card) */}
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">Weight Change</h2>
+              <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
+                <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+              </div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
+                <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
+              </div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
+                <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
+                <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
+              </div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
+                <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
+              </div>
+              <div className="ui-card p-4">
+                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
+                <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+              </div>
+            </div>
+            {stats.estimatedGoalDate && (
+              <div className="ui-card p-4 border-accent/25 bg-accent/10">
+                <div className="flex items-center gap-3">
+                  <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
+                  <div>
+                    <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
+                    <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
+                    <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Goal weight + progress — below Weight Change */}
+            {userProfile?.goalWeight && (() => {
+              const goal = parseFloat(userProfile.goalWeight);
+              const current = parseFloat(stats.current) || 0;
+              const hasWeight = current > 0;
+              const filtered = getFilteredData(weightEntries);
+              const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
+              const totalToLose = startWeight - goal;
+              const progress = totalToLose > 0 && hasWeight ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
+              return (
+                <div className="ui-card p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-400 text-sm">Goal</span>
+                    <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>{hasWeight ? `${stats.current} lbs now` : 'Add weight to see progress'}</span>
+                    <span>{hasWeight ? (stats.toGoal || '—') + ' to go' : '—'}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Week in review */}
             {(() => {
               const d = getWeeklyDigest();
@@ -3104,6 +3301,27 @@ const wipeAllData = () => {
               );
             })()}
 
+            {/* Hydration goal progress — always show; default goal 64 oz if not set */}
+            {(() => {
+              const goal = Number(userProfile?.hydrationGoalOz) || 64;
+              const current = Math.round(hydrationToday);
+              const pct = goal > 0 ? Math.min(100, (current / goal) * 100) : 0;
+              return (
+                <div className="ui-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm flex items-center gap-1.5"><Droplet className="h-4 w-4 text-sky-400" />Hydration today</span>
+                    <span className="text-white font-medium">{current} / {goal} oz</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-1.5">
+                    Edit goal in More → Profile
+                  </button>
+                </div>
+              );
+            })()}
+
             {/* Logging streak */}
             {(() => {
               const streak = getLoggingStreak();
@@ -3116,81 +3334,6 @@ const wipeAllData = () => {
                 </div>
               );
             })()}
-
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-white">Weight Change</h2>
-              <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
-                <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
-                <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
-                <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-              </div>
-            </div>
-
-            {/* Goal weight + progress */}
-            {userProfile?.goalWeight && parseFloat(stats.current) > 0 && (() => {
-              const goal = parseFloat(userProfile.goalWeight);
-              const current = parseFloat(stats.current);
-              const filtered = getFilteredData(weightEntries);
-              const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
-              const totalToLose = startWeight - goal;
-              const progress = totalToLose > 0 ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
-              return (
-                <div className="ui-card p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-400 text-sm">Goal</span>
-                    <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>{stats.current} lbs now</span>
-                    <span>{stats.toGoal} to go</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Estimated Goal Date */}
-            {stats.estimatedGoalDate && (
-              <div className="ui-card p-4 border-accent/25 bg-accent/10">
-                <div className="flex items-center gap-3">
-                  <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
-                  <div>
-                    <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
-                    <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
-                    <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* On track? — compare to typical GLP-1 loss */}
             {getOnTrackInfo() && (
@@ -3402,19 +3545,7 @@ const wipeAllData = () => {
               </div>
             )}
 
-            {/* Goal Weight Setting */}
-            <div className="ui-card p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400 text-sm">Goal Weight</span>
-                <div className="flex items-center gap-2">
-                  <input type="number" value={userProfile.goalWeight || 200} onChange={(e) => { const p = { ...userProfile, goalWeight: parseFloat(e.target.value) }; setUserProfile(p); saveData('health-user-profile', p); }}
-                    className="w-20 bg-slate-700/80 border border-white/[0.06] text-white rounded-xl px-2 py-1 text-center text-sm" />
-                  <span className="text-gray-400 text-sm">lbs</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Weight chart — clean, modern */}
+            {/* Weight chart — clean, modern (goal weight is at top of Summary + editable in More → Profile) */}
             {weightEntries.length > 0 && (() => {
               const summaryData = getSummaryChartData(chartRangeWeeks);
               const pointCount = summaryData.length;
@@ -3626,6 +3757,35 @@ const wipeAllData = () => {
                 </div>
               </div>
             )}
+
+            {/* Side effects by day in cycle */}
+            {(() => {
+              const medNamesWithEffects = [...new Set(injectionEntries.filter(e => (e.sideEffects?.length ?? 0) > 0).map(e => e.type))];
+              if (medNamesWithEffects.length === 0) return null;
+              return (
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-semibold mb-2 text-sm">Side effects by day in cycle</h3>
+                  <p className="text-gray-400 text-xs mb-3">Reported on injection day (day 0). Many people feel effects peak 1–2 days after; use Journal to track how you feel the next day.</p>
+                  {medNamesWithEffects.map(medName => {
+                    const byDay = getSideEffectsByDayInCycle(medName);
+                    const day0 = byDay.day0 || {};
+                    const entries = Object.entries(day0).sort((a, b) => b[1] - a[1]);
+                    if (entries.length === 0) return null;
+                    return (
+                      <div key={medName} className="mb-3 last:mb-0">
+                        <div className="text-gold-400 text-xs font-medium mb-1">{medName}</div>
+                        <div className="text-gray-300 text-xs">
+                          <span className="text-gray-500">Day 0 (injection day): </span>
+                          {entries.map(([name, count]) => (
+                            <span key={name} className="inline-block bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded mr-1 mb-1">{name} ({count})</span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* How levels work — one line + optional expand */}
             <div className="ui-card overflow-hidden">
@@ -3862,12 +4022,11 @@ const wipeAllData = () => {
           <div key="weight" className="space-y-4 tab-enter">
             <div className="ui-card p-4">
               <div className="flex items-center justify-between">
-                <span className="text-gray-400 text-sm">Your Height (for BMI)</span>
-                <div className="flex items-center gap-2">
-                  <input type="number" value={userProfile.height} onChange={(e) => { const p = { ...userProfile, height: parseFloat(e.target.value) }; setUserProfile(p); saveData('health-user-profile', p); }}
-                    className="w-16 bg-slate-700 text-white rounded px-2 py-1 text-center text-sm" />
-                  <span className="text-gray-400 text-sm">inches</span>
-                </div>
+                <span className="text-gray-400 text-sm">Height (for BMI)</span>
+                <span className="text-white text-sm">{userProfile?.height ?? 70} in</span>
+                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gold-400 hover:text-accent text-xs">
+                  Edit in Profile
+                </button>
               </div>
             </div>
 
@@ -4141,6 +4300,33 @@ const wipeAllData = () => {
               })}
             </div>
 
+            {/* Your vials — remaining volume on Injections page */}
+            {vials.length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
+                <div className="space-y-2">
+                  {vials.map(v => {
+                    const remMg = v.remainingMg ?? v.totalMg;
+                    const totalMg = v.totalMg;
+                    const conc = v.concentration;
+                    const remMl = conc > 0 ? remMg / conc : null;
+                    const totalMl = conc > 0 ? totalMg / conc : null;
+                    const isLow = remMg <= 0;
+                    return (
+                      <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
+                        <span className="text-white font-medium">{v.medication}</span>
+                        <span className="text-gray-400">
+                          {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
+                          {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">· {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
+              </div>
+            )}
+
             {showAddForm && (
               <div className="ui-card p-4">
                 <div className="flex justify-between items-center mb-4">
@@ -4179,19 +4365,32 @@ const wipeAllData = () => {
                     <label className="text-gray-400 text-sm block mb-1">Date</label>
                     <input type="date" value={injectionDate} onChange={(e) => setInjectionDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
                   </div>
-                  {!editingInjection && (() => {
-                    const availableVials = vials.filter(v => v.medication === injectionType && (v.remainingMg ?? v.totalMg) > 0);
-                    if (availableVials.length === 0) return null;
+                  {(() => {
+                    const matchingVials = vials.filter(v => v.medication === injectionType);
+                    const availableVials = matchingVials.filter(v => (v.remainingMg ?? v.totalMg) > 0);
+                    const linkedVialWhenEditing = editingInjection?.vialId ? matchingVials.find(v => v.id === editingInjection.vialId) : null;
+                    const options = [...availableVials];
+                    if (linkedVialWhenEditing && !options.find(o => o.id === linkedVialWhenEditing.id))
+                      options.push(linkedVialWhenEditing);
+                    if (options.length === 0 && matchingVials.length === 0) {
+                      return (
+                        <p className="text-gray-500 text-xs">Add vials in More → Tools → Vials for this medication to track inventory.</p>
+                      );
+                    }
+                    if (options.length === 0) return null;
                     return (
                       <div>
                         <label className="text-gray-400 text-sm block mb-1">Use from vial (optional)</label>
                         <select value={selectedVialId != null ? String(selectedVialId) : ''} onChange={(e) => setSelectedVialId(e.target.value ? Number(e.target.value) : null)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
                           <option value="">None</option>
-                          {availableVials.map(v => (
-                            <option key={v.id} value={v.id}>
-                              {(v.remainingMg ?? v.totalMg).toFixed(1)} mg left{v.expiry ? ` · Exp ${v.expiry}` : ''}
-                            </option>
-                          ))}
+                          {options.map(v => {
+                            const rem = v.remainingMg ?? v.totalMg;
+                            return (
+                              <option key={v.id} value={v.id}>
+                                {rem.toFixed(1)} mg left{v.expiry ? ` · Exp ${v.expiry}` : ''}{rem <= 0 ? ' (empty)' : ''}
+                              </option>
+                            );
+                          })}
                         </select>
                         {selectedVialId && injectionDose && (() => {
                           const v = vials.find(x => x.id === selectedVialId);
@@ -4267,7 +4466,7 @@ const wipeAllData = () => {
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setShowAddForm(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
+                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setShowAddForm(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
                           <button onClick={() => deleteInjection(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </div>
@@ -4391,20 +4590,48 @@ const wipeAllData = () => {
         {/* MORE TAB */}
         {activeTab === 'more' && (
           <div key="more" className="space-y-4 tab-enter">
-            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
+            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto overflow-y-hidden bg-[var(--bg-elevated)] backdrop-blur-sm scroll-smooth" style={{ scrollbarWidth: 'thin' }}>
               {[
+                { id: 'profile', icon: User, label: 'Profile' },
                 { id: 'body', icon: Ruler, label: 'Body' },
                 { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' },
                 { id: 'glucose', icon: Droplet, label: 'Glucose' }
               ].map(section => (
-                <button key={section.id} onClick={() => setActiveMoreSection(section.id)}
-                  className={`menu-3d-item flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
-                  <section.icon className="h-4 w-4" />{section.label}
+                <button
+                  key={section.id}
+                  ref={el => { moreSectionRefs.current[section.id] = el; }}
+                  onClick={() => setActiveMoreSection(section.id)}
+                  className={`menu-3d-item flex-1 min-w-[4.5rem] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                >
+                  <section.icon className="h-4 w-4 flex-shrink-0" />{section.label}
                 </button>
               ))}
             </div>
+            {activeMoreSection === 'profile' && (
+              <div className="space-y-4">
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><User className="h-5 w-5 text-gold-400" />Profile & goals</h3>
+                  <p className="text-gray-400 text-xs mb-4">Set your goal weight, height (for BMI), and daily hydration goal. These drive progress and reminders.</p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Goal weight (lbs)</label>
+                      <input type="number" min="0" step="1" value={userProfile?.goalWeight ?? 200} onChange={(e) => { const p = { ...userProfile, goalWeight: parseFloat(e.target.value) || 200 }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Height (inches)</label>
+                      <input type="number" min="0" step="0.5" value={userProfile?.height ?? 70} onChange={(e) => { const p = { ...userProfile, height: parseFloat(e.target.value) || 70 }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Daily hydration goal (oz)</label>
+                      <input type="number" min="0" step="8" value={userProfile?.hydrationGoalOz ?? 64} onChange={(e) => { const v = e.target.value === '' ? 64 : parseInt(e.target.value, 10); const p = { ...userProfile, hydrationGoalOz: isNaN(v) ? 64 : v }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="64" />
+                      <p className="text-gray-500 text-xs mt-1">0 = hide hydration progress bar</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {activeMoreSection === 'body' && (
           <div className="space-y-4">
             {/* Measurement Stats */}
@@ -4537,6 +4764,22 @@ const wipeAllData = () => {
             <div className="ui-card p-4">
               <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-gold-400" /><UtensilsCrossed className="h-4 w-4 text-gold-400" />Daily — Hydration, Protein & Nutrition</h3>
               <p className="text-gray-500 text-xs mb-3">Hydration and protein today are calculated from your meal entries below. Add optional extra water if you don’t log drinks as meals.</p>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <label className="text-gray-400 text-xs">Daily hydration goal (oz)</label>
+                <input type="number" min="0" step="8" value={userProfile?.hydrationGoalOz ?? ''} onChange={(e) => { const v = e.target.value === '' ? 0 : parseInt(e.target.value, 10); const p = { ...userProfile, hydrationGoalOz: isNaN(v) ? 0 : v }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-16 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="64" />
+                <span className="text-gray-500 text-xs">0 = hide</span>
+              </div>
+              {(userProfile?.hydrationGoalOz ?? 0) > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-gray-400 text-sm">Today</span>
+                    <span className="text-white font-medium">{Math.round(hydrationToday)} / {userProfile.hydrationGoalOz} oz</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${Math.min(100, (hydrationToday / (userProfile.hydrationGoalOz || 1)) * 100)}%` }} />
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <label className="text-gray-400 text-xs">Extra water (oz)</label>
                 <input type="number" min="0" step="1" value={extraHydrationOz} onChange={(e) => setExtraHydrationOz(e.target.value)} className="w-20 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
@@ -5150,7 +5393,7 @@ const wipeAllData = () => {
               <div className="space-y-4">
                 <div className="ui-card p-4">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Syringe className="h-5 w-5 text-gold-400" />Vial inventory</h3>
-                  <p className="text-gray-400 text-sm mb-4">Track vials by total mg. When you log an injection you can deduct from a vial; remaining amount updates automatically.</p>
+                  <p className="text-gray-400 text-sm mb-4">Reconstitution calculator: enter vial size and bac water (for peptides/hormones that need reconstitution). Pre‑constituted meds (e.g. testosterone in oil): enter total amount only. When you log an injection and choose a vial, the dose is subtracted automatically.</p>
                   <div className="space-y-3">
                     <div>
                       <label className="text-gray-400 text-sm block mb-1">Medication</label>
@@ -5158,24 +5401,81 @@ const wipeAllData = () => {
                         {MEDICATIONS.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Total amount (mg)</label>
-                      <input type="number" step="0.01" min="0" value={vialTotalMg} onChange={(e) => setVialTotalMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 5" />
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-gray-400 text-sm block mb-1">{MEDICATIONS.find(m => m.name === vialMedication)?.preConstituted ? 'Vial size (total in vial)' : 'Vial size (peptide in vial)'}</label>
+                        <input type="number" step="0.01" min="0" value={vialTotalMg} onChange={(e) => setVialTotalMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder={vialUnit === 'ml' ? 'e.g. 10' : MEDICATIONS.find(m => m.name === vialMedication)?.preConstituted ? 'e.g. 200' : 'e.g. 5'} />
+                      </div>
+                      <div className="w-20 flex-shrink-0">
+                        <label className="text-gray-400 text-sm block mb-1">Unit</label>
+                        <select value={vialUnit} onChange={(e) => setVialUnit(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-2 py-2 text-sm">
+                          <option value="mg">mg</option>
+                          <option value="mcg">mcg</option>
+                          <option value="ml">ml</option>
+                          <option value="units">units</option>
+                          <option value="IU">IU</option>
+                        </select>
+                      </div>
                     </div>
+                    {vialUnit === 'ml' && (
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml)</label>
+                        <input type="number" step="0.1" min="0" value={vialConcentrationForMl} onChange={(e) => setVialConcentrationForMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 200" />
+                        <p className="text-gray-500 text-xs mt-1">Total mg = volume (ml) × concentration. Example: 10 ml × 200 mg/ml = 2000 mg.</p>
+                      </div>
+                    )}
+                    {MEDICATIONS.find(m => m.name === vialMedication)?.preConstituted ? (
+                      <p className="text-gray-500 text-xs">Pre-constituted (e.g. in oil). No bac water needed — just total amount in vial.</p>
+                    ) : (
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Bac water vol (ml)</label>
+                        <input type="number" step="0.1" min="0" value={vialBacWaterMl} onChange={(e) => setVialBacWaterMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 2" />
+                        <p className="text-gray-500 text-xs mt-1">Dose = vial size ÷ bac water. Example: 5 mg + 2 ml → 2.5 mg/ml.</p>
+                      </div>
+                    )}
                     <div>
-                      <label className="text-gray-400 text-sm block mb-1">Expiry date (optional)</label>
+                      <label className="text-gray-400 text-sm block mb-1">Expiry / use-by date (optional)</label>
                       <input type="date" value={vialExpiry} onChange={(e) => setVialExpiry(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                      <p className="text-gray-500 text-xs mt-1">Use printed expiry or use-by after reconstitution, whichever is earlier.</p>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="vial-recon" checked={vialReconstituted} onChange={(e) => setVialReconstituted(e.target.checked)} className="rounded bg-slate-700" />
+                      <label htmlFor="vial-recon" className="text-gray-400 text-sm">Reconstituted</label>
+                    </div>
+                    {vialReconstituted && (
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Reconstituted on</label>
+                        <input type="date" value={vialReconstitutedDate} onChange={(e) => setVialReconstitutedDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                        <p className="text-gray-500 text-xs mt-1">Many peptides are stable 28–56 days after reconstitution.</p>
+                      </div>
+                    )}
                     <button
                       onClick={() => {
-                        const total = parseFloat(vialTotalMg);
-                        if (!vialTotalMg || isNaN(total) || total <= 0) return;
-                        const newVial = { id: Date.now(), medication: vialMedication, totalMg: total, remainingMg: total, expiry: vialExpiry || null };
+                        const concentrationForMl = vialUnit === 'ml' ? (vialConcentrationForMl || '1') : null;
+                        const totalMg = vialAmountToMg(vialTotalMg, vialUnit, concentrationForMl);
+                        if (totalMg <= 0) return;
+                        const bacMl = parseFloat(vialBacWaterMl);
+                        const concentration = (bacMl > 0 && !isNaN(bacMl)) ? totalMg / bacMl : (vialUnit === 'ml' && vialConcentrationForMl) ? parseFloat(vialConcentrationForMl) : undefined;
+                        const newVial = {
+                          id: Date.now(),
+                          medication: vialMedication,
+                          totalMg,
+                          remainingMg: totalMg,
+                          unit: 'mg',
+                          concentration: concentration && concentration > 0 ? concentration : undefined,
+                          bacWaterMl: bacMl > 0 && !isNaN(bacMl) ? bacMl : undefined,
+                          expiry: vialExpiry || null,
+                          reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null
+                        };
                         const updated = [...vials, newVial];
                         setVials(updated);
                         saveData('health-vials', updated);
                         setVialTotalMg('');
+                        setVialBacWaterMl('');
+                        setVialConcentrationForMl('');
                         setVialExpiry('');
+                        setVialReconstituted(false);
+                        setVialReconstitutedDate('');
                       }}
                       className="w-full ui-btn-primary py-2.5"
                     >
@@ -5188,14 +5488,25 @@ const wipeAllData = () => {
                     <h4 className="text-white font-medium mb-3">Your vials</h4>
                     <div className="space-y-2">
                       {vials.map(v => {
-                        const rem = v.remainingMg ?? v.totalMg;
-                        const isLow = rem <= 0;
+                        const remMg = v.remainingMg ?? v.totalMg;
+                        const totalMg = v.totalMg;
+                        const conc = v.concentration;
+                        const isLow = remMg <= 0;
+                        const useBy = v.reconstitutedDate ? (() => {
+                          const d = new Date(v.reconstitutedDate);
+                          d.setDate(d.getDate() + 28);
+                          return d.toISOString().slice(0, 10);
+                        })() : null;
+                        const remMl = conc > 0 ? remMg / conc : null;
+                        const totalMl = conc > 0 ? totalMg / conc : null;
                         return (
                           <div key={v.id} className={`flex items-center justify-between rounded-lg p-3 ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/50'}`}>
                             <div>
                               <span className="text-white font-medium">{v.medication}</span>
-                              <span className="text-gray-400 text-sm ml-2">{rem.toFixed(1)} / {v.totalMg} mg</span>
-                              {v.expiry && <span className="text-gray-500 text-xs ml-2">Exp {v.expiry}</span>}
+                              <span className="text-gray-400 text-sm ml-2">{remMg.toFixed(1)} / {totalMg.toFixed(1)} mg</span>
+                              {conc > 0 && <span className="text-gray-500 text-xs ml-2">· {conc.toFixed(1)} mg/ml{remMl != null && totalMl != null ? ` · ${remMl.toFixed(1)} / ${totalMl.toFixed(1)} ml` : ''}</span>}
+                              {v.expiry && <span className="text-gray-500 text-xs ml-2">· Exp {v.expiry}</span>}
+                              {v.reconstitutedDate && <span className="text-gray-500 text-xs ml-2 block">Recon {v.reconstitutedDate}{useBy ? ` · use by ${useBy}` : ''}</span>}
                             </div>
                             <button onClick={() => { const updated = vials.filter(x => x.id !== v.id); setVials(updated); saveData('health-vials', updated); }} className="p-2 text-gray-400 hover:text-red-400 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                           </div>
