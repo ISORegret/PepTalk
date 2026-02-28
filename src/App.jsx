@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES } from './medicationInsights';
 
-const APP_VERSION = '1.0.9';
+const APP_VERSION = '1.2.0';
 
 // Comprehensive peptide/medication list with pharmacokinetic data
 const MEDICATIONS = [
@@ -1619,7 +1619,7 @@ const PepTalk = () => {
 
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
-    const doseMg = toDoseMg({ dose: injectionDose, unit: injectionUnit });
+    const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId);
     const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects, vialId: selectedVialId || undefined };
     let updated = editingInjection
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
@@ -1630,7 +1630,7 @@ const PepTalk = () => {
     // Vial: add back old dose when editing, then deduct new dose if a vial is selected
     let updatedVials = [...vials];
     if (editingInjection?.vialId) {
-      const oldDoseMg = toDoseMg({ dose: editingInjection.dose, unit: editingInjection.unit || 'mg' });
+      const oldDoseMg = getDoseMgForVial(editingInjection.dose, editingInjection.unit || 'mg', editingInjection.vialId);
       updatedVials = updatedVials.map(v => v.id === editingInjection.vialId ? { ...v, remainingMg: (v.remainingMg ?? v.totalMg) + oldDoseMg } : v);
     }
     if (selectedVialId) {
@@ -2382,10 +2382,10 @@ const wipeAllData = () => {
   const getSummaryChartData = (maxWeeks = 0) => {
     const filteredWeights = getFilteredData(weightEntries);
     const filteredInjections = getFilteredData(injectionEntries);
-    const allDates = new Set();
-    filteredWeights.forEach(e => allDates.add(e.date));
-    filteredInjections.forEach(e => allDates.add(e.date));
-    let sortedDates = Array.from(allDates).sort((a, b) => new Date(a) - new Date(b));
+    // Use only dates that have a weight entry so the line is accurate (no null interpolation)
+    const weightDates = new Set();
+    filteredWeights.forEach(e => weightDates.add(e.date));
+    let sortedDates = Array.from(weightDates).sort((a, b) => new Date(a) - new Date(b));
     if (maxWeeks > 0 && sortedDates.length > 0) {
       const cutoff = new Date(sortedDates[sortedDates.length - 1]);
       cutoff.setDate(cutoff.getDate() - maxWeeks * 7);
@@ -2409,9 +2409,9 @@ const wipeAllData = () => {
       const injectionsForTooltip = dayInjections.map(inj => ({ type: inj.type, dose: inj.dose, unit: inj.unit, route: inj.route, site: inj.site }));
       return { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight != null ? parseFloat(weightEntry.weight) : null, units: unitData, hasInjection: dayInjections.length > 0, injections: injectionsForTooltip, ...doseData };
     });
-    // 7-day moving average trend line
+    // 7-day moving average trend line (use parseLocalDate so timezone matches weight dates)
     points.forEach(p => {
-      const pointDate = new Date(p.fullDate);
+      const pointDate = parseLocalDate(p.fullDate);
       const windowStart = new Date(pointDate);
       windowStart.setDate(windowStart.getDate() - 6);
       const inWindow = filteredWeights.filter(e => {
@@ -2596,10 +2596,19 @@ const wipeAllData = () => {
     let dose = parseFloat(inj.dose);
     if (isNaN(dose)) return 0;
     if (inj.unit === 'mcg') return dose / 1000;
-    if (inj.unit === 'ml') return dose;
+    if (inj.unit === 'ml') return dose; // generic: no vial context
     if (inj.unit === 'units') return dose / 100;
     if (inj.unit === 'IU') return dose / 1000;
     return dose; // mg
+  };
+
+  // For vial deduction: ml → mg using vial concentration (0.5 ml × 250 mg/ml = 125 mg)
+  const getDoseMgForVial = (dose, unit, vialId) => {
+    if (unit === 'ml' && vialId) {
+      const v = vials.find(x => x.id === vialId);
+      if (v?.concentration && v.concentration > 0) return parseFloat(dose) * v.concentration;
+    }
+    return toDoseMg({ dose, unit: unit || 'mg' });
   };
 
   // Convert vial amount + unit to mg for storage/deduction
@@ -3610,6 +3619,8 @@ const wipeAllData = () => {
                         width={36}
                         domain={yDomain}
                         tickFormatter={(v) => `${v}`}
+                        allowDecimals={false}
+                        tickCount={6}
                       />
                       {currentWeight != null && (
                         <ReferenceLine 
@@ -3666,7 +3677,7 @@ const wipeAllData = () => {
                           fill="url(#weightFill)" 
                           stroke="none" 
                           isAnimationActive={true}
-                          connectNulls 
+                          connectNulls={false}
                         />
                       )}
                       {visibleLines.weight && (
@@ -3693,7 +3704,7 @@ const wipeAllData = () => {
                             );
                           }}
                           activeDot={{ r: 6, stroke: '#e8b84c', strokeWidth: 2, fill: '#0f172a' }}
-                          connectNulls 
+                          connectNulls={false}
                           name="Weight"
                         />
                       )}
@@ -3706,7 +3717,7 @@ const wipeAllData = () => {
                           strokeWidth={1.5} 
                           strokeDasharray="6 4" 
                           dot={false} 
-                          connectNulls 
+                          connectNulls={false}
                           name="7-day average"
                         />
                       )}
@@ -4397,7 +4408,7 @@ const wipeAllData = () => {
                         {selectedVialId && injectionDose && (() => {
                           const v = vials.find(x => x.id === selectedVialId);
                           const remaining = v ? (v.remainingMg ?? v.totalMg) : 0;
-                          const deduct = toDoseMg({ dose: injectionDose, unit: injectionUnit });
+                          const deduct = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId);
                           const after = Math.max(0, remaining - deduct);
                           return <p className="text-gray-500 text-xs mt-1">After this dose: {after.toFixed(1)} mg remaining</p>;
                         })()}
@@ -5480,7 +5491,7 @@ const wipeAllData = () => {
                         <label className="text-gray-400 text-sm block mb-1">{MEDICATIONS.find(m => m.name === vialMedication)?.preConstituted ? 'Vial size (total in vial)' : 'Vial size (peptide in vial)'}</label>
                         <input type="number" step="0.01" min="0" value={vialTotalMg} onChange={(e) => setVialTotalMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder={vialUnit === 'ml' ? 'e.g. 10' : MEDICATIONS.find(m => m.name === vialMedication)?.preConstituted ? 'e.g. 200' : 'e.g. 5'} />
                       </div>
-                      <div className="w-20 flex-shrink-0">
+                      <div className="w-24 min-w-[5rem] flex-shrink-0">
                         <label className="text-gray-400 text-sm block mb-1">Unit</label>
                         <select value={vialUnit} onChange={(e) => setVialUnit(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-2 py-2 text-sm">
                           <option value="mg">mg</option>
