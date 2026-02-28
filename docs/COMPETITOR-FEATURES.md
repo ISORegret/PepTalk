@@ -2,6 +2,8 @@
 
 Ideas taken from popular apps (OptiPin, Regimen, PepTracker, Dose Track, GLPer, Glapp, Peptide Tracker & Calculator, etc.) that could benefit PepTalk. Ordered by impact vs effort.
 
+**See also:** [COMPETITOR-RESEARCH-2025.md](./COMPETITOR-RESEARCH-2025.md) for 2025 research on Shotlee, Pep, Phaze, GLP Compass, Regimen, and glucose trackers, with a full gap analysis and prioritized suggestions.
+
 ---
 
 ## High priority
