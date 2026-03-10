@@ -119,6 +119,12 @@ export const MEDICATION_EFFECT_PROFILES = {
     peakEffects: 'Short half-life; peak effect within 1–2 hours; often dosed daily',
     steadyState: 'Daily use; body composition changes over weeks'
   },
+  'MOTS-C': {
+    effects: ['Mitochondrial support', 'Metabolic health', 'Endurance', 'Recovery'],
+    sideEffects: ['Generally well tolerated', 'Injection site possible'],
+    peakEffects: 'Peak within 1–2 hours; often dosed 2–3× per week',
+    steadyState: 'Protocol-dependent; 2–3× per week common'
+  },
   'Melanotan II': {
     effects: ['Tanning', 'Libido', 'Appetite suppression'],
     sideEffects: ['Nausea', 'Flushing', 'Facial flushing', 'Yawning'],
@@ -137,11 +143,23 @@ export const MEDICATION_EFFECT_PROFILES = {
     peakEffects: 'Days 1–2 of daily dosing; steady state in 1–2 weeks',
     steadyState: '1–2 weeks of consistent daily dosing'
   },
+  'KLOW': {
+    effects: ['Tissue repair', 'Anti-inflammatory', 'GHK-Cu + BPC-157 + KPV + TB-500 blend'],
+    sideEffects: ['Injection site reactions', 'Generally well tolerated'],
+    peakEffects: 'Peak within 1–2 hours; blend of short-acting peptides; typically daily',
+    steadyState: '8–16 week protocols common; daily dosing; healing builds over weeks'
+  },
   'Kisspeptin': {
     effects: ['GnRH release', 'LH/FSH pulse', 'Testosterone support', 'Fertility signaling'],
     sideEffects: ['Flushing', 'Mild nausea', 'Injection site reactions'],
     peakEffects: 'Peak LH pulse within 1–2 hours; short-lived; often 2–3× per week',
     steadyState: 'Pulsatile; no single steady state; protocol-dependent'
+  },
+  'Tesa/Ipa Blend (5mg/5mg)': {
+    effects: ['GH release', 'Tesamorelin + Ipamorelin', 'Visceral fat support', 'Recovery'],
+    sideEffects: ['Injection site reactions', 'Flushing', 'Hunger possible'],
+    peakEffects: 'Fast Tesa peak ~15–30 min; Ipa peak ~1 h; combined GH pulse; daily typical',
+    steadyState: 'Per-dose pulse; daily use; body composition over time'
   },
   'Gonadorelin': {
     effects: ['GnRH analog', 'LH/FSH release', 'Testosterone stimulation'],
@@ -303,6 +321,21 @@ export const MEDICATION_PHASE_TIMELINES = {
       { name: 'Next dose', hours: [4, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next daily Tesamorelin', whatsHappening: ['Cleared', 'Next dose tomorrow', 'Daily rhythm'], whatToExpect: ['Inject tomorrow same time', 'Daily use', 'Rotate site'], tips: ['Daily dose', 'Same time', 'Rotate injection site'] }
     ]
   },
+  'KLOW': {
+    phases: [
+      { name: 'Absorption', hours: [0, 2], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'KLOW blend entering system', whatsHappening: ['GHK-Cu, BPC-157, KPV, TB-500 absorbing', 'Tissue repair and anti-inflammatory pathways', 'Peak within 1–2 hours'], whatToExpect: ['Healing blend active', 'Daily dosing typical', '8–16 week protocols'], tips: ['Daily injection', 'Rotate sites', 'Track recovery'] },
+      { name: 'Peak activity', hours: [2, 8], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'Peak KLOW effect', whatsHappening: ['Blend at peak concentration', 'Repair and inflammation support', 'BPC-157 dominates duration'], whatToExpect: ['Strongest window', 'Cumulative over weeks', 'Well tolerated'], tips: ['Consistent dosing', 'Good nutrition', 'Patience for tissue repair'] },
+      { name: 'Next dose', hours: [8, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Time for next KLOW dose', whatsHappening: ['Levels declining', 'Next dose tomorrow', 'Daily rhythm'], whatToExpect: ['Inject daily per protocol', 'Rotate sites', 'Build over 8–16 weeks'], tips: ['Daily dose', 'Same time', 'Rotate injection site'] }
+    ]
+  },
+  'Tesa/Ipa Blend (5mg/5mg)': {
+    phases: [
+      { name: 'Rapid rise', hours: [0, 0.5], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'Tesa + Ipa GH pulse', whatsHappening: ['Tesamorelin peak ~15–30 min', 'Ipamorelin rising', 'Combined GH release'], whatToExpect: ['Fast peak from Tesa', 'Ipa extends pulse', 'Best fasted, before bed'], tips: ['Fasted state', 'Before bed common', 'Daily typical'] },
+      { name: 'Peak', hours: [0.5, 2], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'Peak GH from blend', whatsHappening: ['Ipamorelin peak ~1 h', 'Combined GH elevation', 'Fat loss and recovery support'], whatToExpect: ['Maximum GH from dose', 'Short-lived', 'Next dose tomorrow'], tips: ['Avoid carbs around dose', 'Rotate sites', 'Track sleep/recovery'] },
+      { name: 'Clearance', hours: [2, 6], icon: '📉', color: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', description: 'Blend clearing', whatsHappening: ['Levels declining', 'Effect from pulse complete', 'Next dose next day'], whatToExpect: ['Back toward baseline', 'Daily dosing typical', 'Consistency matters'], tips: ['Same time tomorrow', 'Rotate sites', 'Daily injection'] },
+      { name: 'Next dose', hours: [6, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next Tesa/Ipa dose', whatsHappening: ['Ready for next pulse', 'Daily injection', '5/5 mg blend'], whatToExpect: ['Inject tomorrow', 'Fasted, before bed', 'Rotate injection site'], tips: ['Daily dose', '5mg/5mg', 'Rotate injection site'] }
+    ]
+  },
   'Sermorelin': {
     phases: [
       { name: 'Pulse', hours: [0, 0.5], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'Sermorelin GH pulse', whatsHappening: ['Very short half-life', 'Peak GH within minutes', 'Brief pulse'], whatToExpect: ['Rapid GH pulse', 'Effect 1–2 hours', 'Daily typical'], tips: ['Timing consistent', 'Before bed common', 'Rotate sites'] },
@@ -455,5 +488,41 @@ export const TYPICAL_SIDE_EFFECTS_BY_DAY = {
   'TB-500': [
     { day: 'Day 0 (injection)', effects: ['Injection site reactions possible', 'Generally well tolerated'] },
     { day: 'Ongoing', effects: ['Effects accumulate over weeks', 'Rare systemic side effects'] }
+  ],
+  'MOTS-C': [
+    { day: 'Day 0 (injection)', effects: ['Injection site possible', 'Generally well tolerated'] },
+    { day: 'Ongoing', effects: ['Often 2–3×/week', 'Mitochondrial/metabolic support'] }
+  ],
+  'KLOW': [
+    { day: 'Day 0 (injection)', effects: ['Injection site possible', 'Blend (GHK-Cu, BPC-157, KPV, TB-500)'] },
+    { day: 'Ongoing', effects: ['Tissue repair builds', 'Daily dosing typical', '8–16 week protocols'] }
+  ],
+  'Tesa/Ipa Blend (5mg/5mg)': [
+    { day: 'Day 0 (injection)', effects: ['Flushing possible', 'Hunger increase in some'] },
+    { day: 'Within hours', effects: ['GH pulse', 'Best fasted, before bed', 'Daily typical'] }
+  ],
+  'Ipamorelin': [
+    { day: 'Day 0 (each dose)', effects: ['Flushing', 'Hunger increase', 'Generally well tolerated'] },
+    { day: 'Within 1–2h', effects: ['GH pulse', 'Short-lived', 'Daily or BID typical'] }
+  ],
+  'Tesamorelin': [
+    { day: 'Day 0 (injection)', effects: ['Injection site reactions', 'Joint pain in some', 'Fluid retention'] },
+    { day: 'Ongoing', effects: ['Visceral fat focus over time', 'Daily dosing'] }
+  ],
+  'CJC-1295': [
+    { day: 'Day 0 (injection)', effects: ['Flushing', 'Hunger', 'Numbness/tingling in some'] },
+    { day: 'Hours to days', effects: ['Sustained GH release', '1–2× per week common'] }
+  ],
+  'MK-677': [
+    { day: 'Daily (oral)', effects: ['Increased hunger', 'Water retention', 'Blood sugar effects possible'] },
+    { day: 'Ongoing', effects: ['IGF-1 builds over 1–2 weeks', 'Take same time daily'] }
+  ],
+  'Melanotan II': [
+    { day: 'Day 0 (injection)', effects: ['Nausea', 'Flushing', 'Yawning', 'Facial flushing'] },
+    { day: 'Ongoing', effects: ['Tan builds over days', 'Often 1–2× per week'] }
+  ],
+  'Rybelsus (Oral Semaglutide)': [
+    { day: 'Daily', effects: ['Nausea', 'GI upset', 'Take on empty stomach'] },
+    { day: 'Within 1–4h', effects: ['Peak blood levels', 'Wait 30 min before eating'] }
   ]
 };

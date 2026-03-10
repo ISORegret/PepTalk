@@ -4,34 +4,37 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 
-// Comprehensive peptide/medication list with pharmacokinetic data
+// Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
   { name: 'Semaglutide', category: 'GLP-1', color: '#10b981', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
   { name: 'Rybelsus (Oral Semaglutide)', category: 'GLP-1', color: '#10b981', defaultSchedule: 1, halfLife: 168, peakHours: 4, effectDuration: 24 },
   { name: 'Tirzepatide', category: 'GLP-1/GIP', color: '#14b8a6', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
-  { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
+  { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true },
   { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168, preConstituted: true },
-  { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 33, peakHours: 12, effectDuration: 72 },
+  { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 56, peakHours: 12, effectDuration: 72 },
   { name: 'BPC-157', category: 'Peptide', color: '#e8b84c', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
-  { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 240, peakHours: 24, effectDuration: 168 },
+  { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 2, peakHours: 2, effectDuration: 72 },
   { name: 'Ipamorelin', category: 'Peptide', color: '#fbbf24', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 4 },
   { name: 'CJC-1295', category: 'Peptide', color: '#f97316', defaultSchedule: 1, halfLife: 168, peakHours: 12, effectDuration: 168 },
-  { name: 'Tesamorelin', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 3 },
-  { name: 'Sermorelin', category: 'Peptide', color: '#fb923c', defaultSchedule: 1, halfLife: 0.2, peakHours: 0.1, effectDuration: 1 },
+  { name: 'Tesamorelin', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 0.35, peakHours: 0.15, effectDuration: 3 },
+  { name: 'Sermorelin', category: 'Peptide', color: '#fb923c', defaultSchedule: 1, halfLife: 0.12, peakHours: 0.5, effectDuration: 1 },
   { name: 'MK-677', category: 'Peptide', color: '#c2410c', defaultSchedule: 1, halfLife: 24, peakHours: 2, effectDuration: 24 },
   { name: 'AOD-9604', category: 'Peptide', color: '#ec4899', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 3 },
+  { name: 'MOTS-C', category: 'Peptide', color: '#22c55e', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Melanotan II', category: 'Peptide', color: '#db2777', defaultSchedule: 7, halfLife: 33, peakHours: 12, effectDuration: 168 },
   { name: 'PT-141', category: 'Peptide', color: '#be185d', defaultSchedule: 0, halfLife: 3, peakHours: 1, effectDuration: 8 },
-  { name: 'Enclomiphene (Enclo)', category: 'SERM', color: '#7c3aed', defaultSchedule: 1, halfLife: 120, peakHours: 24, effectDuration: 24 },
+  { name: 'Enclomiphene (Enclo)', category: 'SERM', color: '#7c3aed', defaultSchedule: 1, halfLife: 10, peakHours: 24, effectDuration: 24 },
+  { name: 'KLOW', category: 'Peptide', color: '#0891b2', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Kisspeptin', category: 'Peptide', color: '#a855f7', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Gonadorelin', category: 'Peptide', color: '#9333ea', defaultSchedule: 2, halfLife: 0.3, peakHours: 0.5, effectDuration: 4 },
+  { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6 },
   { name: 'Fragment 176-191', category: 'Peptide', color: '#06b6d4', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 12 },
-  { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 2, peakHours: 2, effectDuration: 24 },
+  { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 1, peakHours: 0.5, effectDuration: 24 },
   { name: 'Semax', category: 'Peptide', color: '#6366f1', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 4 },
   { name: 'Epithalon', category: 'Peptide', color: '#64748b', defaultSchedule: 7, halfLife: 1, peakHours: 1, effectDuration: 24 },
   { name: 'BPC-157 (Oral)', category: 'Peptide', color: '#eab308', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
@@ -1103,7 +1106,6 @@ const PepTalk = () => {
   const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
-  const [showCalculatorUnitRef, setShowCalculatorUnitRef] = useState(false);
   const [exportFormat, setExportFormat] = useState('json'); // 'json' | 'csv'
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
@@ -1128,6 +1130,18 @@ const PepTalk = () => {
   const [chartRangeWeeks, setChartRangeWeeks] = useState(0); // 0 = all, 4, 8, 12
   const [insightsExpandedMed, setInsightsExpandedMed] = useState(null); // medication name or null
   const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
+  const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
+  const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
+
+  // Cycle tracking (peptide cycles: medication + start + duration in weeks)
+  const [cycleEntries, setCycleEntries] = useState([]);
+  const [cycleMedication, setCycleMedication] = useState('Retatrutide');
+  const [cycleStartDate, setCycleStartDate] = useState(getTodayLocal());
+  const [cycleDurationWeeks, setCycleDurationWeeks] = useState(12);
+  const [selectedCycleId, setSelectedCycleId] = useState(null);
+  const [compareCycle1Id, setCompareCycle1Id] = useState(null);
+  const [compareCycle2Id, setCompareCycle2Id] = useState(null);
+  const [editingCycleId, setEditingCycleId] = useState(null);
   
   // Weight form states
   const [weight, setWeight] = useState('');
@@ -1183,16 +1197,14 @@ const PepTalk = () => {
   const [titrationSteps, setTitrationSteps] = useState([{ dose: '', weeks: 4, unit: 'mg' }]);
 
   // Calculator states
-  const [calcConcentration, setCalcConcentration] = useState('');
-  const [calcDesiredDose, setCalcDesiredDose] = useState('');
-  const [calcDesiredUnit, setCalcDesiredUnit] = useState('mg');
-  const [calcResult, setCalcResult] = useState(null);
   const [reconPeptideAmount, setReconPeptideAmount] = useState('');
   const [reconPeptideUnit, setReconPeptideUnit] = useState('mg');
   const [reconWaterAmount, setReconWaterAmount] = useState('');
   const [reconDesiredDose, setReconDesiredDose] = useState('');
   const [reconDesiredUnit, setReconDesiredUnit] = useState('mcg');
   const [reconResult, setReconResult] = useState(null);
+  const [reconMode, setReconMode] = useState('vial_bac'); // 'vial_bac' = vial + bac → concentration & dose per ml; 'vial_dose' = vial + dose → bac water needed
+  const [reconVolumePerDose, setReconVolumePerDose] = useState('0.5'); // ml per dose when solving for bac water
   // Calorie / TDEE calculator
   const [tdeeAge, setTdeeAge] = useState('');
   const [tdeeGender, setTdeeGender] = useState('male');
@@ -1297,6 +1309,7 @@ const PepTalk = () => {
       const dailyTrackData = localStorage.getItem('health-daily-track');
       const glucoseData = localStorage.getItem('health-glucose-entries');
       const a1cData = localStorage.getItem('health-a1c-entries');
+      const cycleData = localStorage.getItem('health-cycles');
       
       if (weightData) {
         const parsed = JSON.parse(weightData);
@@ -1317,6 +1330,7 @@ const PepTalk = () => {
       if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
+      if (cycleData) setCycleEntries(JSON.parse(cycleData));
       const vialsData = localStorage.getItem('health-vials');
       if (vialsData) {
         const parsed = JSON.parse(vialsData);
@@ -1768,7 +1782,8 @@ const PepTalk = () => {
       glucoseEntries,
       a1cEntries,
       userProfile,
-      vials
+      vials,
+      cycleEntries
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -1870,6 +1885,10 @@ const PepTalk = () => {
         if (imported.a1cEntries) {
           setA1cEntries(imported.a1cEntries);
           saveData('health-a1c-entries', imported.a1cEntries);
+        }
+        if (imported.cycleEntries) {
+          setCycleEntries(imported.cycleEntries);
+          saveData('health-cycles', imported.cycleEntries);
         }
         if (imported.userProfile) {
           setUserProfile(imported.userProfile);
@@ -2453,6 +2472,158 @@ const wipeAllData = () => {
     });
   };
 
+  // Cycle tracking: get per-week aggregates for a cycle (weight, waist, glucose, appetite from journal hunger)
+  const getCycleWeekData = (cycle) => {
+    if (!cycle?.startDate || !cycle?.durationWeeks) return [];
+    const start = parseLocalDate(cycle.startDate);
+    const data = [];
+    for (let w = 1; w <= cycle.durationWeeks; w++) {
+      const weekStart = new Date(start);
+      weekStart.setDate(start.getDate() + (w - 1) * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const startStr = formatDateLocal(weekStart);
+      const endStr = formatDateLocal(weekEnd);
+      const inRange = (d) => d >= startStr && d <= endStr;
+      const weights = weightEntries.filter(e => inRange(e.date)).map(e => parseFloat(e.weight));
+      const waistEntries = measurementEntries.filter(e => e.type === 'Waist' && inRange(e.date)).map(e => parseFloat(e.value));
+      const glucoseEntriesInRange = glucoseEntries.filter(e => inRange(e.date)).map(e => parseFloat(e.value));
+      const journalInRange = journalEntries.filter(e => inRange(e.date) && e.hunger != null).map(e => Number(e.hunger));
+      data.push({
+        week: w,
+        weekLabel: `Week ${w}`,
+        weight: weights.length ? Math.round((weights.reduce((a, b) => a + b, 0) / weights.length) * 10) / 10 : null,
+        waist: waistEntries.length ? Math.round((waistEntries.reduce((a, b) => a + b, 0) / waistEntries.length) * 10) / 10 : null,
+        glucose: glucoseEntriesInRange.length ? Math.round(glucoseEntriesInRange.reduce((a, b) => a + b, 0) / glucoseEntriesInRange.length) : null,
+        appetite: journalInRange.length ? Math.round((journalInRange.reduce((a, b) => a + b, 0) / journalInRange.length) * 10) / 10 : null
+      });
+    }
+    return data;
+  };
+
+  const addOrUpdateCycle = () => {
+    const start = cycleStartDate.trim();
+    const duration = parseInt(cycleDurationWeeks, 10);
+    if (!start || isNaN(duration) || duration < 1) return;
+    if (editingCycleId) {
+      const updated = cycleEntries.map(c => c.id === editingCycleId ? { ...c, medication: cycleMedication, startDate: start, durationWeeks: duration } : c);
+      setCycleEntries(updated);
+      saveData('health-cycles', updated);
+      setEditingCycleId(null);
+    } else {
+      const newCycle = { id: Date.now(), medication: cycleMedication, startDate: start, durationWeeks: duration };
+      const updated = [...cycleEntries, newCycle].sort((a, b) => b.startDate.localeCompare(a.startDate));
+      setCycleEntries(updated);
+      saveData('health-cycles', updated);
+    }
+    setCycleStartDate(getTodayLocal());
+    setCycleDurationWeeks(12);
+    setCycleMedication('Retatrutide');
+  };
+
+  const deleteCycle = (id) => {
+    const updated = cycleEntries.filter(c => c.id !== id);
+    setCycleEntries(updated);
+    saveData('health-cycles', updated);
+    if (selectedCycleId === id) setSelectedCycleId(null);
+    if (compareCycle1Id === id) setCompareCycle1Id(null);
+    if (compareCycle2Id === id) setCompareCycle2Id(null);
+    setEditingCycleId(null);
+  };
+
+  // Stack timeline: which meds are active by month (from schedules with startDate)
+  const getStackTimelineMonths = () => {
+    const withStart = schedules.filter(s => s.startDate);
+    if (withStart.length === 0) return [];
+    const startDates = withStart.map(s => s.startDate);
+    const minDate = startDates.sort()[0];
+    const start = parseLocalDate(minDate);
+    const end = new Date();
+    end.setMonth(end.getMonth() + 3); // show 3 months ahead
+    const months = [];
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cursor <= end) {
+      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+      const monthEndStr = formatDateLocal(monthEnd);
+      const active = withStart.filter(s => s.startDate <= monthEndStr).map(s => s.medication);
+      const prevActive = cursor.getMonth() === 0
+        ? withStart.filter(s => s.startDate <= formatDateLocal(new Date(cursor.getFullYear() - 1, 11, 31))).map(s => s.medication)
+        : withStart.filter(s => s.startDate <= formatDateLocal(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 31))).map(s => s.medication);
+      const added = active.filter(m => !prevActive.includes(m));
+      months.push({
+        label: cursor.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        active,
+        added
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return months;
+  };
+
+  // Injection site heatmap: count by site (last 30 days), color green/yellow/red
+  const getInjectionSiteCounts = () => {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = formatDateLocal(cutoff);
+    const recent = injectionEntries.filter(e => e.date >= cutoffStr);
+    const bySite = {};
+    recent.forEach(e => {
+      const site = e.site || 'Other';
+      bySite[site] = (bySite[site] || 0) + 1;
+    });
+    const allSites = [...BODY_LOCATIONS];
+    Object.keys(bySite).filter(s => !allSites.includes(s)).forEach(s => allSites.push(s));
+    return allSites.map(site => {
+      const count = bySite[site] || 0;
+      const status = count <= 2 ? 'green' : count <= 5 ? 'yellow' : 'red';
+      return { site, count, status };
+    }).filter(x => x.count > 0).sort((a, b) => b.count - a.count);
+  };
+
+  // Side-effect intelligence: correlate side effects with days since injection, suggest tips
+  const getSideEffectPatterns = () => {
+    const withEffects = injectionEntries.filter(e => e.sideEffects && e.sideEffects.length > 0).sort((a, b) => a.date.localeCompare(b.date));
+    if (withEffects.length < 2) return null;
+    const byMed = {};
+    withEffects.forEach(inj => {
+      if (!byMed[inj.type]) byMed[inj.type] = [];
+      byMed[inj.type].push(inj);
+    });
+    const patterns = [];
+    Object.entries(byMed).forEach(([med, entries]) => {
+      entries.forEach((entry, i) => {
+        const entryDate = parseLocalDate(entry.date);
+        (entry.sideEffects || []).forEach(se => {
+          let daysSince = null;
+          if (i > 0) {
+            const prev = parseLocalDate(entries[i - 1].date);
+            daysSince = Math.round((entryDate - prev) / (24 * 60 * 60 * 1000));
+          }
+          patterns.push({ med, sideEffect: se, date: entry.date, daysSince });
+        });
+      });
+    });
+    const byEffect = {};
+    patterns.forEach(p => {
+      const key = `${p.med}|${p.sideEffect}`;
+      if (!byEffect[key]) byEffect[key] = { med: p.med, sideEffect: p.sideEffect, days: [] };
+      if (p.daysSince != null) byEffect[key].days.push(p.daysSince);
+    });
+    const insights = Object.values(byEffect)
+      .filter(x => x.days.length >= 2)
+      .map(x => {
+        const avg = x.days.reduce((a, b) => a + b, 0) / x.days.length;
+        const in24_48 = x.days.filter(d => d >= 1 && d <= 2).length / x.days.length;
+        let suggestion = null;
+        if (in24_48 >= 0.5) suggestion = 'Try evening injections so peak falls during sleep, or split dose (half twice per week). Increase electrolytes and small meals.';
+        else if (avg <= 0.5) suggestion = 'Effect often same day — consider timing (e.g. evening) or smaller dose.';
+        return { ...x, avgDays: Math.round(avg * 10) / 10, in24_48, suggestion };
+      })
+      .filter(x => x.suggestion);
+    return insights.length ? insights : null;
+  };
+
   const getCalendarDays = () => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
@@ -2472,23 +2643,51 @@ const wipeAllData = () => {
     return days;
   };
 
-  const calculateDose = () => {
-    if (!calcConcentration || !calcDesiredDose) return;
-    let desiredMg = parseFloat(calcDesiredDose);
-    if (calcDesiredUnit === 'mcg') desiredMg = desiredMg / 1000;
-    const volumeMl = desiredMg / parseFloat(calcConcentration);
-    setCalcResult({ ml: volumeMl.toFixed(3), units: (volumeMl * 100).toFixed(1) });
-  };
-
   const calculateReconstitution = () => {
-    if (!reconPeptideAmount || !reconWaterAmount || !reconDesiredDose) return;
-    let peptideMcg = parseFloat(reconPeptideAmount);
-    if (reconPeptideUnit === 'mg') peptideMcg = peptideMcg * 1000;
-    let desiredMcg = parseFloat(reconDesiredDose);
-    if (reconDesiredUnit === 'mg') desiredMcg = desiredMcg * 1000;
-    const concentrationMcgPerMl = peptideMcg / parseFloat(reconWaterAmount);
-    const volumeMl = desiredMcg / concentrationMcgPerMl;
-    setReconResult({ concentration: (concentrationMcgPerMl / 1000).toFixed(2), ml: volumeMl.toFixed(3), units: (volumeMl * 100).toFixed(1) });
+    const vialMg = reconPeptideUnit === 'mg' ? parseFloat(reconPeptideAmount) : parseFloat(reconPeptideAmount) / 1000;
+    if (!reconPeptideAmount || isNaN(vialMg) || vialMg <= 0) return;
+
+    if (reconMode === 'vial_bac') {
+      // Vial + Bac water → concentration and dose (volume per desired dose)
+      const bacMl = parseFloat(reconWaterAmount);
+      if (!reconWaterAmount || isNaN(bacMl) || bacMl <= 0) return;
+      const concentrationMgPerMl = vialMg / bacMl;
+      const concentrationMcgPerMl = concentrationMgPerMl * 1000;
+      let mlPerDose = null;
+      let unitsPerDose = null;
+      if (reconDesiredDose) {
+        const desiredMg = reconDesiredUnit === 'mg' ? parseFloat(reconDesiredDose) : parseFloat(reconDesiredDose) / 1000;
+        if (!isNaN(desiredMg) && desiredMg > 0) {
+          mlPerDose = desiredMg / concentrationMgPerMl;
+          unitsPerDose = mlPerDose * 100;
+        }
+      }
+      setReconResult({
+        mode: 'vial_bac',
+        concentration: concentrationMgPerMl.toFixed(2),
+        concentrationMcg: concentrationMcgPerMl.toFixed(0),
+        bacMl,
+        mlPerDose: mlPerDose != null ? mlPerDose.toFixed(3) : null,
+        unitsPerDose: unitsPerDose != null ? unitsPerDose.toFixed(1) : null,
+        desiredDose: reconDesiredDose ? `${reconDesiredDose} ${reconDesiredUnit}` : null
+      });
+      return;
+    }
+
+    // Vial + Desired dose → bac water needed (so that volumePerDose ml = desired dose)
+    const desiredMg = reconDesiredUnit === 'mg' ? parseFloat(reconDesiredDose) : parseFloat(reconDesiredDose) / 1000;
+    const volumePerDoseMl = parseFloat(reconVolumePerDose) || 0.5;
+    if (!reconDesiredDose || isNaN(desiredMg) || desiredMg <= 0 || volumePerDoseMl <= 0) return;
+    // desiredMg per volumePerDoseMl → concentration = desiredMg / volumePerDoseMl; vialMg = concentration * bacMl → bacMl = vialMg / concentration = vialMg * volumePerDoseMl / desiredMg
+    const bacMl = (vialMg * volumePerDoseMl) / desiredMg;
+    const concentrationMgPerMl = vialMg / bacMl;
+    setReconResult({
+      mode: 'vial_dose',
+      bacMl: bacMl.toFixed(2),
+      concentration: concentrationMgPerMl.toFixed(2),
+      mlPerDose: volumePerDoseMl.toFixed(2),
+      unitsPerDose: (volumePerDoseMl * 100).toFixed(1)
+    });
   };
 
   // Calorie / TDEE calculator (Mifflin-St Jeor BMR, then activity multiplier)
@@ -2809,6 +3008,81 @@ const wipeAllData = () => {
     return data;
   };
 
+  // Phase label for a given day based on hours since last injection (Rising → Peak → Falling → Trough)
+  // Trough = right before next dose; for weekly drugs with ~6–7 day half-life, that's day 6–7
+  const getPhaseLabelForDay = (hoursSinceInjection, med, isInjectionDay) => {
+    if (isInjectionDay && hoursSinceInjection < 24) return 'Injection';
+    const peak = med.peakHours || 24;
+    const halfLife = med.halfLife || 168;
+    if (hoursSinceInjection <= peak * 0.8) return 'Rising';
+    if (hoursSinceInjection <= peak * 2) return 'Peak';           // Peak through ~day 2–4 for weekly drugs
+    if (hoursSinceInjection <= halfLife * 0.85) return 'Falling'; // Falling until ~day 5–6
+    return 'Trough';                                              // Trough = last day(s) before next dose
+  };
+
+  // Unified chart: one graph with one curve per medication, estimated levels from half-life decay
+  const getUnifiedMedicationLevelChartData = () => {
+    const now = new Date();
+    const daysBack = 21;
+    const medNames = [...new Set(injectionEntries.map(inj => inj.type))];
+    const medications = medNames.map(name => MEDICATIONS.find(m => m.name === name)).filter(Boolean);
+    if (medications.length === 0) return { data: [], medications: [] };
+
+    const data = [];
+    for (let i = -daysBack; i <= 0; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + i);
+      date.setHours(23, 59, 59, 999);
+      const dateStr = formatDateLocal(date);
+      const injectionMeds = new Set();
+      const injectionDoses = {}; // { medName: { dose, unit } } for tooltip
+      const phaseByMed = {};
+      medications.forEach(med => {
+        const injOnDay = injectionEntries.find(inj => inj.type === med.name && toCalendarDay(inj.date) === dateStr);
+        if (injOnDay) {
+          injectionMeds.add(med.name);
+          injectionDoses[med.name] = { dose: String(injOnDay.dose), unit: injOnDay.unit || 'mg' };
+        }
+      });
+      const row = {
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: dateStr,
+        timestamp: date.getTime(),
+        injectionMeds,
+        injectionDoses,
+        phaseByMed
+      };
+      medications.forEach(med => {
+        const recentInjections = injectionEntries
+          .filter(inj => inj.type === med.name)
+          .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+        const injectionsBeforeDate = recentInjections.filter(inj => toCalendarDay(inj.date) <= dateStr);
+        if (injectionsBeforeDate.length === 0) {
+          row[med.name] = null;
+          return;
+        }
+        let totalRemainingMg = 0;
+        injectionsBeforeDate.forEach(inj => {
+          const injDate = parseLocalDate(toCalendarDay(inj.date));
+          const hoursElapsed = (date.getTime() - injDate.getTime()) / (1000 * 60 * 60);
+          const effectiveHours = getEffectiveHoursForDecay(inj, med, hoursElapsed);
+          const doseMg = toDoseMg(inj);
+          const halfLivesElapsed = effectiveHours / med.halfLife;
+          const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
+          if (remaining > 0.0001) totalRemainingMg += remaining;
+        });
+        const lastInj = injectionsBeforeDate[injectionsBeforeDate.length - 1];
+        const lastDoseMg = toDoseMg(lastInj);
+        row[med.name] = lastDoseMg > 0 ? Math.round((totalRemainingMg / lastDoseMg) * 100) : null;
+        const lastInjDate = parseLocalDate(toCalendarDay(lastInj.date));
+        const hoursSinceInjection = (date.getTime() - lastInjDate.getTime()) / (1000 * 60 * 60);
+        row.phaseByMed[med.name] = getPhaseLabelForDay(hoursSinceInjection, med, injectionMeds.has(med.name));
+      });
+      data.push(row);
+    }
+    return { data, medications };
+  };
+
   const filteredMedications = MEDICATIONS.filter(med => med.name.toLowerCase().includes(medSearchTerm.toLowerCase()) || med.category.toLowerCase().includes(medSearchTerm.toLowerCase()));
   const groupedMedications = filteredMedications.reduce((acc, med) => { if (!acc[med.category]) acc[med.category] = []; acc[med.category].push(med); return acc; }, {});
 
@@ -3080,7 +3354,7 @@ const wipeAllData = () => {
       <div className="max-w-2xl mx-auto px-1">
         <header className="text-center mb-5">
           <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
-          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Tools</p>
+          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Cycles · Tools</p>
         </header>
 
         {/* Upcoming Injections Alert */}
@@ -3115,6 +3389,7 @@ const wipeAllData = () => {
               { id: 'weight', icon: Scale, label: 'Weight' },
               { id: 'injections', icon: Syringe, label: 'Injections' },
               { id: 'insights', icon: Activity, label: 'Insights' },
+              { id: 'cycles', icon: CalendarDays, label: 'Cycles' },
               { id: 'journal', icon: BookOpen, label: 'Journal' },
               { id: 'more', icon: MoreHorizontal, label: 'More' }
             ].map(tab => (
@@ -3771,35 +4046,75 @@ const wipeAllData = () => {
               </div>
             )}
 
-            {/* Side effects by day in cycle — what clinical trials / people commonly report (reference, not your input) */}
+            {/* Side effects by day in cycle — reference only; shows all your logged meds */}
             {(() => {
               const loggedMeds = getLoggedMedications();
-              const medsToShow = loggedMeds.filter(m => TYPICAL_SIDE_EFFECTS_BY_DAY[m]);
-              const displayMeds = medsToShow.length > 0 ? medsToShow : ['Semaglutide', 'Tirzepatide'];
+              if (loggedMeds.length === 0) return null;
               return (
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold mb-2 text-sm">Side effects by day in cycle</h3>
-                  <p className="text-gray-400 text-xs mb-3">What clinical trials and people commonly report by day in the injection cycle — reference only, not your logged side effects.</p>
-                  {displayMeds.map(medName => {
-                    const byDay = TYPICAL_SIDE_EFFECTS_BY_DAY[medName];
-                    if (!byDay || !Array.isArray(byDay)) return null;
-                    return (
-                      <div key={medName} className="mb-4 last:mb-0">
-                        <div className="text-gold-400 text-xs font-medium mb-2">{medName}</div>
-                        <div className="space-y-1.5">
-                          {byDay.map(({ day, effects }, i) => (
-                            <div key={i} className="text-gray-300 text-xs">
-                              <span className="text-gray-500">{day}: </span>
-                              {effects.map(ef => (
-                                <span key={ef} className="inline-block bg-slate-600/50 text-gray-300 px-2 py-0.5 rounded mr-1 mb-1">{ef}</span>
-                              ))}
+                <div className="ui-card overflow-hidden">
+                  <h3 className="text-white font-semibold mb-1 text-sm px-4 pt-4">Side effects by day in cycle</h3>
+                  <p className="text-gray-400 text-xs mb-3 px-4">Reference: what’s commonly reported by day. Tap a medication to expand.</p>
+                  <div className="divide-y divide-white/10">
+                    {loggedMeds.map(medName => {
+                      const med = MEDICATIONS.find(m => m.name === medName);
+                      const color = med?.color || '#6b7280';
+                      const byDay = TYPICAL_SIDE_EFFECTS_BY_DAY[medName];
+                      const hasData = byDay && Array.isArray(byDay) && byDay.length > 0;
+                      const isExpanded = insightsSideEffectsExpandedMed === medName;
+                      return (
+                        <div key={medName} className="overflow-hidden" style={{ borderLeftWidth: '4px', borderLeftColor: color }}>
+                          <button type="button" onClick={() => setInsightsSideEffectsExpandedMed(isExpanded ? null : medName)} className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                              <span className="text-white font-medium text-sm truncate">{medName}</span>
                             </div>
-                          ))}
+                            <ChevronDown className={`h-4 w-4 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {isExpanded && (
+                          <div className="px-4 pb-4 pt-0 border-t border-white/[0.04]">
+                            {hasData ? (
+                              <div className="space-y-2.5 mt-3">
+                                {byDay.map(({ day, effects }, i) => (
+                                  <div key={i}>
+                                    <div className="text-gray-500 text-[10px] font-medium uppercase tracking-wider mb-1">{day}</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {effects.map(ef => (
+                                        <span key={ef} className="text-gray-300 text-xs bg-slate-700/60 px-2 py-0.5 rounded">{ef}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-xs mt-3">No reference pattern for this compound yet. Log side effects when you inject to see your patterns in the cards above.</p>
+                            )}
+                          </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
+              );
+            })()}
+
+            {/* Side-effect intelligence — correlate symptoms with dosing, suggest tips */}
+            {(() => {
+              const patterns = getSideEffectPatterns();
+              return patterns && patterns.length > 0 && (
+              <div className="ui-card p-4 border border-gold-500/20 bg-gold-500/5">
+                <h3 className="text-white font-semibold mb-2 text-sm flex items-center gap-2">Side-effect patterns</h3>
+                <p className="text-gray-400 text-xs mb-3">Correlated with your injection timing. Use this to adjust dosing.</p>
+                <div className="space-y-3">
+                  {patterns.slice(0, 5).map((p, i) => (
+                    <div key={i} className="bg-slate-800/50 rounded-lg p-3">
+                      <div className="text-gold-400 font-medium text-xs">{p.med} · {p.sideEffect}</div>
+                      <p className="text-gray-300 text-xs mt-1">{p.suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-gray-500 text-xs mt-2">Tip: Try evening injections, split doses, or increase electrolytes to smooth peaks.</p>
+              </div>
               );
             })()}
 
@@ -3820,6 +4135,132 @@ const wipeAllData = () => {
                 </div>
               )}
             </div>
+
+            {/* Single unified graph: estimated medication levels from half-life (all peptides/hormones) */}
+            {getMedicationInsights().length > 0 && (() => {
+              const { data: unifiedData, medications: unifiedMeds } = getUnifiedMedicationLevelChartData();
+              if (unifiedData.length === 0) return null;
+              const toggleMedVisibility = (medName) => {
+                setInsightsChartHiddenMeds(prev => {
+                  const next = new Set(prev);
+                  if (next.has(medName)) next.delete(medName);
+                  else next.add(medName);
+                  return next;
+                });
+              };
+              return (
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-semibold mb-1 text-sm">Estimated medication levels</h3>
+                  <p className="text-gray-400 text-xs mb-3">Based on half-life and your logged doses (last 21 days). Hover a point to see dose injected and phase (Rising → Peak → Falling → Trough). Click a name in the legend to show or hide that curve. Green ring = injection day.</p>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={unifiedData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <ReferenceArea y1={0} y2={100} fill="#475569" fillOpacity={0.08} />
+                      <ReferenceArea y1={100} y2={150} fill="#eab308" fillOpacity={0.08} />
+                      <ReferenceArea y1={150} y2={200} fill="#10b981" fillOpacity={0.08} />
+                      <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} tickMargin={4} interval="preserveStartEnd" />
+                      <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => `${v}%`} domain={[0, 200]} ticks={[0, 50, 100, 150, 200]} width={36} />
+                      <Tooltip
+                        cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                        wrapperStyle={{ zIndex: 1000 }}
+                        contentStyle={{ backgroundColor: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const row = payload[0]?.payload;
+                          if (!row) return null;
+                          const dateLabel = row.fullDate ? new Date(row.fullDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : row.date;
+                          const injectionDoses = row.injectionDoses || {};
+                          const phaseByMed = row.phaseByMed || {};
+                          return (
+                            <div
+                              className="space-y-2"
+                              style={{
+                                backgroundColor: 'rgba(248, 250, 252, 0.92)',
+                                border: '2px solid #94a3b8',
+                                borderRadius: '12px',
+                                padding: '12px 14px',
+                                minWidth: '180px',
+                                boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+                                backdropFilter: 'blur(8px)',
+                                color: '#0f172a'
+                              }}
+                            >
+                              <div className="text-slate-600 text-xs font-semibold border-b border-slate-300 pb-1.5 mb-1.5">{dateLabel}</div>
+                              {unifiedMeds.filter(m => row[m.name] != null).map((med) => {
+                                const value = row[med.name];
+                                const doseInfo = injectionDoses[med.name];
+                                const phase = phaseByMed[med.name] || '';
+                                return (
+                                  <div key={med.name} className="flex items-start justify-between gap-3 text-xs">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: med.color }} />
+                                      <span className="font-medium text-slate-800 truncate">{med.name}</span>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                      <span className="font-semibold text-slate-900">{value != null ? `${value}%` : '—'}</span>
+                                      {doseInfo && (
+                                        <div className="text-green-700 text-[10px] mt-0.5 font-medium">💉 {doseInfo.dose}{doseInfo.unit} injected</div>
+                                      )}
+                                      {phase && (
+                                        <div className="text-slate-500 text-[10px] mt-0.5">{phase}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend
+                        content={() => (
+                          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 mt-2">
+                            {unifiedMeds.map((med) => {
+                              const isHidden = insightsChartHiddenMeds.has(med.name);
+                              return (
+                                <button
+                                  key={med.name}
+                                  type="button"
+                                  onClick={() => toggleMedVisibility(med.name)}
+                                  className="flex items-center gap-1.5 text-xs rounded-md px-2 py-1 hover:bg-white/5 transition-colors"
+                                >
+                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: isHidden ? '#64748b' : med.color }} />
+                                  <span className={isHidden ? 'text-gray-500 line-through' : 'text-gray-300'}>{med.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      />
+                      {unifiedMeds.filter(med => !insightsChartHiddenMeds.has(med.name)).map(med => (
+                        <Line
+                          key={med.name}
+                          type="monotone"
+                          dataKey={med.name}
+                          stroke={med.color}
+                          strokeWidth={2.5}
+                          connectNulls={false}
+                          isAnimationActive={true}
+                          dot={(props) => {
+                            const { cx, cy, payload, dataKey } = props;
+                            if (payload[dataKey] == null) return null;
+                            const isInjectionDay = payload.injectionMeds && payload.injectionMeds.has(dataKey);
+                            return (
+                              <g key={props.key}>
+                                {isInjectionDay && (
+                                  <circle cx={cx} cy={cy} r={8} fill="none" stroke="#10b981" strokeWidth={2} strokeDasharray="3 2" />
+                                )}
+                                <circle cx={cx} cy={cy} r={isInjectionDay ? 5 : 3} fill={med.color} stroke={isInjectionDay ? '#10b981' : 'transparent'} strokeWidth={isInjectionDay ? 2 : 0} />
+                              </g>
+                            );
+                          }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
 
             {getMedicationInsights().length === 0 ? (
               <div className="ui-card p-8 text-center">
@@ -3871,53 +4312,6 @@ const wipeAllData = () => {
 
                     {insight.effectProfile?.splitDoseTip && (
                       <p className="text-gold-400 text-xs bg-accent/10 border border-accent/20 rounded-lg p-2.5">💡 {insight.effectProfile.splitDoseTip}</p>
-                    )}
-
-                    {/* Medication Level Chart */}
-                    {getMedicationLevelChartData(insight.medication).length > 0 && (
-                      <div className="mb-3">
-                        <h4 className="text-gray-400 text-xs font-medium mb-2">Level (last 14 days)</h4>
-                        <ResponsiveContainer width="100%" height={160}>
-                          <LineChart data={getMedicationLevelChartData(insight.medication)} margin={{ top: 8, right: 20, left: 0, bottom: 4 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                            {/* Reference zones */}
-                            <ReferenceArea y1={0} y2={100} fill="#475569" fillOpacity={0.1} />
-                            <ReferenceArea y1={100} y2={150} fill="#eab308" fillOpacity={0.1} />
-                            <ReferenceArea y1={150} y2={200} fill="#10b981" fillOpacity={0.1} />
-                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} tickMargin={4} interval="preserveStartEnd" />
-                            <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => `${v}%`} domain={[0, 200]} ticks={[0, 50, 100, 150, 200]} width={36} />
-                            <Tooltip 
-                              contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(12px)' }}
-                              formatter={(value) => [`${value}%`, 'Level']}
-                            />
-                            <Line
-                              type="monotone"
-                              dataKey="level"
-                              stroke={insight.color}
-                              strokeWidth={3}
-                              dot={(props) => {
-                                const { cx, cy, payload } = props;
-                                if (payload.level == null) return null;
-                                const isInjectionDay = payload.injectionDay;
-                                return (
-                                  <g>
-                                    {isInjectionDay && (
-                                      <circle cx={cx} cy={cy} r={8} fill="none" stroke="#10b981" strokeWidth={2} strokeDasharray="3 2" />
-                                    )}
-                                    <circle cx={cx} cy={cy} r={isInjectionDay ? 5 : 4} fill={insight.color} stroke={isInjectionDay ? '#10b981' : 'transparent'} strokeWidth={isInjectionDay ? 2 : 0} />
-                                  </g>
-                                );
-                              }}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                        <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-white/[0.06]">
-                          <div className="flex items-center gap-1.5 text-gray-400 text-xs">
-                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border-2 border-dashed border-green-500 bg-transparent" style={{ borderStyle: 'dashed' }} />
-                            <span><strong className="text-gray-300">Green ring</strong> = day you logged an injection</span>
-                          </div>
-                        </div>
-                      </div>
                     )}
 
                     {/* Phase progress — compact */}
@@ -4028,6 +4422,252 @@ const wipeAllData = () => {
                   </div>
                 );
                 })}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* CYCLES TAB — peptide/medication cycles with weekly metrics and compare */}
+        {activeTab === 'cycles' && (
+          <div key="cycles" className="space-y-4 tab-enter">
+            <div className="text-center pb-2">
+              <h2 className="text-xl font-bold text-white tracking-tight">Cycles</h2>
+              <p className="text-gray-400 text-sm mt-1">Track peptide/medication cycles. View weight, waist, glucose & appetite by week. Compare cycles.</p>
+            </div>
+
+            {/* Add / Edit cycle form */}
+            <div className="ui-card p-4">
+              <h3 className="text-white font-semibold mb-3 text-sm">{editingCycleId ? 'Edit cycle' : 'Add cycle'}</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Medication</label>
+                  <select value={cycleMedication} onChange={(e) => setCycleMedication(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm">
+                    {MEDICATIONS.filter(m => m.name !== 'Other').map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Start date</label>
+                  <input type="date" value={cycleStartDate} onChange={(e) => setCycleStartDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Duration (weeks)</label>
+                  <input type="number" min={1} max={52} value={cycleDurationWeeks} onChange={(e) => setCycleDurationWeeks(parseInt(e.target.value, 10) || 12)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div className="flex items-end gap-2">
+                  <button type="button" onClick={addOrUpdateCycle} className="ui-btn-primary px-4 py-2 text-sm flex-1">{editingCycleId ? 'Save' : 'Add cycle'}</button>
+                  {editingCycleId && <button type="button" onClick={() => { setEditingCycleId(null); setCycleMedication('Retatrutide'); setCycleStartDate(getTodayLocal()); setCycleDurationWeeks(12); }} className="px-3 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>}
+                </div>
+              </div>
+            </div>
+
+            {/* Cycle list */}
+            {cycleEntries.length === 0 ? (
+              <div className="ui-card p-8 text-center">
+                <CalendarDays className="h-12 w-12 text-gray-500 mx-auto mb-3" />
+                <h3 className="text-white font-semibold mb-1">No cycles yet</h3>
+                <p className="text-gray-400 text-sm">Add a cycle (e.g. Retatrutide 12 weeks) to see weight, waist, glucose and appetite by week and compare with other cycles.</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {cycleEntries.map((cycle) => {
+                    const endDate = (() => { const d = parseLocalDate(cycle.startDate); d.setDate(d.getDate() + cycle.durationWeeks * 7 - 1); return d; })();
+                    const med = MEDICATIONS.find(m => m.name === cycle.medication);
+                    const color = med?.color || '#6b7280';
+                    return (
+                      <div key={cycle.id} className="ui-card p-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}22` }}>
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                          </div>
+                          <div>
+                            <div className="font-semibold text-white">{cycle.medication}</div>
+                            <div className="text-gray-400 text-xs">{cycle.durationWeeks} weeks · {parseLocalDate(cycle.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – {endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => setSelectedCycleId(selectedCycleId === cycle.id ? null : cycle.id)} className="px-3 py-1.5 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 text-sm">{selectedCycleId === cycle.id ? 'Hide' : 'View'}</button>
+                          <button type="button" onClick={() => { setEditingCycleId(cycle.id); setCycleMedication(cycle.medication); setCycleStartDate(cycle.startDate); setCycleDurationWeeks(cycle.durationWeeks); }} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10"><Edit2 className="h-4 w-4" /></button>
+                          <button type="button" onClick={() => window.confirm('Delete this cycle?') && deleteCycle(cycle.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Single cycle view: charts by week */}
+                {selectedCycleId && (() => {
+                  const cycle = cycleEntries.find(c => c.id === selectedCycleId);
+                  if (!cycle) return null;
+                  const weekData = getCycleWeekData(cycle);
+                  if (weekData.length === 0) return null;
+                  const hasWeight = weekData.some(d => d.weight != null);
+                  const hasWaist = weekData.some(d => d.waist != null);
+                  const hasGlucose = weekData.some(d => d.glucose != null);
+                  const hasAppetite = weekData.some(d => d.appetite != null);
+                  return (
+                    <div className="ui-card p-4 space-y-4">
+                      <h3 className="text-white font-semibold">Week-by-week · {cycle.medication}</h3>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {hasWeight && (
+                          <div>
+                            <h4 className="text-gray-400 text-xs font-medium mb-2">Weight (lb)</h4>
+                            <ResponsiveContainer width="100%" height={160}>
+                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
+                                <YAxis stroke="#94a3b8" fontSize={10} width={32} />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
+                                <Line type="monotone" dataKey="weight" stroke="#e8b84c" strokeWidth={2} dot={{ fill: '#e8b84c', r: 3 }} connectNulls />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                        {hasWaist && (
+                          <div>
+                            <h4 className="text-gray-400 text-xs font-medium mb-2">Waist (in)</h4>
+                            <ResponsiveContainer width="100%" height={160}>
+                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
+                                <YAxis stroke="#94a3b8" fontSize={10} width={32} />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
+                                <Line type="monotone" dataKey="waist" stroke="#06b6d4" strokeWidth={2} dot={{ fill: '#06b6d4', r: 3 }} connectNulls />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                        {hasGlucose && (
+                          <div>
+                            <h4 className="text-gray-400 text-xs font-medium mb-2">Glucose (mg/dL)</h4>
+                            <ResponsiveContainer width="100%" height={160}>
+                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
+                                <YAxis stroke="#94a3b8" fontSize={10} width={32} />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
+                                <Line type="monotone" dataKey="glucose" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} connectNulls />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                        {hasAppetite && (
+                          <div>
+                            <h4 className="text-gray-400 text-xs font-medium mb-2">Hunger (1–10, from Journal)</h4>
+                            <ResponsiveContainer width="100%" height={160}>
+                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
+                                <YAxis stroke="#94a3b8" fontSize={10} domain={[0, 10]} width={32} />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
+                                <Line type="monotone" dataKey="appetite" stroke="#a855f7" strokeWidth={2} dot={{ fill: '#a855f7', r: 3 }} connectNulls />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                      </div>
+                      {!hasWeight && !hasWaist && !hasGlucose && !hasAppetite && (
+                        <p className="text-gray-500 text-sm">Log weight, waist (Measurements), glucose, and Journal entries with hunger to see data in this cycle.</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Compare two cycles */}
+                {cycleEntries.length >= 2 && (
+                  <div className="ui-card p-4 space-y-4">
+                    <h3 className="text-white font-semibold">Compare cycles</h3>
+                    <p className="text-gray-400 text-xs">Select two cycles to overlay weight and waist by week.</p>
+                    <div className="flex flex-wrap gap-3">
+                      <select value={compareCycle1Id ?? ''} onChange={(e) => setCompareCycle1Id(e.target.value ? Number(e.target.value) : null)} className="bg-slate-700 text-white rounded-lg px-3 py-2 text-sm flex-1 min-w-0">
+                        <option value="">Cycle 1</option>
+                        {cycleEntries.map(c => <option key={c.id} value={c.id}>{c.medication} ({c.durationWeeks}w)</option>)}
+                      </select>
+                      <select value={compareCycle2Id ?? ''} onChange={(e) => setCompareCycle2Id(e.target.value ? Number(e.target.value) : null)} className="bg-slate-700 text-white rounded-lg px-3 py-2 text-sm flex-1 min-w-0">
+                        <option value="">Cycle 2</option>
+                        {cycleEntries.map(c => <option key={c.id} value={c.id}>{c.medication} ({c.durationWeeks}w)</option>)}
+                      </select>
+                    </div>
+                    {compareCycle1Id && compareCycle2Id && compareCycle1Id !== compareCycle2Id && (() => {
+                      const c1 = cycleEntries.find(c => c.id === compareCycle1Id);
+                      const c2 = cycleEntries.find(c => c.id === compareCycle2Id);
+                      if (!c1 || !c2) return null;
+                      const data1 = getCycleWeekData(c1);
+                      const data2 = getCycleWeekData(c2);
+                      const maxWeeks = Math.max(data1.length, data2.length);
+                      const compareData = Array.from({ length: maxWeeks }, (_, i) => ({
+                        week: i + 1,
+                        weekLabel: `W${i + 1}`,
+                        weight1: data1[i]?.weight != null ? parseFloat(data1[i].weight) : null,
+                        weight2: data2[i]?.weight != null ? parseFloat(data2[i].weight) : null,
+                        waist1: data1[i]?.waist != null ? parseFloat(data1[i].waist) : null,
+                        waist2: data2[i]?.waist != null ? parseFloat(data2[i].waist) : null
+                      }));
+                      const hasAnyWeight = compareData.some(d => d.weight1 != null || d.weight2 != null);
+                      const firstW1 = data1.find(d => d.weight != null)?.weight;
+                      const lastW1 = [...data1].reverse().find(d => d.weight != null)?.weight;
+                      const firstW2 = data2.find(d => d.weight != null)?.weight;
+                      const lastW2 = [...data2].reverse().find(d => d.weight != null)?.weight;
+                      const loss1 = (firstW1 != null && lastW1 != null) ? firstW1 - lastW1 : null;
+                      const loss2 = (firstW2 != null && lastW2 != null) ? firstW2 - lastW2 : null;
+                      const diffLoss = (loss1 != null && loss2 != null) ? loss2 - loss1 : null;
+                      const addedInC2 = c1.medication !== c2.medication ? [c2.medication] : [];
+                      const hasAnyWaist = compareData.some(d => d.waist1 != null || d.waist2 != null);
+                      return (
+                        <>
+                          {(diffLoss != null || addedInC2.length > 0) && (
+                            <div className="rounded-lg bg-slate-700/50 border border-white/10 p-3 space-y-1">
+                              <div className="text-gray-300 text-xs font-medium">Cycle performance</div>
+                              {diffLoss != null && (
+                                <p className="text-white text-sm">
+                                  {diffLoss > 0 ? `Cycle 2 (${c2.medication}): ${diffLoss.toFixed(1)} lb more loss than Cycle 1.` : diffLoss < 0 ? `Cycle 1 (${c1.medication}): ${(-diffLoss).toFixed(1)} lb more loss than Cycle 2.` : 'Similar weight change in both cycles.'}
+                                </p>
+                              )}
+                              {addedInC2.length > 0 && (
+                                <p className="text-cyan-400 text-xs">Added in Cycle 2: {addedInC2.join(', ')}</p>
+                              )}
+                            </div>
+                          )}
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {hasAnyWeight && (
+                            <div>
+                              <h4 className="text-gray-400 text-xs font-medium mb-2">Weight · Cycle 1 vs 2</h4>
+                              <ResponsiveContainer width="100%" height={180}>
+                                <LineChart data={compareData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                  <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
+                                  <YAxis stroke="#94a3b8" fontSize={10} width={32} />
+                                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
+                                  <Legend />
+                                  <Line type="monotone" dataKey="weight1" name={c1.medication} stroke="#e8b84c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                                  <Line type="monotone" dataKey="weight2" name={c2.medication} stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                          {hasAnyWaist && (
+                            <div>
+                              <h4 className="text-gray-400 text-xs font-medium mb-2">Waist · Cycle 1 vs 2</h4>
+                              <ResponsiveContainer width="100%" height={180}>
+                                <LineChart data={compareData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                  <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
+                                  <YAxis stroke="#94a3b8" fontSize={10} width={32} />
+                                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
+                                  <Legend />
+                                  <Line type="monotone" dataKey="waist1" name={c1.medication} stroke="#e8b84c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                                  <Line type="monotone" dataKey="waist2" name={c2.medication} stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                          {!hasAnyWeight && !hasAnyWaist && <p className="text-gray-500 text-sm col-span-2">No weight or waist data in these cycles to compare.</p>}
+                        </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -4340,6 +4980,29 @@ const wipeAllData = () => {
                   })}
                 </div>
                 <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
+              </div>
+            )}
+
+            {/* Injection site heatmap — rotate to green areas */}
+            {getInjectionSiteCounts().length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-medium text-sm mb-1 flex items-center gap-2">Injection site rotation</h3>
+                <p className="text-gray-400 text-xs mb-3">Last 30 days. Rotate to green areas to avoid bruising and lumps.</p>
+                <div className="flex flex-wrap gap-2">
+                  {getInjectionSiteCounts().map(({ site, count, status }) => (
+                    <div
+                      key={site}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                        status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
+                        status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+                        'bg-red-500/20 text-red-400 border border-red-500/40'
+                      }`}
+                    >
+                      {site} <span className="opacity-80">({count})</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-gray-500 text-xs mt-2">Green = 1–2 injections · Yellow = 3–5 · Red = 6+ (rotate away)</p>
               </div>
             )}
 
@@ -4900,46 +5563,14 @@ const wipeAllData = () => {
             {activeToolSection === 'calculator' && (
               <>
                 <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Calculator className="h-5 w-5 text-gold-400" />Dose Calculator</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml)</label>
-                      <input type="number" step="0.01" value={calcConcentration} onChange={(e) => setCalcConcentration(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2.5" />
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Desired Dose</label>
-                      <div className="flex gap-2">
-                        <input type="number" step="0.01" value={calcDesiredDose} onChange={(e) => setCalcDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 0.5" />
-                        <select value={calcDesiredUnit} onChange={(e) => setCalcDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
-                      </div>
-                    </div>
-                    <button onClick={calculateDose} className="w-full btn-secondary text-white font-medium py-2 rounded-lg transform hover:scale-105 transition-all">Calculate</button>
-                    {calcResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-green-500">{calcResult.ml} mL</div>
-                        <div className="text-gray-400 text-sm">or</div>
-                        <div className="text-xl font-bold text-violet-400">{calcResult.units} units</div>
-                      </div>
-                    )}
-                    <div className="pt-2 border-t border-white/5">
-                      <button type="button" onClick={() => setShowCalculatorUnitRef(!showCalculatorUnitRef)} className="text-gray-400 hover:text-gold-400 text-xs font-medium flex items-center gap-1">
-                        {showCalculatorUnitRef ? 'Hide' : 'Show'} unit reference
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCalculatorUnitRef ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showCalculatorUnitRef && (
-                        <div className="mt-2 space-y-1 text-sm">
-                          <div className="flex justify-between text-gray-400"><span>1 mL</span><span className="text-white">= 100 units</span></div>
-                          <div className="flex justify-between text-gray-400"><span>1 mg</span><span className="text-white">= 1000 mcg</span></div>
-                          <div className="flex justify-between text-gray-400"><span>0.5 mL</span><span className="text-white">= 50 units</span></div>
-                          <div className="flex justify-between text-gray-400"><span>0.1 mL</span><span className="text-white">= 10 units</span></div>
-                        </div>
-                      )}
-                    </div>
+                  <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Activity className="h-5 w-5 text-green-500" />Reconstitution Calculator</h3>
+                  <div className="mb-3">
+                    <label className="text-gray-400 text-sm block mb-1">Calculate</label>
+                    <select value={reconMode} onChange={(e) => { setReconMode(e.target.value); setReconResult(null); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
+                      <option value="vial_bac">Vial + Bac water → Concentration & dose per draw</option>
+                      <option value="vial_dose">Vial + Desired dose → Bac water to add</option>
+                    </select>
                   </div>
-                </div>
-
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-green-500" />Reconstitution Calculator</h3>
                   <div className="space-y-3">
                     <div>
                       <label className="text-gray-400 text-sm block mb-1">Vial (peptide in vial)</label>
@@ -4948,24 +5579,59 @@ const wipeAllData = () => {
                         <select value={reconPeptideUnit} onChange={(e) => setReconPeptideUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
                       </div>
                     </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">BAC Water (mL)</label>
-                      <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" title="Bacteriostatic water volume added to the vial" />
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Desired Dose</label>
-                      <div className="flex gap-2">
-                        <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 250" />
-                        <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mcg">mcg</option><option value="mg">mg</option></select>
-                      </div>
-                    </div>
+                    {reconMode === 'vial_bac' && (
+                      <>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">BAC Water (mL)</label>
+                          <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" title="Bacteriostatic water volume added to the vial" />
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Desired dose per injection (optional)</label>
+                          <div className="flex gap-2">
+                            <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 250" />
+                            <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mcg">mcg</option><option value="mg">mg</option></select>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {reconMode === 'vial_dose' && (
+                      <>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Desired dose per injection</label>
+                          <div className="flex gap-2">
+                            <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 1" />
+                            <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Volume per dose (mL)</label>
+                          <input type="number" step="0.01" min="0.1" value={reconVolumePerDose} onChange={(e) => setReconVolumePerDose(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="0.5" title="How much volume you want to draw per injection" />
+                        </div>
+                      </>
+                    )}
                     <button onClick={calculateReconstitution} className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg">Calculate</button>
                     {reconResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center">
-                        <div className="text-gray-400 text-xs">Concentration: {reconResult.concentration} mg/mL</div>
-                        <div className="text-2xl font-bold text-green-500 mt-1">{reconResult.ml} mL</div>
-                        <div className="text-gray-400 text-sm">or</div>
-                        <div className="text-xl font-bold text-violet-400">{reconResult.units} units</div>
+                      <div className="bg-slate-700/50 rounded-lg p-4 text-center space-y-2">
+                        {reconResult.mode === 'vial_bac' && (
+                          <>
+                            <div className="text-gray-400 text-xs">Concentration: {reconResult.concentration} mg/mL ({reconResult.concentrationMcg} mcg/mL)</div>
+                            {reconResult.mlPerDose != null && reconResult.desiredDose && (
+                              <>
+                                <div className="text-gray-300 text-sm mt-1">For {reconResult.desiredDose} dose:</div>
+                                <div className="text-2xl font-bold text-green-500">{reconResult.mlPerDose} mL</div>
+                                <div className="text-gray-400 text-sm">or</div>
+                                <div className="text-xl font-bold text-violet-400">{reconResult.unitsPerDose} units</div>
+                              </>
+                            )}
+                          </>
+                        )}
+                        {reconResult.mode === 'vial_dose' && (
+                          <>
+                            <div className="text-gray-300 text-sm">Add bac water</div>
+                            <div className="text-2xl font-bold text-green-500">{reconResult.bacMl} mL</div>
+                            <div className="text-gray-400 text-xs mt-1">Then {reconResult.mlPerDose} mL = 1 dose ({reconResult.unitsPerDose} units) · {reconResult.concentration} mg/mL</div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -5117,6 +5783,46 @@ const wipeAllData = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Stack Timeline: which compounds are active by month */}
+                {getStackTimelineMonths().length > 0 && (
+                  <div className="ui-card p-4 mb-4">
+                    <h3 className="text-white font-medium mb-2 flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-gold-400" />
+                      Your stack timeline
+                    </h3>
+                    <p className="text-gray-400 text-xs mb-3">When each compound joined your stack (set Start date on each schedule).</p>
+                    <div className="space-y-2">
+                      {getStackTimelineMonths().map((m) => (
+                        <div key={m.label} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="text-gray-500 font-medium w-16 shrink-0">{m.label}</span>
+                          <span className="text-gray-300">
+                            {m.added.length > 0 && m.active.length > 0 && (
+                              <>
+                                {m.added.length === m.active.length ? m.active.map(med => (
+                                  <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs" style={{ backgroundColor: `${getMedicationColor(med)}22`, color: getMedicationColor(med) }}>{med}</span>
+                                )) : (
+                                  <>
+                                    {m.active.filter(x => !m.added.includes(x)).map(med => (
+                                      <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs bg-slate-600/50 text-gray-300">{med}</span>
+                                    ))}
+                                    {m.added.map(med => (
+                                      <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs border border-green-500/50 bg-green-500/10 text-green-400">+ {med}</span>
+                                    ))}
+                                  </>
+                                )}
+                              </>
+                            )}
+                            {m.added.length === 0 && m.active.length > 0 && m.active.map(med => (
+                              <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs bg-slate-600/50 text-gray-300">{med}</span>
+                            ))}
+                            {m.active.length === 0 && <span className="text-gray-500">—</span>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {schedules.length > 0 && (
                   <div className="ui-card p-4">
