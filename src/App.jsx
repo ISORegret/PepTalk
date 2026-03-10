@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.3.0';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1107,6 +1107,7 @@ const PepTalk = () => {
   const [timeRange, setTimeRange] = useState('all');
   const [activeToolSection, setActiveToolSection] = useState('calculator');
   const [exportFormat, setExportFormat] = useState('json'); // 'json' | 'csv'
+  const [csvType, setCsvType] = useState('full'); // 'full' | 'weight' | 'injections'
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -1131,18 +1132,9 @@ const PepTalk = () => {
   const [insightsExpandedMed, setInsightsExpandedMed] = useState(null); // medication name or null
   const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
   const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
+  const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
   const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
 
-  // Cycle tracking (peptide cycles: medication + start + duration in weeks)
-  const [cycleEntries, setCycleEntries] = useState([]);
-  const [cycleMedication, setCycleMedication] = useState('Retatrutide');
-  const [cycleStartDate, setCycleStartDate] = useState(getTodayLocal());
-  const [cycleDurationWeeks, setCycleDurationWeeks] = useState(12);
-  const [selectedCycleId, setSelectedCycleId] = useState(null);
-  const [compareCycle1Id, setCompareCycle1Id] = useState(null);
-  const [compareCycle2Id, setCompareCycle2Id] = useState(null);
-  const [editingCycleId, setEditingCycleId] = useState(null);
-  
   // Weight form states
   const [weight, setWeight] = useState('');
   const [weightDate, setWeightDate] = useState(getTodayLocal());
@@ -1223,6 +1215,15 @@ const PepTalk = () => {
   const [a1cDate, setA1cDate] = useState(getTodayLocal());
   const [showGlucoseForm, setShowGlucoseForm] = useState(false);
   const [showA1cForm, setShowA1cForm] = useState(false);
+
+  // Bloodwork / Labs (any lab type: Testosterone, LDL, etc.)
+  const [labEntries, setLabEntries] = useState([]);
+  const [labType, setLabType] = useState('Testosterone');
+  const [labValue, setLabValue] = useState('');
+  const [labUnit, setLabUnit] = useState('ng/dL');
+  const [labDate, setLabDate] = useState(getTodayLocal());
+  const [showLabForm, setShowLabForm] = useState(false);
+  const LAB_TYPES = ['A1C', 'Testosterone', 'Free Testosterone', 'LDL', 'HDL', 'Triglycerides', 'Fasting Glucose', 'HbA1c', 'Creatinine', 'eGFR', 'Other'];
 
   // Daily track (hydration & protein from meals + optional extra water)
   const [dailyTrackEntries, setDailyTrackEntries] = useState([]);
@@ -1309,8 +1310,7 @@ const PepTalk = () => {
       const dailyTrackData = localStorage.getItem('health-daily-track');
       const glucoseData = localStorage.getItem('health-glucose-entries');
       const a1cData = localStorage.getItem('health-a1c-entries');
-      const cycleData = localStorage.getItem('health-cycles');
-      
+      const labData = localStorage.getItem('health-lab-entries');
       if (weightData) {
         const parsed = JSON.parse(weightData);
         setWeightEntries(sortWeightByDateAsc(parsed));
@@ -1330,7 +1330,7 @@ const PepTalk = () => {
       if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
-      if (cycleData) setCycleEntries(JSON.parse(cycleData));
+      if (labData) setLabEntries(JSON.parse(labData));
       const vialsData = localStorage.getItem('health-vials');
       if (vialsData) {
         const parsed = JSON.parse(vialsData);
@@ -1433,6 +1433,23 @@ const PepTalk = () => {
     const updated = a1cEntries.filter(e => e.id !== id);
     setA1cEntries(updated);
     saveData('health-a1c-entries', updated);
+  };
+
+  const addLabEntry = () => {
+    const v = parseFloat(labValue);
+    if (!labType.trim() || isNaN(v)) return;
+    const entry = { id: Date.now(), type: labType.trim(), value: v, unit: labUnit.trim() || '—', date: labDate };
+    const updated = [...labEntries, entry].sort((a, b) => b.date.localeCompare(a.date));
+    setLabEntries(updated);
+    saveData('health-lab-entries', updated);
+    setLabValue('');
+    setLabDate(getTodayLocal());
+    setShowLabForm(false);
+  };
+  const deleteLabEntry = (id) => {
+    const updated = labEntries.filter(e => e.id !== id);
+    setLabEntries(updated);
+    saveData('health-lab-entries', updated);
   };
 
   // Fasting window CRUD operations
@@ -1781,9 +1798,9 @@ const PepTalk = () => {
       dailyTrackEntries,
       glucoseEntries,
       a1cEntries,
+      labEntries,
       userProfile,
-      vials,
-      cycleEntries
+      vials
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -1886,9 +1903,9 @@ const PepTalk = () => {
           setA1cEntries(imported.a1cEntries);
           saveData('health-a1c-entries', imported.a1cEntries);
         }
-        if (imported.cycleEntries) {
-          setCycleEntries(imported.cycleEntries);
-          saveData('health-cycles', imported.cycleEntries);
+        if (imported.labEntries) {
+          setLabEntries(imported.labEntries);
+          saveData('health-lab-entries', imported.labEntries);
         }
         if (imported.userProfile) {
           setUserProfile(imported.userProfile);
@@ -1968,13 +1985,22 @@ ${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeig
     const sortedGlucose = sortByDateDesc(glucoseEntries);
     const sortedA1c = sortByDateDesc(a1cEntries);
     const rows = [];
-    rows.push('Type,Date,Value,Medication,Dose,Unit,Route,Site');
-    sortedWeights.forEach(e => rows.push(`Weight,${e.date},${e.weight},,,,,`));
-    sortedInjections.forEach(e => rows.push(`Injection,${e.date},,${e.type},${e.dose},${e.unit},${e.route || ''},${e.site || ''}`));
-    sortedGlucose.forEach(e => rows.push(`Glucose,${e.date},${e.value} mg/dL (${e.type}),,,`));
-    sortedA1c.forEach(e => rows.push(`A1C,${e.date},${e.value}%,,,`));
+    if (csvType === 'weight') {
+      rows.push('Date,Weight (lbs)');
+      sortedWeights.forEach(e => rows.push(`${e.date},${e.weight}`));
+    } else if (csvType === 'injections') {
+      rows.push('Date,Medication,Dose,Unit,Route,Site');
+      sortedInjections.forEach(e => rows.push(`${e.date},${e.type},${e.dose},${e.unit || ''},${e.route || ''},${e.site || ''}`));
+    } else {
+      rows.push('Type,Date,Value,Medication,Dose,Unit,Route,Site');
+      sortedWeights.forEach(e => rows.push(`Weight,${e.date},${e.weight},,,,,`));
+      sortedInjections.forEach(e => rows.push(`Injection,${e.date},,${e.type},${e.dose},${e.unit},${e.route || ''},${e.site || ''}`));
+      sortedGlucose.forEach(e => rows.push(`Glucose,${e.date},${e.value} mg/dL (${e.type}),,,`));
+      sortedA1c.forEach(e => rows.push(`A1C,${e.date},${e.value}%,,,`));
+      labEntries.sort((a, b) => a.date.localeCompare(b.date)).forEach(e => rows.push(`Lab,${e.date},${e.value} ${e.unit},${e.type},,,,`));
+    }
     const csv = rows.join('\n');
-    const filename = `PepTalk-export-${getTodayLocal()}.csv`;
+    const filename = csvType === 'weight' ? `PepTalk-weight-${getTodayLocal()}.csv` : csvType === 'injections' ? `PepTalk-injections-${getTodayLocal()}.csv` : `PepTalk-export-${getTodayLocal()}.csv`;
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -2027,6 +2053,7 @@ const wipeAllData = () => {
     'health-daily-track',
     'health-glucose-entries',
     'health-a1c-entries',
+    'health-lab-entries',
     'health-user-profile',
     'health-vials',
   ];
@@ -2043,6 +2070,7 @@ const wipeAllData = () => {
   setDailyTrackEntries([]);
   setGlucoseEntries([]);
   setA1cEntries([]);
+  setLabEntries([]);
   setVials([]);
   setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
 
@@ -2472,65 +2500,6 @@ const wipeAllData = () => {
     });
   };
 
-  // Cycle tracking: get per-week aggregates for a cycle (weight, waist, glucose, appetite from journal hunger)
-  const getCycleWeekData = (cycle) => {
-    if (!cycle?.startDate || !cycle?.durationWeeks) return [];
-    const start = parseLocalDate(cycle.startDate);
-    const data = [];
-    for (let w = 1; w <= cycle.durationWeeks; w++) {
-      const weekStart = new Date(start);
-      weekStart.setDate(start.getDate() + (w - 1) * 7);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-      const startStr = formatDateLocal(weekStart);
-      const endStr = formatDateLocal(weekEnd);
-      const inRange = (d) => d >= startStr && d <= endStr;
-      const weights = weightEntries.filter(e => inRange(e.date)).map(e => parseFloat(e.weight));
-      const waistEntries = measurementEntries.filter(e => e.type === 'Waist' && inRange(e.date)).map(e => parseFloat(e.value));
-      const glucoseEntriesInRange = glucoseEntries.filter(e => inRange(e.date)).map(e => parseFloat(e.value));
-      const journalInRange = journalEntries.filter(e => inRange(e.date) && e.hunger != null).map(e => Number(e.hunger));
-      data.push({
-        week: w,
-        weekLabel: `Week ${w}`,
-        weight: weights.length ? Math.round((weights.reduce((a, b) => a + b, 0) / weights.length) * 10) / 10 : null,
-        waist: waistEntries.length ? Math.round((waistEntries.reduce((a, b) => a + b, 0) / waistEntries.length) * 10) / 10 : null,
-        glucose: glucoseEntriesInRange.length ? Math.round(glucoseEntriesInRange.reduce((a, b) => a + b, 0) / glucoseEntriesInRange.length) : null,
-        appetite: journalInRange.length ? Math.round((journalInRange.reduce((a, b) => a + b, 0) / journalInRange.length) * 10) / 10 : null
-      });
-    }
-    return data;
-  };
-
-  const addOrUpdateCycle = () => {
-    const start = cycleStartDate.trim();
-    const duration = parseInt(cycleDurationWeeks, 10);
-    if (!start || isNaN(duration) || duration < 1) return;
-    if (editingCycleId) {
-      const updated = cycleEntries.map(c => c.id === editingCycleId ? { ...c, medication: cycleMedication, startDate: start, durationWeeks: duration } : c);
-      setCycleEntries(updated);
-      saveData('health-cycles', updated);
-      setEditingCycleId(null);
-    } else {
-      const newCycle = { id: Date.now(), medication: cycleMedication, startDate: start, durationWeeks: duration };
-      const updated = [...cycleEntries, newCycle].sort((a, b) => b.startDate.localeCompare(a.startDate));
-      setCycleEntries(updated);
-      saveData('health-cycles', updated);
-    }
-    setCycleStartDate(getTodayLocal());
-    setCycleDurationWeeks(12);
-    setCycleMedication('Retatrutide');
-  };
-
-  const deleteCycle = (id) => {
-    const updated = cycleEntries.filter(c => c.id !== id);
-    setCycleEntries(updated);
-    saveData('health-cycles', updated);
-    if (selectedCycleId === id) setSelectedCycleId(null);
-    if (compareCycle1Id === id) setCompareCycle1Id(null);
-    if (compareCycle2Id === id) setCompareCycle2Id(null);
-    setEditingCycleId(null);
-  };
-
   // Stack timeline: which meds are active by month (from schedules with startDate)
   const getStackTimelineMonths = () => {
     const withStart = schedules.filter(s => s.startDate);
@@ -2579,6 +2548,25 @@ const wipeAllData = () => {
       const status = count <= 2 ? 'green' : count <= 5 ? 'yellow' : 'red';
       return { site, count, status };
     }).filter(x => x.count > 0).sort((a, b) => b.count - a.count);
+  };
+
+  // All body locations with count and status for body map (0 = green/safe)
+  const getInjectionSiteCountsForMap = () => {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = formatDateLocal(cutoff);
+    const recent = injectionEntries.filter(e => e.date >= cutoffStr);
+    const bySite = {};
+    recent.forEach(e => {
+      const site = e.site || 'Other';
+      bySite[site] = (bySite[site] || 0) + 1;
+    });
+    return BODY_LOCATIONS.map(site => {
+      const count = bySite[site] || 0;
+      const status = count <= 2 ? 'green' : count <= 5 ? 'yellow' : 'red';
+      return { site, count, status };
+    });
   };
 
   // Side-effect intelligence: correlate side effects with days since injection, suggest tips
@@ -2722,6 +2710,18 @@ const wipeAllData = () => {
     setDailyTrackEntries(updated);
     saveData('health-daily-track', updated);
     setExtraHydrationOz('');
+  };
+
+  const addQuickWater = (oz) => {
+    const existing = dailyTrackEntries.find(e => e.date === todayStr);
+    const currentExtra = existing?.extraHydrationOz ?? (existing && todayMeals.length === 0 ? (existing.hydrationOz ?? 0) : 0) ?? 0;
+    const newExtra = currentExtra + oz;
+    const updated = existing
+      ? dailyTrackEntries.map(e => e.date === todayStr ? { ...e, extraHydrationOz: newExtra } : e)
+      : [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals: [], extraHydrationOz: newExtra }];
+    updated.sort((a, b) => b.date.localeCompare(a.date));
+    setDailyTrackEntries(updated);
+    saveData('health-daily-track', updated);
   };
 
   const addNutritionEntry = () => {
@@ -3023,7 +3023,7 @@ const wipeAllData = () => {
   // Unified chart: one graph with one curve per medication, estimated levels from half-life decay
   const getUnifiedMedicationLevelChartData = () => {
     const now = new Date();
-    const daysBack = 21;
+    const daysBack = insightsChartRange === '1w' ? 7 : insightsChartRange === '1m' ? 30 : insightsChartRange === '3m' ? 90 : 365;
     const medNames = [...new Set(injectionEntries.map(inj => inj.type))];
     const medications = medNames.map(name => MEDICATIONS.find(m => m.name === name)).filter(Boolean);
     if (medications.length === 0) return { data: [], medications: [] };
@@ -3076,7 +3076,12 @@ const wipeAllData = () => {
         row[med.name] = lastDoseMg > 0 ? Math.round((totalRemainingMg / lastDoseMg) * 100) : null;
         const lastInjDate = parseLocalDate(toCalendarDay(lastInj.date));
         const hoursSinceInjection = (date.getTime() - lastInjDate.getTime()) / (1000 * 60 * 60);
-        row.phaseByMed[med.name] = getPhaseLabelForDay(hoursSinceInjection, med, injectionMeds.has(med.name));
+        // Use same phase source as detail panel (MEDICATION_PHASE_TIMELINES) so graph and panel match
+        const isInjectionDay = injectionMeds.has(med.name);
+        const phaseFromTimeline = getCurrentPhase(hoursSinceInjection, med.category, med.name);
+        row.phaseByMed[med.name] = (isInjectionDay && hoursSinceInjection < 24)
+          ? 'Injection'
+          : (phaseFromTimeline ? phaseFromTimeline.name : getPhaseLabelForDay(hoursSinceInjection, med, isInjectionDay));
       });
       data.push(row);
     }
@@ -3354,7 +3359,7 @@ const wipeAllData = () => {
       <div className="max-w-2xl mx-auto px-1">
         <header className="text-center mb-5">
           <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
-          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Cycles · Tools</p>
+          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Journal · Tools</p>
         </header>
 
         {/* Upcoming Injections Alert */}
@@ -3389,7 +3394,6 @@ const wipeAllData = () => {
               { id: 'weight', icon: Scale, label: 'Weight' },
               { id: 'injections', icon: Syringe, label: 'Injections' },
               { id: 'insights', icon: Activity, label: 'Insights' },
-              { id: 'cycles', icon: CalendarDays, label: 'Cycles' },
               { id: 'journal', icon: BookOpen, label: 'Journal' },
               { id: 'more', icon: MoreHorizontal, label: 'More' }
             ].map(tab => (
@@ -3406,7 +3410,7 @@ const wipeAllData = () => {
         </div>
 
         {/* SUMMARY TAB */}
-        {activeTab === 'summary' && (
+        {(activeTab === 'summary' || activeTab === 'cycles') && (
           <div key="summary" className="space-y-4 tab-enter">
             {/* Time Range Selector */}
             <div className="ui-segmented">
@@ -3440,6 +3444,51 @@ const wipeAllData = () => {
                 Log injection
               </button>
             </div>
+
+            {/* In-app reminder: dose due today or overdue */}
+            {upcomingInjections.some(inj => inj.isDueToday || inj.isOverdue) && (() => {
+              const due = upcomingInjections.find(inj => inj.isDueToday || inj.isOverdue);
+              if (!due) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
+                  className="w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0" />
+                    <div>
+                      <span className="text-gold-400 font-semibold">
+                        {due.isOverdue ? `${due.medication} — ${Math.abs(due.daysUntil)} day${Math.abs(due.daysUntil) !== 1 ? 's' : ''} overdue` : `${due.medication} due today`}
+                      </span>
+                      <p className="text-gray-400 text-xs mt-0.5">Tap to log injection</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })()}
+
+            {/* Dashboard phase line: current phase for all active meds */}
+            {getMedicationInsights().length > 0 && (() => {
+              const insights = getMedicationInsights().filter(i => i.phase);
+              if (insights.length === 0) return null;
+              return (
+                <div className="ui-card p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-400 text-sm">Current phase</span>
+                    <button type="button" onClick={() => setActiveTab('insights')} className="text-gold-400 hover:text-gold-300 text-xs font-medium">View Insights</button>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                    {insights.map(insight => (
+                      <span key={insight.medication} className="text-sm">
+                        <span className={`font-semibold ${insight.phaseColor}`}>{insight.phase}</span>
+                        <span className="text-gray-400"> for {insight.medication}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Low-vial alert: remaining &lt; typical dose */}
             {vials.length > 0 && (() => {
@@ -3601,9 +3650,21 @@ const wipeAllData = () => {
                   <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                     <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${pct}%` }} />
                   </div>
-                  <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-1.5">
-                    Edit goal in More → Profile
-                  </button>
+                  <div className="flex items-center justify-between mt-2 gap-2">
+                    {goal > 0 && (
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => addQuickWater(8)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
+                          +8 oz
+                        </button>
+                        <button type="button" onClick={() => addQuickWater(16)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
+                          +16 oz
+                        </button>
+                      </div>
+                    )}
+                    <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs ml-auto">
+                      Edit goal
+                    </button>
+                  </div>
                 </div>
               );
             })()}
@@ -3686,25 +3747,33 @@ const wipeAllData = () => {
                   </button>
                 </div>
                 <div className="space-y-2">
-                  {upcomingInjections.slice(0, 3).map((inj, idx) => (
-                    <div key={idx} className="flex items-center justify-between rounded-lg p-3 ui-card-inner">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(inj.medication)}20` }}>
-                          <Syringe className="h-4 w-4" style={{ color: getMedicationColor(inj.medication) }} />
+                  {upcomingInjections.slice(0, 3).map((inj, idx) => {
+                    const suggestedSite = getSuggestedInjectionSite(inj.medication);
+                    return (
+                      <div key={idx} className="rounded-lg p-3 ui-card-inner space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(inj.medication)}20` }}>
+                              <Syringe className="h-4 w-4" style={{ color: getMedicationColor(inj.medication) }} />
+                            </div>
+                            <span className="text-white">{inj.medication}</span>
+                          </div>
+                          <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-gold-400' : 'text-gray-400'}`}>
+                            {inj.isOverdue
+                              ? `${Math.abs(inj.daysUntil)} ${Math.abs(inj.daysUntil) === 1 ? 'day' : 'days'} overdue`
+                              : inj.isDueToday
+                                ? 'Due today'
+                                : inj.daysUntil === 1
+                                  ? 'Tomorrow'
+                                  : `In ${inj.daysUntil} days`}
+                          </div>
                         </div>
-                        <span className="text-white">{inj.medication}</span>
+                        {suggestedSite && (
+                          <p className="text-gray-500 text-xs pl-11">Suggested site: <span className="text-gold-400">{suggestedSite}</span></p>
+                        )}
                       </div>
-                      <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-gold-400' : 'text-gray-400'}`}>
-                        {inj.isOverdue
-                          ? `${Math.abs(inj.daysUntil)} ${Math.abs(inj.daysUntil) === 1 ? 'day' : 'days'} overdue`
-                          : inj.isDueToday
-                            ? 'Due today'
-                            : inj.daysUntil === 1
-                              ? 'Tomorrow'
-                              : `In ${inj.daysUntil} days`}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -4140,6 +4209,15 @@ const wipeAllData = () => {
             {getMedicationInsights().length > 0 && (() => {
               const { data: unifiedData, medications: unifiedMeds } = getUnifiedMedicationLevelChartData();
               if (unifiedData.length === 0) return null;
+              const visibleMeds = unifiedMeds.filter(med => !insightsChartHiddenMeds.has(med.name));
+              const dataMax = unifiedData.reduce((m, row) => {
+                visibleMeds.forEach(med => { const v = row[med.name]; if (v != null && v > m) m = v; });
+                return m;
+              }, 0);
+              const yMax = Math.max(200, Math.ceil((dataMax * 1.12) / 50) * 50);
+              const yTicks = [];
+              for (let t = 0; t <= yMax; t += (yMax <= 300 ? 50 : yMax <= 500 ? 100 : 200)) yTicks.push(t);
+              if (yTicks[yTicks.length - 1] < yMax) yTicks.push(yMax);
               const toggleMedVisibility = (medName) => {
                 setInsightsChartHiddenMeds(prev => {
                   const next = new Set(prev);
@@ -4150,18 +4228,31 @@ const wipeAllData = () => {
               };
               return (
                 <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold mb-1 text-sm">Estimated medication levels</h3>
-                  <p className="text-gray-400 text-xs mb-3">Based on half-life and your logged doses (last 21 days). Hover a point to see dose injected and phase (Rising → Peak → Falling → Trough). Click a name in the legend to show or hide that curve. Green ring = injection day.</p>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <LineChart data={unifiedData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <ReferenceArea y1={0} y2={100} fill="#475569" fillOpacity={0.08} />
-                      <ReferenceArea y1={100} y2={150} fill="#eab308" fillOpacity={0.08} />
-                      <ReferenceArea y1={150} y2={200} fill="#10b981" fillOpacity={0.08} />
-                      <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} tickMargin={4} interval="preserveStartEnd" />
-                      <YAxis stroke="#94a3b8" fontSize={9} tickFormatter={(v) => `${v}%`} domain={[0, 200]} ticks={[0, 50, 100, 150, 200]} width={36} />
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <h3 className="text-white font-semibold text-sm">Estimated medication levels</h3>
+                    <div className="flex rounded-lg bg-white/[0.06] p-0.5">
+                      {[{ id: '1w', label: 'Week' }, { id: '1m', label: 'Month' }, { id: '3m', label: '3 mo' }, { id: 'all', label: 'All' }].map(({ id, label }) => (
+                        <button key={id} type="button" onClick={() => setInsightsChartRange(id)} className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${insightsChartRange === id ? 'bg-white/15 text-white font-medium' : 'text-gray-400 hover:text-gray-300'}`}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-gray-500 text-xs mb-4">Half-life model from logged doses. Hover for dose & phase · click legend to toggle.</p>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <ComposedChart data={unifiedData} margin={{ top: 16, right: 8, left: 4, bottom: 8 }}>
+                      <defs>
+                        {visibleMeds.map(med => (
+                          <linearGradient key={med.name} id={`area-${med.name.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={med.color} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={med.color} stopOpacity={0} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid stroke="#334155" strokeOpacity={0.3} strokeDasharray="2 4" vertical={true} horizontal={true} />
+                      <ReferenceLine y={100} stroke="#64748b" strokeOpacity={0.55} strokeDasharray="3 3" />
+                      <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickMargin={6} interval="preserveStartEnd" tickLine={false} axisLine={{ stroke: '#334155', strokeOpacity: 0.6 }} />
+                      <YAxis stroke="#64748b" fontSize={10} tickFormatter={(v) => `${v}%`} domain={[0, yMax]} ticks={yTicks} width={36} tickLine={false} axisLine={false} />
                       <Tooltip
-                        cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
+                        cursor={{ stroke: '#64748b', strokeWidth: 1, strokeOpacity: 0.5 }}
                         wrapperStyle={{ zIndex: 1000 }}
                         contentStyle={{ backgroundColor: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}
                         content={({ active, payload }) => {
@@ -4175,17 +4266,17 @@ const wipeAllData = () => {
                             <div
                               className="space-y-2"
                               style={{
-                                backgroundColor: 'rgba(248, 250, 252, 0.92)',
-                                border: '2px solid #94a3b8',
-                                borderRadius: '12px',
-                                padding: '12px 14px',
-                                minWidth: '180px',
-                                boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
-                                backdropFilter: 'blur(8px)',
-                                color: '#0f172a'
+                                backgroundColor: 'rgba(30, 41, 59, 0.97)',
+                                border: '1px solid rgba(148, 163, 184, 0.2)',
+                                borderRadius: '8px',
+                                padding: '10px 12px',
+                                minWidth: '160px',
+                                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                                backdropFilter: 'blur(12px)',
+                                color: '#e2e8f0'
                               }}
                             >
-                              <div className="text-slate-600 text-xs font-semibold border-b border-slate-300 pb-1.5 mb-1.5">{dateLabel}</div>
+                              <div className="text-slate-400 text-[11px] font-medium border-b border-slate-600/50 pb-1.5 mb-1.5">{dateLabel}</div>
                               {unifiedMeds.filter(m => row[m.name] != null).map((med) => {
                                 const value = row[med.name];
                                 const doseInfo = injectionDoses[med.name];
@@ -4193,17 +4284,13 @@ const wipeAllData = () => {
                                 return (
                                   <div key={med.name} className="flex items-start justify-between gap-3 text-xs">
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: med.color }} />
-                                      <span className="font-medium text-slate-800 truncate">{med.name}</span>
+                                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: med.color }} />
+                                      <span className="text-slate-200 truncate">{med.name}</span>
                                     </div>
                                     <div className="text-right flex-shrink-0">
-                                      <span className="font-semibold text-slate-900">{value != null ? `${value}%` : '—'}</span>
-                                      {doseInfo && (
-                                        <div className="text-green-700 text-[10px] mt-0.5 font-medium">💉 {doseInfo.dose}{doseInfo.unit} injected</div>
-                                      )}
-                                      {phase && (
-                                        <div className="text-slate-500 text-[10px] mt-0.5">{phase}</div>
-                                      )}
+                                      <span className="font-medium text-white">{value != null ? `${value}%` : '—'}</span>
+                                      {doseInfo && <div className="text-emerald-400/90 text-[10px] mt-0.5">{doseInfo.dose}{doseInfo.unit}</div>}
+                                      {phase && <div className="text-slate-500 text-[10px] mt-0.5">{phase}</div>}
                                     </div>
                                   </div>
                                 );
@@ -4214,49 +4301,66 @@ const wipeAllData = () => {
                       />
                       <Legend
                         content={() => (
-                          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 mt-2">
-                            {unifiedMeds.map((med) => {
-                              const isHidden = insightsChartHiddenMeds.has(med.name);
-                              return (
-                                <button
-                                  key={med.name}
-                                  type="button"
-                                  onClick={() => toggleMedVisibility(med.name)}
-                                  className="flex items-center gap-1.5 text-xs rounded-md px-2 py-1 hover:bg-white/5 transition-colors"
-                                >
-                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: isHidden ? '#64748b' : med.color }} />
-                                  <span className={isHidden ? 'text-gray-500 line-through' : 'text-gray-300'}>{med.name}</span>
-                                </button>
-                              );
-                            })}
+                          <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
+                            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                              {unifiedMeds.map((med) => {
+                                const isHidden = insightsChartHiddenMeds.has(med.name);
+                                return (
+                                  <button
+                                    key={med.name}
+                                    type="button"
+                                    onClick={() => toggleMedVisibility(med.name)}
+                                    className="flex items-center gap-1.5 text-[11px] rounded px-2 py-1 hover:bg-white/[0.06] transition-colors"
+                                  >
+                                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isHidden ? '#475569' : med.color }} />
+                                    <span className={isHidden ? 'text-gray-500 line-through' : 'text-gray-400'}>{med.name}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-500">
+                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-amber-400/90" />
+                              <span>Injection day</span>
+                            </div>
                           </div>
                         )}
                       />
-                      {unifiedMeds.filter(med => !insightsChartHiddenMeds.has(med.name)).map(med => (
+                      {visibleMeds.map(med => (
+                        <Area key={`area-${med.name}`} type="monotone" dataKey={med.name} fill={`url(#area-${med.name.replace(/\s/g, '')})`} stroke="none" connectNulls={false} isAnimationActive={true} />
+                      ))}
+                      {visibleMeds.map(med => {
+                        const INJECTION_DAY_COLOR = '#eab308';
+                        return (
                         <Line
                           key={med.name}
                           type="monotone"
                           dataKey={med.name}
                           stroke={med.color}
-                          strokeWidth={2.5}
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                           connectNulls={false}
                           isAnimationActive={true}
                           dot={(props) => {
                             const { cx, cy, payload, dataKey } = props;
                             if (payload[dataKey] == null) return null;
                             const isInjectionDay = payload.injectionMeds && payload.injectionMeds.has(dataKey);
+                            if (!isInjectionDay) return null;
+                            return <circle key={props.key} cx={cx} cy={cy} r={2.5} fill={INJECTION_DAY_COLOR} stroke="rgba(15,23,42,0.5)" strokeWidth={1} />;
+                          }}
+                          activeDot={(props) => {
+                            const { cx, cy, payload, dataKey } = props;
+                            const isInjectionDay = payload?.injectionMeds && payload.injectionMeds.has(dataKey);
                             return (
-                              <g key={props.key}>
-                                {isInjectionDay && (
-                                  <circle cx={cx} cy={cy} r={8} fill="none" stroke="#10b981" strokeWidth={2} strokeDasharray="3 2" />
-                                )}
-                                <circle cx={cx} cy={cy} r={isInjectionDay ? 5 : 3} fill={med.color} stroke={isInjectionDay ? '#10b981' : 'transparent'} strokeWidth={isInjectionDay ? 2 : 0} />
+                              <g>
+                                <circle cx={cx} cy={cy} r={3.5} fill={med.color} stroke="rgba(30,41,59,0.95)" strokeWidth={1.5} />
+                                {isInjectionDay && <circle cx={cx} cy={cy} r={4.5} fill="none" stroke={INJECTION_DAY_COLOR} strokeWidth={1} strokeOpacity={0.45} />}
                               </g>
                             );
                           }}
                         />
-                      ))}
-                    </LineChart>
+                      ); })}
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               );
@@ -4422,252 +4526,6 @@ const wipeAllData = () => {
                   </div>
                 );
                 })}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* CYCLES TAB — peptide/medication cycles with weekly metrics and compare */}
-        {activeTab === 'cycles' && (
-          <div key="cycles" className="space-y-4 tab-enter">
-            <div className="text-center pb-2">
-              <h2 className="text-xl font-bold text-white tracking-tight">Cycles</h2>
-              <p className="text-gray-400 text-sm mt-1">Track peptide/medication cycles. View weight, waist, glucose & appetite by week. Compare cycles.</p>
-            </div>
-
-            {/* Add / Edit cycle form */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-semibold mb-3 text-sm">{editingCycleId ? 'Edit cycle' : 'Add cycle'}</h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="text-gray-400 text-xs block mb-1">Medication</label>
-                  <select value={cycleMedication} onChange={(e) => setCycleMedication(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm">
-                    {MEDICATIONS.filter(m => m.name !== 'Other').map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-gray-400 text-xs block mb-1">Start date</label>
-                  <input type="date" value={cycleStartDate} onChange={(e) => setCycleStartDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="text-gray-400 text-xs block mb-1">Duration (weeks)</label>
-                  <input type="number" min={1} max={52} value={cycleDurationWeeks} onChange={(e) => setCycleDurationWeeks(parseInt(e.target.value, 10) || 12)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div className="flex items-end gap-2">
-                  <button type="button" onClick={addOrUpdateCycle} className="ui-btn-primary px-4 py-2 text-sm flex-1">{editingCycleId ? 'Save' : 'Add cycle'}</button>
-                  {editingCycleId && <button type="button" onClick={() => { setEditingCycleId(null); setCycleMedication('Retatrutide'); setCycleStartDate(getTodayLocal()); setCycleDurationWeeks(12); }} className="px-3 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>}
-                </div>
-              </div>
-            </div>
-
-            {/* Cycle list */}
-            {cycleEntries.length === 0 ? (
-              <div className="ui-card p-8 text-center">
-                <CalendarDays className="h-12 w-12 text-gray-500 mx-auto mb-3" />
-                <h3 className="text-white font-semibold mb-1">No cycles yet</h3>
-                <p className="text-gray-400 text-sm">Add a cycle (e.g. Retatrutide 12 weeks) to see weight, waist, glucose and appetite by week and compare with other cycles.</p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  {cycleEntries.map((cycle) => {
-                    const endDate = (() => { const d = parseLocalDate(cycle.startDate); d.setDate(d.getDate() + cycle.durationWeeks * 7 - 1); return d; })();
-                    const med = MEDICATIONS.find(m => m.name === cycle.medication);
-                    const color = med?.color || '#6b7280';
-                    return (
-                      <div key={cycle.id} className="ui-card p-4 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}22` }}>
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-white">{cycle.medication}</div>
-                            <div className="text-gray-400 text-xs">{cycle.durationWeeks} weeks · {parseLocalDate(cycle.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – {endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => setSelectedCycleId(selectedCycleId === cycle.id ? null : cycle.id)} className="px-3 py-1.5 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 text-sm">{selectedCycleId === cycle.id ? 'Hide' : 'View'}</button>
-                          <button type="button" onClick={() => { setEditingCycleId(cycle.id); setCycleMedication(cycle.medication); setCycleStartDate(cycle.startDate); setCycleDurationWeeks(cycle.durationWeeks); }} className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10"><Edit2 className="h-4 w-4" /></button>
-                          <button type="button" onClick={() => window.confirm('Delete this cycle?') && deleteCycle(cycle.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Single cycle view: charts by week */}
-                {selectedCycleId && (() => {
-                  const cycle = cycleEntries.find(c => c.id === selectedCycleId);
-                  if (!cycle) return null;
-                  const weekData = getCycleWeekData(cycle);
-                  if (weekData.length === 0) return null;
-                  const hasWeight = weekData.some(d => d.weight != null);
-                  const hasWaist = weekData.some(d => d.waist != null);
-                  const hasGlucose = weekData.some(d => d.glucose != null);
-                  const hasAppetite = weekData.some(d => d.appetite != null);
-                  return (
-                    <div className="ui-card p-4 space-y-4">
-                      <h3 className="text-white font-semibold">Week-by-week · {cycle.medication}</h3>
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        {hasWeight && (
-                          <div>
-                            <h4 className="text-gray-400 text-xs font-medium mb-2">Weight (lb)</h4>
-                            <ResponsiveContainer width="100%" height={160}>
-                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
-                                <YAxis stroke="#94a3b8" fontSize={10} width={32} />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
-                                <Line type="monotone" dataKey="weight" stroke="#e8b84c" strokeWidth={2} dot={{ fill: '#e8b84c', r: 3 }} connectNulls />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                        {hasWaist && (
-                          <div>
-                            <h4 className="text-gray-400 text-xs font-medium mb-2">Waist (in)</h4>
-                            <ResponsiveContainer width="100%" height={160}>
-                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
-                                <YAxis stroke="#94a3b8" fontSize={10} width={32} />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
-                                <Line type="monotone" dataKey="waist" stroke="#06b6d4" strokeWidth={2} dot={{ fill: '#06b6d4', r: 3 }} connectNulls />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                        {hasGlucose && (
-                          <div>
-                            <h4 className="text-gray-400 text-xs font-medium mb-2">Glucose (mg/dL)</h4>
-                            <ResponsiveContainer width="100%" height={160}>
-                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
-                                <YAxis stroke="#94a3b8" fontSize={10} width={32} />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
-                                <Line type="monotone" dataKey="glucose" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 3 }} connectNulls />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                        {hasAppetite && (
-                          <div>
-                            <h4 className="text-gray-400 text-xs font-medium mb-2">Hunger (1–10, from Journal)</h4>
-                            <ResponsiveContainer width="100%" height={160}>
-                              <LineChart data={weekData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
-                                <YAxis stroke="#94a3b8" fontSize={10} domain={[0, 10]} width={32} />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
-                                <Line type="monotone" dataKey="appetite" stroke="#a855f7" strokeWidth={2} dot={{ fill: '#a855f7', r: 3 }} connectNulls />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                      </div>
-                      {!hasWeight && !hasWaist && !hasGlucose && !hasAppetite && (
-                        <p className="text-gray-500 text-sm">Log weight, waist (Measurements), glucose, and Journal entries with hunger to see data in this cycle.</p>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Compare two cycles */}
-                {cycleEntries.length >= 2 && (
-                  <div className="ui-card p-4 space-y-4">
-                    <h3 className="text-white font-semibold">Compare cycles</h3>
-                    <p className="text-gray-400 text-xs">Select two cycles to overlay weight and waist by week.</p>
-                    <div className="flex flex-wrap gap-3">
-                      <select value={compareCycle1Id ?? ''} onChange={(e) => setCompareCycle1Id(e.target.value ? Number(e.target.value) : null)} className="bg-slate-700 text-white rounded-lg px-3 py-2 text-sm flex-1 min-w-0">
-                        <option value="">Cycle 1</option>
-                        {cycleEntries.map(c => <option key={c.id} value={c.id}>{c.medication} ({c.durationWeeks}w)</option>)}
-                      </select>
-                      <select value={compareCycle2Id ?? ''} onChange={(e) => setCompareCycle2Id(e.target.value ? Number(e.target.value) : null)} className="bg-slate-700 text-white rounded-lg px-3 py-2 text-sm flex-1 min-w-0">
-                        <option value="">Cycle 2</option>
-                        {cycleEntries.map(c => <option key={c.id} value={c.id}>{c.medication} ({c.durationWeeks}w)</option>)}
-                      </select>
-                    </div>
-                    {compareCycle1Id && compareCycle2Id && compareCycle1Id !== compareCycle2Id && (() => {
-                      const c1 = cycleEntries.find(c => c.id === compareCycle1Id);
-                      const c2 = cycleEntries.find(c => c.id === compareCycle2Id);
-                      if (!c1 || !c2) return null;
-                      const data1 = getCycleWeekData(c1);
-                      const data2 = getCycleWeekData(c2);
-                      const maxWeeks = Math.max(data1.length, data2.length);
-                      const compareData = Array.from({ length: maxWeeks }, (_, i) => ({
-                        week: i + 1,
-                        weekLabel: `W${i + 1}`,
-                        weight1: data1[i]?.weight != null ? parseFloat(data1[i].weight) : null,
-                        weight2: data2[i]?.weight != null ? parseFloat(data2[i].weight) : null,
-                        waist1: data1[i]?.waist != null ? parseFloat(data1[i].waist) : null,
-                        waist2: data2[i]?.waist != null ? parseFloat(data2[i].waist) : null
-                      }));
-                      const hasAnyWeight = compareData.some(d => d.weight1 != null || d.weight2 != null);
-                      const firstW1 = data1.find(d => d.weight != null)?.weight;
-                      const lastW1 = [...data1].reverse().find(d => d.weight != null)?.weight;
-                      const firstW2 = data2.find(d => d.weight != null)?.weight;
-                      const lastW2 = [...data2].reverse().find(d => d.weight != null)?.weight;
-                      const loss1 = (firstW1 != null && lastW1 != null) ? firstW1 - lastW1 : null;
-                      const loss2 = (firstW2 != null && lastW2 != null) ? firstW2 - lastW2 : null;
-                      const diffLoss = (loss1 != null && loss2 != null) ? loss2 - loss1 : null;
-                      const addedInC2 = c1.medication !== c2.medication ? [c2.medication] : [];
-                      const hasAnyWaist = compareData.some(d => d.waist1 != null || d.waist2 != null);
-                      return (
-                        <>
-                          {(diffLoss != null || addedInC2.length > 0) && (
-                            <div className="rounded-lg bg-slate-700/50 border border-white/10 p-3 space-y-1">
-                              <div className="text-gray-300 text-xs font-medium">Cycle performance</div>
-                              {diffLoss != null && (
-                                <p className="text-white text-sm">
-                                  {diffLoss > 0 ? `Cycle 2 (${c2.medication}): ${diffLoss.toFixed(1)} lb more loss than Cycle 1.` : diffLoss < 0 ? `Cycle 1 (${c1.medication}): ${(-diffLoss).toFixed(1)} lb more loss than Cycle 2.` : 'Similar weight change in both cycles.'}
-                                </p>
-                              )}
-                              {addedInC2.length > 0 && (
-                                <p className="text-cyan-400 text-xs">Added in Cycle 2: {addedInC2.join(', ')}</p>
-                              )}
-                            </div>
-                          )}
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          {hasAnyWeight && (
-                            <div>
-                              <h4 className="text-gray-400 text-xs font-medium mb-2">Weight · Cycle 1 vs 2</h4>
-                              <ResponsiveContainer width="100%" height={180}>
-                                <LineChart data={compareData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                  <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
-                                  <YAxis stroke="#94a3b8" fontSize={10} width={32} />
-                                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="weight1" name={c1.medication} stroke="#e8b84c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                                  <Line type="monotone" dataKey="weight2" name={c2.medication} stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          )}
-                          {hasAnyWaist && (
-                            <div>
-                              <h4 className="text-gray-400 text-xs font-medium mb-2">Waist · Cycle 1 vs 2</h4>
-                              <ResponsiveContainer width="100%" height={180}>
-                                <LineChart data={compareData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                  <XAxis dataKey="weekLabel" stroke="#94a3b8" fontSize={10} />
-                                  <YAxis stroke="#94a3b8" fontSize={10} width={32} />
-                                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148,163,184,0.35)', borderRadius: '8px', fontSize: '12px' }} />
-                                  <Legend />
-                                  <Line type="monotone" dataKey="waist1" name={c1.medication} stroke="#e8b84c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                                  <Line type="monotone" dataKey="waist2" name={c2.medication} stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          )}
-                          {!hasAnyWeight && !hasAnyWaist && <p className="text-gray-500 text-sm col-span-2">No weight or waist data in these cycles to compare.</p>}
-                        </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -4951,7 +4809,14 @@ const wipeAllData = () => {
           <div key="injections" className="space-y-4 tab-enter">
             <div className="grid grid-cols-4 gap-2">
               {['GLP-1', 'Peptide', 'Hormone', 'Other'].map(cat => {
-                const count = injectionEntries.filter(e => { const med = MEDICATIONS.find(m => m.name === e.type); return med?.category === cat || (cat === 'Other' && (!med || med.category === 'Other' || med.category === 'Triple Agonist' || med.category === 'GLP-1/GIP')); }).length;
+                const count = injectionEntries.filter(e => {
+                  const med = MEDICATIONS.find(m => m.name === e.type);
+                  if (!med) return cat === 'Other';
+                  if (cat === 'GLP-1') return med.category === 'GLP-1' || med.category === 'GLP-1/GIP';
+                  if (cat === 'Peptide') return med.category === 'Peptide' || med.category === 'Triple Agonist';
+                  if (cat === 'Hormone') return med.category === 'Hormone';
+                  return med.category === 'Other';
+                }).length;
                 return <div key={cat} className="bg-[var(--bg-card)] rounded-xl p-2 text-center"><div className="text-lg font-bold text-white">{count}</div><div className="text-xs text-gray-400 truncate">{cat}</div></div>;
               })}
             </div>
@@ -4983,28 +4848,43 @@ const wipeAllData = () => {
               </div>
             )}
 
-            {/* Injection site heatmap — rotate to green areas */}
-            {getInjectionSiteCounts().length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-medium text-sm mb-1 flex items-center gap-2">Injection site rotation</h3>
-                <p className="text-gray-400 text-xs mb-3">Last 30 days. Rotate to green areas to avoid bruising and lumps.</p>
-                <div className="flex flex-wrap gap-2">
-                  {getInjectionSiteCounts().map(({ site, count, status }) => (
-                    <div
-                      key={site}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                        status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
-                        status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
-                        'bg-red-500/20 text-red-400 border border-red-500/40'
-                      }`}
-                    >
-                      {site} <span className="opacity-80">({count})</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-gray-500 text-xs mt-2">Green = 1–2 injections · Yellow = 3–5 · Red = 6+ (rotate away)</p>
+            {/* Injection site rotation + body map */}
+            <div className="ui-card p-4">
+              <h3 className="text-white font-medium text-sm mb-1 flex items-center gap-2">Injection site rotation</h3>
+              <p className="text-gray-400 text-xs mb-3">Last 30 days. Green = safe to use · Yellow = moderate · Red = rotate away.</p>
+              {/* Body map: all sites in a visual grid */}
+              <div className="mb-4 grid grid-cols-3 gap-1.5">
+                {getInjectionSiteCountsForMap().map((item) => (
+                  <div
+                    key={item.site}
+                    className={`rounded-lg p-2 text-center min-h-[48px] flex flex-col justify-center ${
+                      item.status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
+                      item.status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+                      'bg-red-500/20 text-red-400 border border-red-500/40'
+                    }`}
+                    title={`${item.site}: ${item.count} injections`}
+                  >
+                    <span className="text-[10px] font-medium leading-tight block truncate">{item.site.replace(' (Left)', ' L').replace(' (Right)', ' R')}</span>
+                    <span className="text-xs opacity-80">{item.count}</span>
+                  </div>
+                ))}
               </div>
-            )}
+              <div className="flex flex-wrap gap-2">
+                {getInjectionSiteCounts().map(({ site, count, status }) => (
+                  <div
+                    key={site}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                      status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
+                      status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
+                      'bg-red-500/20 text-red-400 border border-red-500/40'
+                    }`}
+                  >
+                    {site} <span className="opacity-80">({count})</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-gray-500 text-xs mt-2">Green = 0–2 · Yellow = 3–5 · Red = 6+</p>
+            </div>
 
             {showAddForm && (
               <div className="ui-card p-4">
@@ -5276,7 +5156,8 @@ const wipeAllData = () => {
                 { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' },
-                { id: 'glucose', icon: Droplet, label: 'Glucose' }
+                { id: 'glucose', icon: Droplet, label: 'Glucose' },
+                { id: 'labs', icon: Activity, label: 'Labs' }
               ].map(section => (
                 <button
                   key={section.id}
@@ -6340,12 +6221,22 @@ const wipeAllData = () => {
                         <label className="text-gray-400 text-xs block mb-2">Export as</label>
                         <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 border border-white/[0.06]">
                           <option value="json">JSON Backup — full backup, import later</option>
-                          <option value="csv">CSV — weight & injections (spreadsheets)</option>
+                          <option value="csv">CSV — for spreadsheets</option>
                         </select>
                       </div>
+                      {exportFormat === 'csv' && (
+                        <div className="mb-4">
+                          <label className="text-gray-400 text-xs block mb-2">CSV contents</label>
+                          <select value={csvType} onChange={(e) => setCsvType(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 border border-white/[0.06]">
+                            <option value="full">Full — weight, injections, glucose, A1C</option>
+                            <option value="weight">Weight only</option>
+                            <option value="injections">Injections only</option>
+                          </select>
+                        </div>
+                      )}
                       <button onClick={runExport} className="w-full bg-accent hover:bg-gold-600 text-gray-900 font-medium py-3 rounded-lg flex items-center justify-center gap-2 shadow-accent/20">
                         <FileDown className="h-5 w-5" />
-                        {exportFormat === 'json' ? 'Export backup (JSON)' : 'Download CSV'}
+                        {exportFormat === 'json' ? 'Export backup (JSON)' : `Download CSV${csvType !== 'full' ? ` (${csvType})` : ''}`}
                       </button>
                     </div>
 
@@ -6509,6 +6400,68 @@ const wipeAllData = () => {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+            )}
+            {activeMoreSection === 'labs' && (
+          <div className="space-y-4 tab-enter">
+            <div className="ui-card p-4">
+              <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Activity className="h-6 w-6 text-cyan-400" />Bloodwork & Labs</h2>
+              <p className="text-gray-400 text-sm mb-4">Log any lab result (Testosterone, lipids, etc.) and see trends over time.</p>
+              {!showLabForm ? (
+                <button onClick={() => setShowLabForm(true)} className="w-full py-3 rounded-xl border-2 border-dashed border-gray-500 text-gray-400 hover:text-white hover:border-cyan-500/50 text-sm font-medium flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Log lab result</button>
+              ) : (
+                <div className="rounded-xl p-4 bg-slate-700/50 space-y-3">
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Lab type</label>
+                    <select value={labType} onChange={(e) => setLabType(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
+                      {LAB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-gray-400 text-xs block mb-1">Value</label>
+                      <input type="number" step="any" value={labValue} onChange={(e) => setLabValue(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g. 45" />
+                    </div>
+                    <div className="w-24">
+                      <label className="text-gray-400 text-xs block mb-1">Unit</label>
+                      <input type="text" value={labUnit} onChange={(e) => setLabUnit(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-3 text-sm" placeholder="ng/dL" />
+                    </div>
+                  </div>
+                  <input type="date" value={labDate} onChange={(e) => setLabDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
+                  <div className="flex gap-2">
+                    <button onClick={addLabEntry} className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white py-3 rounded-lg font-medium">Add</button>
+                    <button onClick={() => { setShowLabForm(false); setLabValue(''); }} className="px-4 py-3 text-gray-400 hover:text-white rounded-lg">Cancel</button>
+                  </div>
+                </div>
+              )}
+              {labEntries.length > 0 && (
+                <div className="mt-4 space-y-4">
+                  {[...new Set(labEntries.map(e => e.type))].sort().map(type => {
+                    const byType = labEntries.filter(e => e.type === type).sort((a, b) => b.date.localeCompare(a.date));
+                    const last = byType[0];
+                    const prev = byType[1];
+                    const trend = prev != null && last.value != null && prev.value != null ? (last.value > prev.value ? '↑' : last.value < prev.value ? '↓' : '→') : null;
+                    return (
+                      <div key={type} className="rounded-lg bg-slate-700/40 p-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-white font-medium">{type}</span>
+                          {trend && <span className={`text-xs font-medium ${trend === '↑' ? 'text-green-400' : trend === '↓' ? 'text-red-400' : 'text-gray-400'}`}>{trend} from {prev.value} {last.unit}</span>}
+                        </div>
+                        <div className="space-y-1.5">
+                          {byType.slice(0, 10).map(e => (
+                            <div key={e.id} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-300">{e.value} {e.unit}</span>
+                              <span className="text-gray-500 text-xs">{parseLocalDate(e.date).toLocaleDateString('en-US')}</span>
+                              <button onClick={() => deleteLabEntry(e.id)} className="p-1 text-gray-400 hover:text-red-400 rounded"><Trash2 className="h-3.5 w-3.5" /></button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
             )}
