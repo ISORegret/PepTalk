@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1112,6 +1112,8 @@ const PepTalk = () => {
   const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
+  const [showLowVialPopup, setShowLowVialPopup] = useState(false);
+  const previousActiveTabRef = useRef(null);
   const [selectedVialId, setSelectedVialId] = useState(null);
   const [vials, setVials] = useState([]);
   const [vialMedication, setVialMedication] = useState('Semaglutide');
@@ -2408,6 +2410,27 @@ const wipeAllData = () => {
     return toDoseMg({ dose: last.dose, unit: last.unit || 'mg' });
   };
 
+  const getLowVials = () => {
+    if (!vials.length) return [];
+    return vials.filter(v => {
+      const rem = v.remainingMg ?? v.totalMg;
+      if (rem <= 0) return false;
+      const typical = getTypicalDoseMg(v.medication);
+      return typical != null && rem < typical;
+    });
+  };
+
+  // When returning to Summary tab, show low-vial popup if any vials are low (so the user notices)
+  useEffect(() => {
+    if (activeTab !== 'summary') {
+      previousActiveTabRef.current = activeTab;
+      return;
+    }
+    const wasAway = previousActiveTabRef.current != null && previousActiveTabRef.current !== 'summary';
+    previousActiveTabRef.current = activeTab;
+    if (wasAway && getLowVials().length > 0) setShowLowVialPopup(true);
+  }, [activeTab, vials]);
+
   const getCurrentTitrationDose = (plan) => {
     if (!plan.steps || plan.steps.length === 0) return null;
     const startDate = new Date(plan.startDate);
@@ -2810,6 +2833,21 @@ const wipeAllData = () => {
     return toDoseMg({ dose, unit: unit || 'mg' });
   };
 
+  // For level/curve only: ml → mg using linked vial, or any vial for this med, or fallback. Stops 0.05 ml being treated as 0.05 mg (which blew level % to 2800%+).
+  const toDoseMgForLevel = (inj) => {
+    if (!inj || isNaN(parseFloat(inj.dose))) return 0;
+    const doseNum = parseFloat(inj.dose);
+    const unit = (inj.unit || '').toLowerCase();
+    const treatAsMl = unit === 'ml' || (doseNum > 0 && doseNum < 2 && inj.type && /testosterone|cypionate|enanthate/i.test(inj.type));
+    if (treatAsMl) {
+      if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId);
+      const v = vials.find((v) => v.medication === inj.type && v.concentration && v.concentration > 0);
+      if (v) return doseNum * v.concentration;
+      return doseNum * 200;
+    }
+    return toDoseMg(inj);
+  };
+
   // Convert vial amount + unit to mg for storage/deduction
   const vialAmountToMg = (amount, unit, concentrationMgPerMl) => {
     const a = parseFloat(amount);
@@ -2842,7 +2880,7 @@ const wipeAllData = () => {
     if (!medication.halfLife) return 0;
     
     const effectiveHours = getEffectiveHoursForDecay(injection, medication, hoursElapsed);
-    const doseMg = toDoseMg(injection);
+    const doseMg = toDoseMgForLevel(injection);
     const halfLivesElapsed = effectiveHours / medication.halfLife;
     const remainingMg = doseMg * Math.pow(0.5, halfLivesElapsed);
     
@@ -2908,15 +2946,16 @@ const wipeAllData = () => {
         const hoursElapsed = (now - injDate) / (1000 * 60 * 60);
         if (hoursElapsed >= 0) {
           const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
-          const doseMg = toDoseMg(inj);
+          const doseMg = toDoseMgForLevel(inj);
           const halfLivesElapsed = effectiveHours / medication.halfLife;
           const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
           if (remaining > 0.0001) totalRemainingMg += remaining;
         }
       });
-      // Display as % of last dose (100% = one dose equivalent remaining)
-      const lastDoseMg = toDoseMg(lastInjection);
-      const currentLevel = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
+      // Display as % of last dose (100% = one dose equivalent remaining). Cap at 1000% so ml→mg bugs don't blow up the UI.
+      const lastDoseMg = toDoseMgForLevel(lastInjection);
+      const rawLevel = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
+      const currentLevel = Math.min(1000, rawLevel);
       
       // Get current phase from timeline (medication-specific first, then category)
       const currentPhase = getCurrentPhase(hoursAgo, medication.category, medication.name);
@@ -2985,14 +3024,14 @@ const wipeAllData = () => {
         const injDate = parseLocalDate(injDay); // start of injection day
         const hoursElapsed = (date.getTime() - injDate.getTime()) / (1000 * 60 * 60);
         const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
-        const doseMg = toDoseMg(inj);
+        const doseMg = toDoseMgForLevel(inj);
         const halfLivesElapsed = effectiveHours / medication.halfLife;
         const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
         if (remaining > 0.0001) totalRemainingMg += remaining;
       });
       // Display as % of most recent dose at that point in time (100% = one dose equivalent)
       const lastInjAtDate = injectionsBeforeDate[injectionsBeforeDate.length - 1];
-      const lastDoseMg = lastInjAtDate ? toDoseMg(lastInjAtDate) : 0;
+      const lastDoseMg = lastInjAtDate ? toDoseMgForLevel(lastInjAtDate) : 0;
       const level = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
       const injectionDatesSet = new Set(recentInjections.map(inj => toCalendarDay(inj.date)));
       const hasInjection = injectionDatesSet.has(dateStr);
@@ -3020,30 +3059,42 @@ const wipeAllData = () => {
     return 'Trough';                                              // Trough = last day(s) before next dose
   };
 
-  // Unified chart: one graph with one curve per medication, estimated levels from half-life decay
+  // Unified chart: one graph with one curve per medication, estimated levels from half-life decay.
+  // "All" = start on first logged injection date → today. Week/Month/3 mo = go back from current date by that period → today.
   const getUnifiedMedicationLevelChartData = () => {
     const now = new Date();
-    const daysBack = insightsChartRange === '1w' ? 7 : insightsChartRange === '1m' ? 30 : insightsChartRange === '3m' ? 90 : 365;
+    now.setHours(23, 59, 59, 999);
     const medNames = [...new Set(injectionEntries.map(inj => inj.type))];
     const medications = medNames.map(name => MEDICATIONS.find(m => m.name === name)).filter(Boolean);
-    if (medications.length === 0) return { data: [], medications: [] };
+    if (medications.length === 0 || injectionEntries.length === 0) return { data: [], medications: [] };
+
+    const firstInjectionDate = injectionEntries.reduce((earliest, inj) => {
+      const d = parseLocalDate(toCalendarDay(inj.date));
+      return !earliest || d.getTime() < earliest.getTime() ? d : earliest;
+    }, null);
+    if (!firstInjectionDate) return { data: [], medications: [] };
+
+    let chartStart;
+    if (insightsChartRange === 'all') {
+      chartStart = new Date(firstInjectionDate);
+      chartStart.setHours(23, 59, 59, 999);
+    } else {
+      const daysBack = insightsChartRange === '1w' ? 7 : insightsChartRange === '1m' ? 30 : 90;
+      chartStart = new Date(now);
+      chartStart.setDate(chartStart.getDate() - daysBack);
+      chartStart.setHours(23, 59, 59, 999);
+    }
 
     const data = [];
-    for (let i = -daysBack; i <= 0; i++) {
-      const date = new Date(now);
-      date.setDate(date.getDate() + i);
-      date.setHours(23, 59, 59, 999);
+    const endTime = now.getTime();
+    let date = new Date(chartStart);
+    date.setHours(23, 59, 59, 999);
+    while (date.getTime() <= endTime) {
       const dateStr = formatDateLocal(date);
       const injectionMeds = new Set();
       const injectionDoses = {}; // { medName: { dose, unit } } for tooltip
       const phaseByMed = {};
-      medications.forEach(med => {
-        const injOnDay = injectionEntries.find(inj => inj.type === med.name && toCalendarDay(inj.date) === dateStr);
-        if (injOnDay) {
-          injectionMeds.add(med.name);
-          injectionDoses[med.name] = { dose: String(injOnDay.dose), unit: injOnDay.unit || 'mg' };
-        }
-      });
+      let totalActiveMg = 0;
       const row = {
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         fullDate: dateStr,
@@ -3052,6 +3103,13 @@ const wipeAllData = () => {
         injectionDoses,
         phaseByMed
       };
+      medications.forEach(med => {
+        const injOnDay = injectionEntries.find(inj => inj.type === med.name && toCalendarDay(inj.date) === dateStr);
+        if (injOnDay) {
+          injectionMeds.add(med.name);
+          injectionDoses[med.name] = { dose: String(injOnDay.dose), unit: injOnDay.unit || 'mg' };
+        }
+      });
       medications.forEach(med => {
         const recentInjections = injectionEntries
           .filter(inj => inj.type === med.name)
@@ -3066,24 +3124,28 @@ const wipeAllData = () => {
           const injDate = parseLocalDate(toCalendarDay(inj.date));
           const hoursElapsed = (date.getTime() - injDate.getTime()) / (1000 * 60 * 60);
           const effectiveHours = getEffectiveHoursForDecay(inj, med, hoursElapsed);
-          const doseMg = toDoseMg(inj);
+          const doseMg = toDoseMgForLevel(inj);
           const halfLivesElapsed = effectiveHours / med.halfLife;
           const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
           if (remaining > 0.0001) totalRemainingMg += remaining;
         });
+        totalActiveMg += totalRemainingMg;
         const lastInj = injectionsBeforeDate[injectionsBeforeDate.length - 1];
-        const lastDoseMg = toDoseMg(lastInj);
-        row[med.name] = lastDoseMg > 0 ? Math.round((totalRemainingMg / lastDoseMg) * 100) : null;
+        const lastDoseMg = toDoseMgForLevel(lastInj);
+        const pct = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : null;
+        row[med.name] = pct != null ? Math.min(1000, Math.round(pct)) : null;
         const lastInjDate = parseLocalDate(toCalendarDay(lastInj.date));
         const hoursSinceInjection = (date.getTime() - lastInjDate.getTime()) / (1000 * 60 * 60);
-        // Use same phase source as detail panel (MEDICATION_PHASE_TIMELINES) so graph and panel match
         const isInjectionDay = injectionMeds.has(med.name);
         const phaseFromTimeline = getCurrentPhase(hoursSinceInjection, med.category, med.name);
         row.phaseByMed[med.name] = (isInjectionDay && hoursSinceInjection < 24)
           ? 'Injection'
           : (phaseFromTimeline ? phaseFromTimeline.name : getPhaseLabelForDay(hoursSinceInjection, med, isInjectionDay));
       });
+      row.totalActiveMg = totalActiveMg;
       data.push(row);
+      date.setDate(date.getDate() + 1);
+      date.setHours(23, 59, 59, 999);
     }
     return { data, medications };
   };
@@ -3266,6 +3328,35 @@ const wipeAllData = () => {
         </div>
       )}
 
+      {/* Low-vial popup — shows when returning to Summary tab so the user notices */}
+      {showLowVialPopup && getLowVials().length > 0 && (
+        <div className="ui-modal-overlay" onClick={() => setShowLowVialPopup(false)}>
+          <div className="ui-modal max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-8 w-8 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-amber-400 font-semibold text-base mb-2">Vial low — less than one dose left</h3>
+                <ul className="text-gray-300 text-sm space-y-1 list-disc list-inside mb-4">
+                  {getLowVials().map(v => {
+                    const rem = (v.remainingMg ?? v.totalMg).toFixed(1);
+                    const typical = getTypicalDoseMg(v.medication);
+                    return <li key={v.id}>{v.medication}: {rem} mg left (your usual dose is ~{typical?.toFixed(1)} mg)</li>;
+                  })}
+                </ul>
+                <div className="flex flex-col gap-2">
+                  <button type="button" onClick={() => { setShowLowVialPopup(false); setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="w-full py-2.5 rounded-lg font-medium text-sm bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30">
+                    Manage vials
+                  </button>
+                  <button type="button" onClick={() => setShowLowVialPopup(false)} className="w-full ui-btn-primary py-2.5 text-sm">
+                    Got it
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes celebrate {
           0% { transform: scale(0) rotate(-180deg); opacity: 0; }
@@ -3354,6 +3445,40 @@ const wipeAllData = () => {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-10px); }
         }
+        
+        /* Injection reminder card — slide in + soft entrance */
+        .animate-injection-reminder {
+          animation: injection-reminder-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes injection-reminder-in {
+          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        /* Bell icon subtle pulse on reminder card */
+        .injection-reminder-bell {
+          animation: injection-bell-pulse 2s ease-in-out infinite;
+        }
+        @keyframes injection-bell-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.85; transform: scale(1.05); }
+        }
+        
+        /* Header injection alert — soft border glow pulse */
+        .injection-notify-pulse {
+          animation: injection-notify-pulse 2.5s ease-in-out infinite;
+        }
+        @keyframes injection-notify-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.2); }
+          50% { box-shadow: 0 0 12px 2px rgba(234, 179, 8, 0.15); }
+        }
+        .injection-notify-pulse.ui-alert-danger {
+          animation-name: injection-notify-pulse-danger;
+        }
+        @keyframes injection-notify-pulse-danger {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.2); }
+          50% { box-shadow: 0 0 12px 2px rgba(248, 113, 113, 0.2); }
+        }
       `}</style>
       
       <div className="max-w-2xl mx-auto px-1">
@@ -3362,29 +3487,38 @@ const wipeAllData = () => {
           <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Journal · Tools</p>
         </header>
 
-        {/* Upcoming Injections Alert */}
-        {upcomingInjections
-          .filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`))
-          .map((injection) => (
-          <div key={injection.medication} className={`alert-enter mb-3 ui-alert ${injection.isOverdue ? 'ui-alert-danger' : 'ui-alert-warning'}`}>
-            <Bell className={`h-5 w-5 shrink-0 ${injection.isOverdue ? 'text-red-400' : 'text-gold-400'}`} />
-            <div className="flex-1 min-w-0">
-              <div className={`font-semibold text-sm ${injection.isOverdue ? 'text-red-400' : 'text-gold-400'}`}>
-                {injection.isOverdue ? 'Injection Overdue' : 'Injection Due Today'}
+        {/* Upcoming Injections Alert — single box for all due/overdue */}
+        {(() => {
+          const dueOrOverdue = upcomingInjections.filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`));
+          if (dueOrOverdue.length === 0) return null;
+          const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
+          return (
+            <div key="injection-alert" className={`alert-enter mb-3 ui-alert injection-notify-pulse ${hasOverdue ? 'ui-alert-danger' : 'ui-alert-warning'}`}>
+              <Bell className={`h-5 w-5 shrink-0 ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`} />
+              <div className="flex-1 min-w-0">
+                <div className={`font-semibold text-sm ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
+                  {hasOverdue && dueOrOverdue.every(inj => inj.isOverdue) ? 'Injections Overdue' : dueOrOverdue.every(inj => inj.isDueToday) ? 'Injections Due Today' : 'Injections Due'}
+                </div>
+                <div className="text-white text-sm mt-0.5">
+                  {dueOrOverdue.map((inj, i) => (
+                    <span key={`${inj.medication}-${inj.daysUntil}`}>
+                      {i > 0 && ', '}
+                      {inj.medication}
+                      {inj.isOverdue && ` (${Math.abs(inj.daysUntil)} day${Math.abs(inj.daysUntil) !== 1 ? 's' : ''} overdue)`}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="text-white text-sm mt-0.5">{injection.medication}</div>
-              {injection.isOverdue && (
-                <div className="text-gray-400 text-xs mt-0.5">{Math.abs(injection.daysUntil)} {Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue</div>
-              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setDismissedAlerts([...dismissedAlerts, ...dueOrOverdue.map(inj => `${inj.medication}-${inj.daysUntil}`)]); }}
+                className="ui-btn-ghost p-2 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              onClick={() => setDismissedAlerts([...dismissedAlerts, `${injection.medication}-${injection.daysUntil}`])}
-              className="ui-btn-ghost p-2 rounded-lg"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
+          );
+        })()}
 
         {/* Tab Navigation */}
         <div className="mb-4">
@@ -3445,21 +3579,30 @@ const wipeAllData = () => {
               </button>
             </div>
 
-            {/* In-app reminder: dose due today or overdue */}
+            {/* In-app reminder: all doses due today or overdue in one box */}
             {upcomingInjections.some(inj => inj.isDueToday || inj.isOverdue) && (() => {
-              const due = upcomingInjections.find(inj => inj.isDueToday || inj.isOverdue);
-              if (!due) return null;
+              const dueOrOverdue = upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue);
+              if (dueOrOverdue.length === 0) return null;
+              const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
               return (
                 <button
                   type="button"
                   onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
-                  className="w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors"
+                  className="injection-reminder-card w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors animate-injection-reminder"
                 >
                   <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0" />
-                    <div>
-                      <span className="text-gold-400 font-semibold">
-                        {due.isOverdue ? `${due.medication} — ${Math.abs(due.daysUntil)} day${Math.abs(due.daysUntil) !== 1 ? 's' : ''} overdue` : `${due.medication} due today`}
+                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0 injection-reminder-bell" />
+                    <div className="flex-1 min-w-0">
+                      <span className={`font-semibold text-sm block ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
+                        {dueOrOverdue.length === 1
+                          ? (dueOrOverdue[0].isOverdue
+                              ? `${dueOrOverdue[0].medication} — ${Math.abs(dueOrOverdue[0].daysUntil)} day${Math.abs(dueOrOverdue[0].daysUntil) !== 1 ? 's' : ''} overdue`
+                              : `${dueOrOverdue[0].medication} due today`)
+                          : hasOverdue && dueOrOverdue.every(inj => inj.isOverdue)
+                            ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} — overdue`
+                            : dueOrOverdue.every(inj => inj.isDueToday)
+                              ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} due today`
+                              : dueOrOverdue.map(inj => inj.isOverdue ? `${inj.medication} (${Math.abs(inj.daysUntil)}d overdue)` : `${inj.medication} (today)`).join(', ')}
                       </span>
                       <p className="text-gray-400 text-xs mt-0.5">Tap to log injection</p>
                     </div>
@@ -3934,8 +4077,10 @@ const wipeAllData = () => {
                       ))}
                     </div>
                   </div>
+                </div>
+                <div className="-mx-2 sm:-mx-3 w-[calc(100%+0.5rem)] sm:w-[calc(100%+0.75rem)]">
                   <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 44, bottom: 4 }}>
+                    <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 40, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.2} />
@@ -3974,7 +4119,11 @@ const wipeAllData = () => {
                           strokeWidth={1.5} 
                           strokeDasharray="4 4"
                           strokeOpacity={0.8}
-                          label={false}
+                          label={({ viewBox }) => viewBox && (
+                            <text x={viewBox.x + 2} y={viewBox.y + 14} fill="#e8b84c" fontSize={11} textAnchor="start" fontWeight={500}>
+                              {currentWeight} lbs
+                            </text>
+                          )}
                         />
                       )}
                       <Tooltip 
@@ -4067,6 +4216,8 @@ const wipeAllData = () => {
                       )}
                     </ComposedChart>
                   </ResponsiveContainer>
+                </div>
+                <div className="px-2 sm:px-3 pb-1">
                   <div className="flex flex-col items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
                     <div className="flex items-center gap-6">
                       <button 
@@ -4237,19 +4388,30 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <p className="text-gray-500 text-xs mb-4">Half-life model from logged doses. Hover for dose & phase · click legend to toggle.</p>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <ComposedChart data={unifiedData} margin={{ top: 16, right: 8, left: 4, bottom: 8 }}>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={unifiedData} margin={{ top: 20, right: 12, left: 4, bottom: 24 }}>
                       <defs>
                         {visibleMeds.map(med => (
                           <linearGradient key={med.name} id={`area-${med.name.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={med.color} stopOpacity={0.35} />
-                            <stop offset="100%" stopColor={med.color} stopOpacity={0} />
+                            <stop offset="0%" stopColor={med.color} stopOpacity={0.45} />
+                            <stop offset="100%" stopColor={med.color} stopOpacity={0.08} />
                           </linearGradient>
                         ))}
                       </defs>
-                      <CartesianGrid stroke="#334155" strokeOpacity={0.3} strokeDasharray="2 4" vertical={true} horizontal={true} />
-                      <ReferenceLine y={100} stroke="#64748b" strokeOpacity={0.55} strokeDasharray="3 3" />
-                      <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickMargin={6} interval="preserveStartEnd" tickLine={false} axisLine={{ stroke: '#334155', strokeOpacity: 0.6 }} />
+                      <CartesianGrid stroke="#64748b" strokeOpacity={0.18} vertical={true} horizontal={true} strokeDasharray="2 4" />
+                      <ReferenceLine y={100} stroke="#94a3b8" strokeOpacity={0.35} strokeDasharray="4 4" />
+                      <XAxis
+                        dataKey="timestamp"
+                        type="number"
+                        domain={unifiedData.length ? [unifiedData[0].timestamp, unifiedData[unifiedData.length - 1].timestamp] : undefined}
+                        tickCount={14}
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickMargin={8}
+                        tickLine={false}
+                        axisLine={{ stroke: '#334155', strokeOpacity: 0.5 }}
+                        tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      />
                       <YAxis stroke="#64748b" fontSize={10} tickFormatter={(v) => `${v}%`} domain={[0, yMax]} ticks={yTicks} width={36} tickLine={false} axisLine={false} />
                       <Tooltip
                         cursor={{ stroke: '#64748b', strokeWidth: 1, strokeOpacity: 0.5 }}
@@ -4277,6 +4439,9 @@ const wipeAllData = () => {
                               }}
                             >
                               <div className="text-slate-400 text-[11px] font-medium border-b border-slate-600/50 pb-1.5 mb-1.5">{dateLabel}</div>
+                              {row.totalActiveMg != null && row.totalActiveMg > 0 && (
+                                <div className="text-amber-400/90 text-[11px] font-medium mb-1.5">Estimated MG active: {row.totalActiveMg.toFixed(1)} mg</div>
+                              )}
                               {unifiedMeds.filter(m => row[m.name] != null).map((med) => {
                                 const value = row[med.name];
                                 const doseInfo = injectionDoses[med.name];
@@ -4322,21 +4487,37 @@ const wipeAllData = () => {
                               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-amber-400/90" />
                               <span>Injection day</span>
                             </div>
+                            {unifiedData.length > 0 && (() => {
+                              const last = unifiedData[unifiedData.length - 1];
+                              const mg = last?.totalActiveMg;
+                              if (mg == null || mg <= 0) return null;
+                              return (
+                                <div className="text-[10px] text-amber-400/90 font-medium mt-1.5 pt-1.5 border-t border-white/[0.06]">
+                                  Estimated MG active: {mg.toFixed(1)} mg
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       />
                       {visibleMeds.map(med => (
-                        <Area key={`area-${med.name}`} type="monotone" dataKey={med.name} fill={`url(#area-${med.name.replace(/\s/g, '')})`} stroke="none" connectNulls={false} isAnimationActive={true} />
+                        <Area
+                          key={`area-${med.name}`}
+                          type="natural"
+                          dataKey={med.name}
+                          fill={`url(#area-${med.name.replace(/\s/g, '')})`}
+                          stroke="none"
+                          connectNulls={false}
+                          isAnimationActive={true}
+                        />
                       ))}
-                      {visibleMeds.map(med => {
-                        const INJECTION_DAY_COLOR = '#eab308';
-                        return (
+                      {visibleMeds.map(med => (
                         <Line
                           key={med.name}
-                          type="monotone"
+                          type="natural"
                           dataKey={med.name}
                           stroke={med.color}
-                          strokeWidth={2}
+                          strokeWidth={2.5}
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           connectNulls={false}
@@ -4345,21 +4526,32 @@ const wipeAllData = () => {
                             const { cx, cy, payload, dataKey } = props;
                             if (payload[dataKey] == null) return null;
                             const isInjectionDay = payload.injectionMeds && payload.injectionMeds.has(dataKey);
-                            if (!isInjectionDay) return null;
-                            return <circle key={props.key} cx={cx} cy={cy} r={2.5} fill={INJECTION_DAY_COLOR} stroke="rgba(15,23,42,0.5)" strokeWidth={1} />;
+                            const dayIndex = payload.timestamp ? Math.floor(payload.timestamp / 86400000) : 0;
+                            const showDot = isInjectionDay || dayIndex % 5 === 0;
+                            if (!showDot) return null;
+                            const rOuter = isInjectionDay ? 6 : 4;
+                            const rInner = isInjectionDay ? 3 : 2;
+                            return (
+                              <g key={props.key}>
+                                <circle cx={cx} cy={cy} r={rOuter} fill={med.color} fillOpacity={isInjectionDay ? 0.45 : 0.3} />
+                                <circle cx={cx} cy={cy} r={rInner} fill="rgba(255,255,255,0.95)" stroke={med.color} strokeWidth={1} />
+                                {isInjectionDay && <circle cx={cx} cy={cy} r={5} fill="none" stroke="#eab308" strokeWidth={1.5} strokeOpacity={0.9} />}
+                              </g>
+                            );
                           }}
                           activeDot={(props) => {
                             const { cx, cy, payload, dataKey } = props;
                             const isInjectionDay = payload?.injectionMeds && payload.injectionMeds.has(dataKey);
                             return (
                               <g>
-                                <circle cx={cx} cy={cy} r={3.5} fill={med.color} stroke="rgba(30,41,59,0.95)" strokeWidth={1.5} />
-                                {isInjectionDay && <circle cx={cx} cy={cy} r={4.5} fill="none" stroke={INJECTION_DAY_COLOR} strokeWidth={1} strokeOpacity={0.45} />}
+                                <circle cx={cx} cy={cy} r={7} fill={med.color} fillOpacity={0.4} />
+                                <circle cx={cx} cy={cy} r={4} fill="white" stroke={med.color} strokeWidth={1.5} />
+                                {isInjectionDay && <circle cx={cx} cy={cy} r={6} fill="none" stroke="#eab308" strokeWidth={2} />}
                               </g>
                             );
                           }}
                         />
-                      ); })}
+                      ))}
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
