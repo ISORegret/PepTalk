@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.3.2';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1049,9 +1049,11 @@ const BODY_LOCATIONS = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)'
 const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
 const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
 
-// Helper function to parse dates in local timezone (fixes off-by-one day bug)
+// Helper function to parse dates in local timezone (fixes off-by-one day bug). Accepts Date or YYYY-MM-DD string.
 const parseLocalDate = (dateString) => {
-  const [year, month, day] = dateString.split('-').map(Number);
+  if (dateString instanceof Date) return new Date(dateString.getTime());
+  const s = typeof dateString === 'string' ? dateString.trim() : String(dateString).trim();
+  const [year, month, day] = s.split('-').map(Number);
   return new Date(year, month - 1, day);
 };
 
@@ -1079,6 +1081,14 @@ const toCalendarDay = (dateString) => {
   return isNaN(d.getTime()) ? '' : formatDateLocal(d);
 };
 
+// True if value yields a valid calendar day (used so bad/malformed entry dates don't crash charts or insights)
+const isValidEntryDate = (value) => {
+  const day = toCalendarDay(value);
+  if (!day) return false;
+  const d = parseLocalDate(day);
+  return d && Number.isFinite(d.getTime());
+};
+
 // Sort weight entries by date then id (same-day order = entry order). Use for "previous" / "current" / "start".
 const sortWeightByDateAsc = (entries) => [...entries].sort((a, b) => {
   const d = parseLocalDate(a.date) - parseLocalDate(b.date);
@@ -1099,6 +1109,7 @@ const PepTalk = () => {
   const [titrationPlans, setTitrationPlans] = useState([]);
   const [journalEntries, setJournalEntries] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [injectionHistorySort, setInjectionHistorySort] = useState('byMed'); // 'byMed' | 'byDate'
   const [isLoading, setIsLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -2833,7 +2844,7 @@ const wipeAllData = () => {
     return toDoseMg({ dose, unit: unit || 'mg' });
   };
 
-  // For level/curve only: ml → mg using linked vial, or any vial for this med, or fallback. Stops 0.05 ml being treated as 0.05 mg (which blew level % to 2800%+).
+  // For level/curve only: ml → mg using linked vial or any vial for this med. If ml with no vial, return 0 so we don't guess (guessing 200 mg/ml inflated levels to 1000%+).
   const toDoseMgForLevel = (inj) => {
     if (!inj || isNaN(parseFloat(inj.dose))) return 0;
     const doseNum = parseFloat(inj.dose);
@@ -2843,9 +2854,20 @@ const wipeAllData = () => {
       if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId);
       const v = vials.find((v) => v.medication === inj.type && v.concentration && v.concentration > 0);
       if (v) return doseNum * v.concentration;
-      return doseNum * 200;
+      return 0;
     }
     return toDoseMg(inj);
+  };
+
+  // For level % denominator: use most recent injection (by date) that has a known mg.
+  const getLastKnownDoseMg = (injections) => {
+    if (!Array.isArray(injections) || injections.length === 0) return 0;
+    const byDate = [...injections].sort((a, b) => parseLocalDate(toCalendarDay(b.date)) - parseLocalDate(toCalendarDay(a.date)));
+    for (let i = 0; i < byDate.length; i++) {
+      const mg = toDoseMgForLevel(byDate[i]);
+      if (mg > 0) return mg;
+    }
+    return 0;
   };
 
   // Convert vial amount + unit to mg for storage/deduction
@@ -2913,14 +2935,15 @@ const wipeAllData = () => {
     const insights = [];
     const now = new Date();
     const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-    
-    // Get recent injections (last 90 days; fall back to all if none recent — e.g. sample data)
-    let recentInjections = injectionEntries.filter(inj => {
-      const injDate = parseLocalDate(inj.date);
+    const withValidDate = injectionEntries.filter(inj => isValidEntryDate(inj.date));
+
+    // Get recent injections (last 90 days; fall back to all if none recent — e.g. sample data). Skip entries with bad dates.
+    let recentInjections = withValidDate.filter(inj => {
+      const injDate = parseLocalDate(toCalendarDay(inj.date));
       const daysAgo = (now - injDate) / (1000 * 60 * 60 * 24);
       return daysAgo <= 90;
     });
-    if (recentInjections.length === 0) recentInjections = injectionEntries;
+    if (recentInjections.length === 0) recentInjections = withValidDate;
     
     // Group by medication type
     const byMedication = {};
@@ -2934,15 +2957,17 @@ const wipeAllData = () => {
       const medication = MEDICATIONS.find(m => m.name === medName);
       if (!medication) return;
       
-      // Sort by date, most recent first
-      const sorted = injections.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+      // Sort by date, most recent first (use toCalendarDay so bad date formats don't break)
+      const sorted = injections.sort((a, b) => parseLocalDate(toCalendarDay(b.date)) - parseLocalDate(toCalendarDay(a.date)));
       const lastInjection = sorted[0];
-      const hoursAgo = (now - parseLocalDate(lastInjection.date)) / (1000 * 60 * 60);
+      const lastDate = parseLocalDate(toCalendarDay(lastInjection.date));
+      const hoursAgo = lastDate && Number.isFinite(lastDate.getTime()) ? (now - lastDate) / (1000 * 60 * 60) : 0;
       
       // Calculate TOTAL current level from ALL recent injections, weighted by user's actual dose
       let totalRemainingMg = 0;
       injections.forEach(inj => {
-        const injDate = parseLocalDate(inj.date);
+        const injDate = parseLocalDate(toCalendarDay(inj.date));
+        if (!injDate || !Number.isFinite(injDate.getTime())) return;
         const hoursElapsed = (now - injDate) / (1000 * 60 * 60);
         if (hoursElapsed >= 0) {
           const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
@@ -2952,8 +2977,8 @@ const wipeAllData = () => {
           if (remaining > 0.0001) totalRemainingMg += remaining;
         }
       });
-      // Display as % of last dose (100% = one dose equivalent remaining). Cap at 1000% so ml→mg bugs don't blow up the UI.
-      const lastDoseMg = toDoseMgForLevel(lastInjection);
+      // Display as % of last known dose (use last injection with known mg so ml-without-vial doesn't inflate %).
+      const lastDoseMg = getLastKnownDoseMg(injections);
       const rawLevel = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
       const currentLevel = Math.min(1000, rawLevel);
       
@@ -2969,9 +2994,12 @@ const wipeAllData = () => {
       const schedule = schedules.find(s => s.medication === medName);
       let nextInjection = null;
       if (schedule) {
-        const nextDate = new Date(parseLocalDate(lastInjection.date));
-        nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
-        nextInjection = nextDate;
+        const lastDay = toCalendarDay(lastInjection.date);
+        const nextDate = lastDay ? new Date(parseLocalDate(lastDay)) : null;
+        if (nextDate && Number.isFinite(nextDate.getTime())) {
+          nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
+          nextInjection = nextDate;
+        }
       }
 
       insights.push({
@@ -3029,9 +3057,8 @@ const wipeAllData = () => {
         const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
         if (remaining > 0.0001) totalRemainingMg += remaining;
       });
-      // Display as % of most recent dose at that point in time (100% = one dose equivalent)
-      const lastInjAtDate = injectionsBeforeDate[injectionsBeforeDate.length - 1];
-      const lastDoseMg = lastInjAtDate ? toDoseMgForLevel(lastInjAtDate) : 0;
+      // Use last injection with known mg so ml-without-vial doesn't inflate %
+      const lastDoseMg = getLastKnownDoseMg(injectionsBeforeDate);
       const level = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
       const injectionDatesSet = new Set(recentInjections.map(inj => toCalendarDay(inj.date)));
       const hasInjection = injectionDatesSet.has(dateStr);
@@ -3062,17 +3089,23 @@ const wipeAllData = () => {
   // Unified chart: one graph with one curve per medication, estimated levels from half-life decay.
   // "All" = start on first logged injection date → today. Week/Month/3 mo = go back from current date by that period → today.
   const getUnifiedMedicationLevelChartData = () => {
-    const now = new Date();
-    now.setHours(23, 59, 59, 999);
-    const medNames = [...new Set(injectionEntries.map(inj => inj.type))];
+    const nowReal = new Date();
+    const todayStr = formatDateLocal(nowReal);
+    const endOfToday = new Date(nowReal);
+    endOfToday.setHours(23, 59, 59, 999);
+    const validInjections = injectionEntries.filter(inj => isValidEntryDate(inj.date));
+    const medNames = [...new Set(validInjections.map(inj => inj.type))];
     const medications = medNames.map(name => MEDICATIONS.find(m => m.name === name)).filter(Boolean);
-    if (medications.length === 0 || injectionEntries.length === 0) return { data: [], medications: [] };
+    if (medications.length === 0 || validInjections.length === 0) return { data: [], medications: [] };
 
-    const firstInjectionDate = injectionEntries.reduce((earliest, inj) => {
-      const d = parseLocalDate(toCalendarDay(inj.date));
+    const firstInjectionDate = validInjections.reduce((earliest, inj) => {
+      const dayStr = toCalendarDay(inj.date);
+      if (!dayStr) return earliest;
+      const d = parseLocalDate(dayStr);
+      if (!d || !Number.isFinite(d.getTime())) return earliest;
       return !earliest || d.getTime() < earliest.getTime() ? d : earliest;
     }, null);
-    if (!firstInjectionDate) return { data: [], medications: [] };
+    if (!firstInjectionDate || !Number.isFinite(firstInjectionDate.getTime())) return { data: [], medications: [] };
 
     let chartStart;
     if (insightsChartRange === 'all') {
@@ -3080,40 +3113,45 @@ const wipeAllData = () => {
       chartStart.setHours(23, 59, 59, 999);
     } else {
       const daysBack = insightsChartRange === '1w' ? 7 : insightsChartRange === '1m' ? 30 : 90;
-      chartStart = new Date(now);
+      chartStart = new Date(nowReal);
       chartStart.setDate(chartStart.getDate() - daysBack);
       chartStart.setHours(23, 59, 59, 999);
     }
 
     const data = [];
-    const endTime = now.getTime();
+    const endTime = endOfToday.getTime();
     let date = new Date(chartStart);
     date.setHours(23, 59, 59, 999);
     while (date.getTime() <= endTime) {
       const dateStr = formatDateLocal(date);
+      const isToday = dateStr === todayStr;
+      const timeForRow = isToday ? nowReal.getTime() : date.getTime();
       const injectionMeds = new Set();
       const injectionDoses = {}; // { medName: { dose, unit } } for tooltip
       const phaseByMed = {};
+      const remainingMgByMed = {};
       let totalActiveMg = 0;
       const row = {
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         fullDate: dateStr,
-        timestamp: date.getTime(),
+        timestamp: timeForRow,
+        isToday,
         injectionMeds,
         injectionDoses,
-        phaseByMed
+        phaseByMed,
+        remainingMgByMed
       };
       medications.forEach(med => {
-        const injOnDay = injectionEntries.find(inj => inj.type === med.name && toCalendarDay(inj.date) === dateStr);
+        const injOnDay = validInjections.find(inj => inj.type === med.name && toCalendarDay(inj.date) === dateStr);
         if (injOnDay) {
           injectionMeds.add(med.name);
           injectionDoses[med.name] = { dose: String(injOnDay.dose), unit: injOnDay.unit || 'mg' };
         }
       });
       medications.forEach(med => {
-        const recentInjections = injectionEntries
+        const recentInjections = validInjections
           .filter(inj => inj.type === med.name)
-          .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+          .sort((a, b) => parseLocalDate(toCalendarDay(a.date)) - parseLocalDate(toCalendarDay(b.date)));
         const injectionsBeforeDate = recentInjections.filter(inj => toCalendarDay(inj.date) <= dateStr);
         if (injectionsBeforeDate.length === 0) {
           row[med.name] = null;
@@ -3121,21 +3159,28 @@ const wipeAllData = () => {
         }
         let totalRemainingMg = 0;
         injectionsBeforeDate.forEach(inj => {
-          const injDate = parseLocalDate(toCalendarDay(inj.date));
-          const hoursElapsed = (date.getTime() - injDate.getTime()) / (1000 * 60 * 60);
+          const dayStr = toCalendarDay(inj.date);
+          if (!dayStr) return;
+          const injDate = parseLocalDate(dayStr);
+          if (!injDate || !Number.isFinite(injDate.getTime())) return;
+          const hoursElapsed = (timeForRow - injDate.getTime()) / (1000 * 60 * 60);
           const effectiveHours = getEffectiveHoursForDecay(inj, med, hoursElapsed);
           const doseMg = toDoseMgForLevel(inj);
           const halfLivesElapsed = effectiveHours / med.halfLife;
           const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
-          if (remaining > 0.0001) totalRemainingMg += remaining;
+          if (Number.isFinite(remaining) && remaining > 0.0001) totalRemainingMg += remaining;
         });
         totalActiveMg += totalRemainingMg;
-        const lastInj = injectionsBeforeDate[injectionsBeforeDate.length - 1];
-        const lastDoseMg = toDoseMgForLevel(lastInj);
+        remainingMgByMed[med.name] = totalRemainingMg;
+        const lastDoseMg = getLastKnownDoseMg(injectionsBeforeDate);
         const pct = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : null;
-        row[med.name] = pct != null ? Math.min(1000, Math.round(pct)) : null;
-        const lastInjDate = parseLocalDate(toCalendarDay(lastInj.date));
-        const hoursSinceInjection = (date.getTime() - lastInjDate.getTime()) / (1000 * 60 * 60);
+        row[med.name] = pct != null && Number.isFinite(pct) ? Math.min(1000, Math.round(pct)) : null;
+        const lastInj = injectionsBeforeDate[injectionsBeforeDate.length - 1];
+        const lastDayStr = lastInj ? toCalendarDay(lastInj.date) : '';
+        const lastInjDate = lastDayStr ? parseLocalDate(lastDayStr) : null;
+        const hoursSinceInjection = lastInjDate && Number.isFinite(lastInjDate.getTime())
+          ? (timeForRow - lastInjDate.getTime()) / (1000 * 60 * 60)
+          : 0;
         const isInjectionDay = injectionMeds.has(med.name);
         const phaseFromTimeline = getCurrentPhase(hoursSinceInjection, med.category, med.name);
         row.phaseByMed[med.name] = (isInjectionDay && hoursSinceInjection < 24)
@@ -3143,6 +3188,34 @@ const wipeAllData = () => {
           : (phaseFromTimeline ? phaseFromTimeline.name : getPhaseLabelForDay(hoursSinceInjection, med, isInjectionDay));
       });
       row.totalActiveMg = totalActiveMg;
+      if (isToday) {
+        const insights = getMedicationInsights();
+        let sumActiveMg = 0;
+        insights.forEach(insight => {
+          row[insight.medication] = insight.currentLevel;
+          const med = medications.find(m => m.name === insight.medication);
+          if (med) {
+            const withValidDate = validInjections.filter(inj => isValidEntryDate(inj.date));
+            const recentInjections = withValidDate.filter(inj => inj.type === insight.medication);
+            let totalRemainingMg = 0;
+            recentInjections.forEach(inj => {
+              const injDate = parseLocalDate(toCalendarDay(inj.date));
+              if (!injDate || !Number.isFinite(injDate.getTime())) return;
+              const hoursElapsed = (nowReal - injDate) / (1000 * 60 * 60);
+              if (hoursElapsed >= 0) {
+                const effectiveHours = getEffectiveHoursForDecay(inj, med, hoursElapsed);
+                const doseMg = toDoseMgForLevel(inj);
+                const halfLivesElapsed = effectiveHours / med.halfLife;
+                const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
+                if (remaining > 0.0001) totalRemainingMg += remaining;
+              }
+            });
+            row.remainingMgByMed[insight.medication] = totalRemainingMg;
+            sumActiveMg += totalRemainingMg;
+          }
+        });
+        row.totalActiveMg = sumActiveMg;
+      }
       data.push(row);
       date.setDate(date.getDate() + 1);
       date.setHours(23, 59, 59, 999);
@@ -4439,13 +4512,15 @@ const wipeAllData = () => {
                               }}
                             >
                               <div className="text-slate-400 text-[11px] font-medium border-b border-slate-600/50 pb-1.5 mb-1.5">{dateLabel}</div>
-                              {row.totalActiveMg != null && row.totalActiveMg > 0 && (
-                                <div className="text-amber-400/90 text-[11px] font-medium mb-1.5">Estimated MG active: {row.totalActiveMg.toFixed(1)} mg</div>
-                              )}
+                              <div className="text-slate-500 text-[10px] mb-1.5">{row.isToday ? 'Same as cards below' : 'Level on this day'}</div>
                               {unifiedMeds.filter(m => row[m.name] != null).map((med) => {
                                 const value = row[med.name];
                                 const doseInfo = injectionDoses[med.name];
-                                const phase = phaseByMed[med.name] || '';
+                                const levelNum = value != null ? parseFloat(value) : 0;
+                                const statusLabel = levelNum >= 150 ? 'Steady state' : levelNum >= 100 ? 'Building up' : 'Single dose range';
+                                const mgActive = row.remainingMgByMed && row.remainingMgByMed[med.name] != null && row.remainingMgByMed[med.name] > 0
+                                  ? row.remainingMgByMed[med.name].toFixed(1)
+                                  : null;
                                 return (
                                   <div key={med.name} className="flex items-start justify-between gap-3 text-xs">
                                     <div className="flex items-center gap-1.5 min-w-0">
@@ -4455,7 +4530,8 @@ const wipeAllData = () => {
                                     <div className="text-right flex-shrink-0">
                                       <span className="font-medium text-white">{value != null ? `${value}%` : '—'}</span>
                                       {doseInfo && <div className="text-emerald-400/90 text-[10px] mt-0.5">{doseInfo.dose}{doseInfo.unit}</div>}
-                                      {phase && <div className="text-slate-500 text-[10px] mt-0.5">{phase}</div>}
+                                      {mgActive != null && <div className="text-amber-400/90 text-[10px] mt-0.5">{mgActive} mg est.</div>}
+                                      <div className="text-slate-500 text-[10px] mt-0.5">{statusLabel}</div>
                                     </div>
                                   </div>
                                 );
@@ -4487,16 +4563,6 @@ const wipeAllData = () => {
                               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-amber-400/90" />
                               <span>Injection day</span>
                             </div>
-                            {unifiedData.length > 0 && (() => {
-                              const last = unifiedData[unifiedData.length - 1];
-                              const mg = last?.totalActiveMg;
-                              if (mg == null || mg <= 0) return null;
-                              return (
-                                <div className="text-[10px] text-amber-400/90 font-medium mt-1.5 pt-1.5 border-t border-white/[0.06]">
-                                  Estimated MG active: {mg.toFixed(1)} mg
-                                </div>
-                              );
-                            })()}
                           </div>
                         )}
                       />
@@ -4524,8 +4590,8 @@ const wipeAllData = () => {
                           isAnimationActive={true}
                           dot={(props) => {
                             const { cx, cy, payload, dataKey } = props;
-                            if (payload[dataKey] == null) return null;
-                            const isInjectionDay = payload.injectionMeds && payload.injectionMeds.has(dataKey);
+                            if (payload == null || payload[dataKey] == null) return null;
+                            const isInjectionDay = payload.injectionMeds && typeof payload.injectionMeds.has === 'function' && payload.injectionMeds.has(dataKey);
                             const dayIndex = payload.timestamp ? Math.floor(payload.timestamp / 86400000) : 0;
                             const showDot = isInjectionDay || dayIndex % 5 === 0;
                             if (!showDot) return null;
@@ -4541,7 +4607,7 @@ const wipeAllData = () => {
                           }}
                           activeDot={(props) => {
                             const { cx, cy, payload, dataKey } = props;
-                            const isInjectionDay = payload?.injectionMeds && payload.injectionMeds.has(dataKey);
+                            const isInjectionDay = payload?.injectionMeds && typeof payload.injectionMeds.has === 'function' && payload.injectionMeds.has(dataKey);
                             return (
                               <g>
                                 <circle cx={cx} cy={cy} r={7} fill={med.color} fillOpacity={0.4} />
@@ -4611,7 +4677,7 @@ const wipeAllData = () => {
                     )}
 
                     {/* Phase progress — compact */}
-                    {insight.currentPhase && insight.timeline && (
+                    {insight.currentPhase && insight.timeline && Array.isArray(insight.timeline.phases) && (
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-2">
                           {insight.timeline.phases.map((phase, idx) => (
@@ -4619,7 +4685,7 @@ const wipeAllData = () => {
                           ))}
                         </div>
                         <div className="relative h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                          <div className={`absolute h-full ${insight.currentPhase.bgColor} transition-all`} style={{ width: `${((insight.currentPhase.phaseIndex + 1) / insight.currentPhase.totalPhases) * 100}%` }} />
+                          <div className={`absolute h-full ${insight.currentPhase.bgColor || 'bg-slate-600'} transition-all`} style={{ width: `${insight.currentPhase.totalPhases > 0 ? ((insight.currentPhase.phaseIndex + 1) / insight.currentPhase.totalPhases) * 100 : 0}%` }} />
                         </div>
                         <p className="text-gray-400 text-xs mt-2">{insight.currentPhase.description}</p>
                       </div>
@@ -4650,7 +4716,7 @@ const wipeAllData = () => {
                               What&apos;s happening
                             </h6>
                             <ul className="space-y-1.5 pl-0.5">
-                              {insight.currentPhase.whatsHappening.map((item, i) => (
+                              {(Array.isArray(insight.currentPhase.whatsHappening) ? insight.currentPhase.whatsHappening : []).map((item, i) => (
                                 <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
                                   <span className="text-gold-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
                                   <span>{item}</span>
@@ -4664,7 +4730,7 @@ const wipeAllData = () => {
                               What to expect
                             </h6>
                             <ul className="space-y-1.5 pl-0.5">
-                              {insight.currentPhase.whatToExpect.map((item, i) => (
+                              {(Array.isArray(insight.currentPhase.whatToExpect) ? insight.currentPhase.whatToExpect : []).map((item, i) => (
                                 <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
                                   <span className="text-cyan-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
                                   <span>{item}</span>
@@ -4678,7 +4744,7 @@ const wipeAllData = () => {
                               Tips for this phase
                             </h6>
                             <ul className="space-y-1.5 pl-0.5">
-                              {insight.currentPhase.tips.map((tip, i) => (
+                              {(Array.isArray(insight.currentPhase.tips) ? insight.currentPhase.tips : []).map((tip, i) => (
                                 <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
                                   <span className="text-green-500/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
                                   <span>{tip}</span>
@@ -5196,33 +5262,98 @@ const wipeAllData = () => {
             )}
 
             <div className="ui-card p-4">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
                 <h3 className="text-white font-medium">History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInjectionHistorySort(prev => prev === 'byMed' ? 'byDate' : 'byMed')}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 hover:text-white text-xs font-medium transition-colors"
+                    title={injectionHistorySort === 'byMed' ? 'Switch to sort by date' : 'Switch to group by medication'}
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                    {injectionHistorySort === 'byMed' ? 'By medication' : 'By date'}
+                  </button>
+                  {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
+                </div>
               </div>
               {injectionEntries.length === 0 ? (
-                <div className="text-center py-8 text-gray-400"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
+                <div className="text-center py-8 text-gray-400 text-sm"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
               ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {injectionEntries.map((entry) => (
-                    <div key={entry.id} className="bg-slate-700/50 rounded-lg p-3 group">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 rounded-lg mt-1" style={{ backgroundColor: `${getMedicationColor(entry.type)}20` }}><Syringe className="h-5 w-5" style={{ color: getMedicationColor(entry.type) }} /></div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2"><span className="text-white font-medium">{entry.type}</span><span className="text-gray-300">{entry.dose} {entry.unit}</span></div>
-                            <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-2">• {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
-                            {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{entry.sideEffects.map(effect => <span key={effect} className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">{effect}</span>)}</div>}
-                            {entry.notes && <div className="text-sm text-gray-400 mt-2 italic">{entry.notes}</div>}
+                <div className={`space-y-3 overflow-y-auto ${injectionHistorySort === 'byMed' ? 'max-h-[32rem]' : 'max-h-[32rem]'}`}>
+                  {injectionHistorySort === 'byDate' ? (
+                    [...injectionEntries]
+                      .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))
+                      .map((entry) => {
+                        const color = getMedicationColor(entry.type);
+                        return (
+                          <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2 min-w-0 flex-1">
+                                <div className="p-1.5 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: `${color}20` }}><Syringe className="h-4 w-4" style={{ color }} /></div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                                    <span className="text-white font-medium">{entry.type}</span>
+                                    <span className="text-gray-400">{entry.dose} {entry.unit}</span>
+                                  </div>
+                                  <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">· {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
+                                  {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-1.5">{entry.sideEffects.map(effect => <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">{effect}</span>)}</div>}
+                                  {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
+                                </div>
+                              </div>
+                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setShowAddForm(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
-                          <button onClick={() => deleteInjection(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                        );
+                      })
+                  ) : (
+                    (() => {
+                      const byMed = injectionEntries.reduce((acc, entry) => {
+                        const t = entry.type || 'Other';
+                        if (!acc[t]) acc[t] = [];
+                        acc[t].push(entry);
+                        return acc;
+                      }, {});
+                      const medOrder = [...new Set(injectionEntries.map(e => e.type || 'Other'))].sort((a, b) => a.localeCompare(b));
+                      return medOrder.map(medName => {
+                        const entries = (byMed[medName] || []).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+                        const color = getMedicationColor(medName);
+                        return (
+                          <div key={medName}>
+                            <div className="flex items-center gap-2 mb-1.5 sticky top-0 z-10 py-1 bg-[var(--bg-base)]/95 backdrop-blur">
+                              <div className="p-1.5 rounded-md" style={{ backgroundColor: `${color}25` }}><Syringe className="h-3.5 w-3.5" style={{ color }} /></div>
+                              <span className="text-xs font-semibold text-white">{medName}</span>
+                              <span className="text-[11px] text-gray-500">({entries.length})</span>
+                            </div>
+                            <div className="space-y-1.5 pl-1">
+                              {entries.map((entry) => (
+                                <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                                      <div className="p-1.5 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: `${color}20` }}><Syringe className="h-4 w-4" style={{ color }} /></div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-xs text-gray-300">{entry.dose} {entry.unit}</div>
+                                        <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">· {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
+                                        {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-1.5">{entry.sideEffects.map(effect => <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">{effect}</span>)}</div>}
+                                        {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()
+                  )}
                 </div>
               )}
             </div>
