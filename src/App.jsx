@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.3.2';
+const APP_VERSION = '1.3.3';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1110,6 +1110,8 @@ const PepTalk = () => {
   const [journalEntries, setJournalEntries] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [injectionHistorySort, setInjectionHistorySort] = useState('byMed'); // 'byMed' | 'byDate'
+  const [weightHistoryFilterDate, setWeightHistoryFilterDate] = useState('');
+  const [injectionHistoryFilterDate, setInjectionHistoryFilterDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -1176,6 +1178,7 @@ const PepTalk = () => {
   const [injectionDose, setInjectionDose] = useState('');
   const [injectionUnit, setInjectionUnit] = useState('mg');
   const [injectionDate, setInjectionDate] = useState(getTodayLocal());
+  const [injectionTime, setInjectionTime] = useState('09:00');
   const [injectionRoute, setInjectionRoute] = useState('SubQ');
   const [injectionSite, setInjectionSite] = useState('Stomach');
   const [injectionNotes, setInjectionNotes] = useState('');
@@ -1374,7 +1377,7 @@ const PepTalk = () => {
 
   // Form reset functions
   const resetWeightForm = () => { setWeight(''); setWeightDate(getTodayLocal()); setEditingWeight(null); setShowAddForm(false); };
-  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); };
+  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionTime('09:00'); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); };
   const resetMeasurementForm = () => { setMeasurementType('Waist'); setMeasurementValue(''); setMeasurementDate(getTodayLocal()); setShowAddForm(false); };
   const resetJournalForm = () => { setJournalContent(''); setJournalMood('neutral'); setJournalEnergy(5); setJournalHunger(5); setJournalDate(getTodayLocal()); setEditingJournal(null); setShowAddForm(false); };
   const resetFastingForm = () => { setFastingHours(''); setFastingDate(getTodayLocal()); setEditingFasting(null); setShowFastingForm(false); };
@@ -1664,7 +1667,7 @@ const PepTalk = () => {
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
     const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId);
-    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects, vialId: selectedVialId || undefined };
+    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, time: injectionTime, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects, vialId: selectedVialId || undefined };
     let updated = editingInjection
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
       : [...injectionEntries, { id: Date.now(), ...entryData }];
@@ -2238,12 +2241,35 @@ const wipeAllData = () => {
     const typical = getTypicalWeeklyLossForDose(injectionMed, weeklyDoseMg);
     const userLoss = -parseFloat(stats.weeklyAvg); // positive = lbs lost per week
     const doseLabel = injectionsLast7Days.length > 1 ? `${weeklyDoseMg} mg/week` : `${lastInjection.dose}${lastInjection.unit}`;
-    if (userLoss <= 0) return { med: injectionMed, dose: doseLabel, typical, userLoss: 0, status: 'slower' };
+
+    // Time on current medication (calendar days since first injection of this med)
+    const firstMedInjection = [...injectionEntries]
+      .filter(e => medName(e) === injectionMed)
+      .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date))[0];
+    const daysOnMed = firstMedInjection
+      ? Math.max(1, Math.round((now - parseLocalDate(firstMedInjection.date)) / (1000 * 60 * 60 * 24)))
+      : null;
+
+    // Projected weeks to next 5-lb milestone based on current weekly loss
+    let nextMilestone = null;
+    let projectedWeeksToMilestone = null;
+    if (userLoss > 0 && typical > 0) {
+      const milestones = getMilestones();
+      const next = milestones.find(m => !m.achieved);
+      if (next && next.toGo > 0) {
+        nextMilestone = next.label;
+        projectedWeeksToMilestone = next.toGo / userLoss;
+      }
+    }
+
+    if (userLoss <= 0) {
+      return { med: injectionMed, dose: doseLabel, typical, userLoss: 0, status: 'slower', daysOnMed, nextMilestone, projectedWeeksToMilestone };
+    }
     const ratio = userLoss / typical;
     let status = 'on_track';
     if (ratio >= 1.2) status = 'ahead';
     else if (ratio < 0.7) status = 'slower';
-    return { med: injectionMed, dose: doseLabel, typical, userLoss, status };
+    return { med: injectionMed, dose: doseLabel, typical, userLoss, status, daysOnMed, nextMilestone, projectedWeeksToMilestone };
   };
 
   // Chart data: your cumulative weight loss vs typical — week 1 through current week + 1
@@ -3074,6 +3100,106 @@ const wipeAllData = () => {
     return data;
   };
 
+  // Weekly breakdown: total dose per week (per medication) + weight change per week
+  const getWeeklyDoseAndWeightSummary = () => {
+    if (weightEntries.length < 2 || injectionEntries.length === 0) return { rows: [], meds: [] };
+    const medNames = [...new Set(injectionEntries.map(inj => inj.type).filter(Boolean))];
+    const sortedWeights = sortWeightByDateAsc(weightEntries);
+    const startDate = parseLocalDate(sortedWeights[0].date);
+    const endDate = parseLocalDate(sortedWeights[sortedWeights.length - 1].date);
+    if (!startDate || !endDate) return { rows: [], meds: medNames };
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const msPerWeek = 7 * msPerDay;
+
+    // Helper: start-of-week (Mon) for a given Date
+    const startOfWeek = (d) => {
+      const date = new Date(d);
+      const day = date.getDay(); // 0=Sun
+      const diff = day === 0 ? -6 : 1 - day;
+      date.setDate(date.getDate() + diff);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+
+    const firstWeekStart = startOfWeek(startDate);
+    const lastWeekStart = startOfWeek(endDate);
+    const weekCount = Math.max(1, Math.round((lastWeekStart - firstWeekStart) / msPerWeek) + 1);
+
+    const injectionsByWeek = {};
+    injectionEntries.forEach(inj => {
+      const d = parseLocalDate(inj.date);
+      if (!d) return;
+      const weekStart = startOfWeek(d).toISOString().slice(0, 10);
+      const doseMg = toDoseMgForLevel(inj);
+      if (!injectionsByWeek[weekStart]) {
+        injectionsByWeek[weekStart] = {
+          totalMg: 0,
+          perMed: {}
+        };
+      }
+      const bucket = injectionsByWeek[weekStart];
+      const safeDose = doseMg || 0;
+      bucket.totalMg += safeDose;
+
+      const medName = inj.type || 'Other';
+      if (!bucket.perMed[medName]) {
+        bucket.perMed[medName] = {
+          dose: 0,
+          unit: inj.unit || ''
+        };
+      }
+      const perMedEntry = bucket.perMed[medName];
+      const numericDose = parseFloat(inj.dose);
+      if (!isNaN(numericDose)) {
+        perMedEntry.dose += numericDose;
+      }
+    });
+
+    const rows = [];
+    for (let i = 0; i < weekCount; i++) {
+      const ws = new Date(firstWeekStart.getTime() + i * msPerWeek);
+      const we = new Date(ws.getTime() + msPerWeek - 1);
+      const wsKey = ws.toISOString().slice(0, 10);
+
+      // Weight change in this week:
+      // - Start = last weight before week start (if any), otherwise first weight in this week
+      // - End   = last weight recorded in this week
+      const weekWeights = sortedWeights.filter(w => {
+        const d = parseLocalDate(w.date);
+        return d && d >= ws && d <= we;
+      });
+      const hasDoses = !!injectionsByWeek[wsKey];
+      if (weekWeights.length === 0 && !hasDoses) continue;
+
+      let change = null;
+      if (weekWeights.length > 0) {
+        const weightsBeforeWeek = sortedWeights.filter(w => {
+          const d = parseLocalDate(w.date);
+          return d && d < ws;
+        });
+        const startW = weightsBeforeWeek.length
+          ? weightsBeforeWeek[weightsBeforeWeek.length - 1].weight
+          : weekWeights[0].weight;
+        const endW = weekWeights[weekWeights.length - 1].weight;
+        if (startW != null && endW != null) {
+          change = endW - startW;
+        }
+      }
+
+      const doseBucket = injectionsByWeek[wsKey] || { totalMg: 0, perMed: {} };
+      rows.push({
+        weekIndex: i + 1,
+        weekLabel: `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        totalDoseMg: doseBucket.totalMg,
+        perMed: doseBucket.perMed,
+        weightChange: change
+      });
+    }
+
+    return { rows, meds: medNames };
+  };
+
   // Phase label for a given day based on hours since last injection (Rising → Peak → Falling → Trough)
   // Trough = right before next dose; for weekly drugs with ~6–7 day half-life, that's day 6–7
   const getPhaseLabelForDay = (hoursSinceInjection, med, isInjectionDay) => {
@@ -3652,61 +3778,7 @@ const wipeAllData = () => {
               </button>
             </div>
 
-            {/* In-app reminder: all doses due today or overdue in one box */}
-            {upcomingInjections.some(inj => inj.isDueToday || inj.isOverdue) && (() => {
-              const dueOrOverdue = upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue);
-              if (dueOrOverdue.length === 0) return null;
-              const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
-              return (
-                <button
-                  type="button"
-                  onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
-                  className="injection-reminder-card w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors animate-injection-reminder"
-                >
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0 injection-reminder-bell" />
-                    <div className="flex-1 min-w-0">
-                      <span className={`font-semibold text-sm block ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
-                        {dueOrOverdue.length === 1
-                          ? (dueOrOverdue[0].isOverdue
-                              ? `${dueOrOverdue[0].medication} — ${Math.abs(dueOrOverdue[0].daysUntil)} day${Math.abs(dueOrOverdue[0].daysUntil) !== 1 ? 's' : ''} overdue`
-                              : `${dueOrOverdue[0].medication} due today`)
-                          : hasOverdue && dueOrOverdue.every(inj => inj.isOverdue)
-                            ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} — overdue`
-                            : dueOrOverdue.every(inj => inj.isDueToday)
-                              ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} due today`
-                              : dueOrOverdue.map(inj => inj.isOverdue ? `${inj.medication} (${Math.abs(inj.daysUntil)}d overdue)` : `${inj.medication} (today)`).join(', ')}
-                      </span>
-                      <p className="text-gray-400 text-xs mt-0.5">Tap to log injection</p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })()}
-
-            {/* Dashboard phase line: current phase for all active meds */}
-            {getMedicationInsights().length > 0 && (() => {
-              const insights = getMedicationInsights().filter(i => i.phase);
-              if (insights.length === 0) return null;
-              return (
-                <div className="ui-card p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-gray-400 text-sm">Current phase</span>
-                    <button type="button" onClick={() => setActiveTab('insights')} className="text-gold-400 hover:text-gold-300 text-xs font-medium">View Insights</button>
-                  </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-                    {insights.map(insight => (
-                      <span key={insight.medication} className="text-sm">
-                        <span className={`font-semibold ${insight.phaseColor}`}>{insight.phase}</span>
-                        <span className="text-gray-400"> for {insight.medication}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Low-vial alert: remaining &lt; typical dose */}
+            {/* Vial low — directly above Weight Change (single in-page warning) */}
             {vials.length > 0 && (() => {
               const low = vials.filter(v => {
                 const rem = v.remainingMg ?? v.totalMg;
@@ -3735,34 +3807,7 @@ const wipeAllData = () => {
               );
             })()}
 
-            {/* Your vials — remaining volume on Summary */}
-            {vials.length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
-                <div className="space-y-2">
-                  {vials.map(v => {
-                    const remMg = v.remainingMg ?? v.totalMg;
-                    const totalMg = v.totalMg;
-                    const conc = v.concentration;
-                    const remMl = conc > 0 ? remMg / conc : null;
-                    const totalMl = conc > 0 ? totalMg / conc : null;
-                    const isLow = remMg <= 0;
-                    return (
-                      <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
-                        <span className="text-white font-medium">{v.medication}</span>
-                        <span className="text-gray-400">
-                          {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
-                          {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">· {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
-              </div>
-            )}
-
-            {/* Weight Change — stats and estimated goal date (above Goal card) */}
+            {/* Weight Change — directly under quick actions */}
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold text-white">Weight Change</h2>
               <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
@@ -3795,340 +3840,17 @@ const wipeAllData = () => {
                 <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
               </div>
             </div>
-            {stats.estimatedGoalDate && (
-              <div className="ui-card p-4 border-accent/25 bg-accent/10">
-                <div className="flex items-center gap-3">
-                  <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
-                  <div>
-                    <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
-                    <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
-                    <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Goal weight + progress — below Weight Change */}
-            {userProfile?.goalWeight && (() => {
-              const goal = parseFloat(userProfile.goalWeight);
-              const current = parseFloat(stats.current) || 0;
-              const hasWeight = current > 0;
-              const filtered = getFilteredData(weightEntries);
-              const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
-              const totalToLose = startWeight - goal;
-              const progress = totalToLose > 0 && hasWeight ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
-              return (
-                <div className="ui-card p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-400 text-sm">Goal</span>
-                    <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>{hasWeight ? `${stats.current} lbs now` : 'Add weight to see progress'}</span>
-                    <span>{hasWeight ? (stats.toGoal || '—') + ' to go' : '—'}</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Week in review */}
-            {(() => {
-              const d = getWeeklyDigest();
-              return (
-                <div className="ui-card p-4 border-accent/20 bg-accent/5">
-                  <h3 className="text-gold-400 text-sm font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" />This week</h3>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-200 text-sm">
-                    <span><Scale className="h-3.5 w-3 inline mr-1 text-gray-400" />Weight {d.weightStr}</span>
-                    <span><Syringe className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.injStr} injections</span>
-                    <span><Droplets className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.hydrationStr} hydrated</span>
-                    {d.avgGlucose != null && <span className="text-green-500">Glucose avg {d.avgGlucose} mg/dL</span>}
-                    {d.avgGlucose == null && d.lastGlucose && <span className="text-green-500">Last glucose {d.lastGlucose.value} mg/dL</span>}
-                    {d.lastA1c && <span className="text-cyan-400">A1C {d.lastA1c.value}%</span>}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Hydration goal progress — always show; default goal 64 oz if not set */}
-            {(() => {
-              const goal = Number(userProfile?.hydrationGoalOz) || 64;
-              const current = Math.round(hydrationToday);
-              const pct = goal > 0 ? Math.min(100, (current / goal) * 100) : 0;
-              return (
-                <div className="ui-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-400 text-sm flex items-center gap-1.5"><Droplet className="h-4 w-4 text-sky-400" />Hydration today</span>
-                    <span className="text-white font-medium">{current} / {goal} oz</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between mt-2 gap-2">
-                    {goal > 0 && (
-                      <div className="flex gap-1.5">
-                        <button type="button" onClick={() => addQuickWater(8)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
-                          +8 oz
-                        </button>
-                        <button type="button" onClick={() => addQuickWater(16)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
-                          +16 oz
-                        </button>
-                      </div>
-                    )}
-                    <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs ml-auto">
-                      Edit goal
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Logging streak */}
-            {(() => {
-              const streak = getLoggingStreak();
-              if (streak.daysLoggedLast7 === 0 && streak.weeksInRow === 0) return null;
-              return (
-                <div className="text-gray-400 text-xs">
-                  {streak.daysLoggedLast7 > 0 && <span>Logged weight {streak.daysLoggedLast7} of last 7 days</span>}
-                  {streak.weeksInRow > 0 && streak.daysLoggedLast7 > 0 && ' · '}
-                  {streak.weeksInRow > 0 && <span>{streak.weeksInRow} week{streak.weeksInRow !== 1 ? 's' : ''} in a row</span>}
-                </div>
-              );
-            })()}
-
-            {/* On track? — compare to typical GLP-1 loss */}
-            {getOnTrackInfo() && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-gold-400" />On track?</h3>
-                {(() => {
-                  const info = getOnTrackInfo();
-                  const statusMsg = info.status === 'ahead' ? "You're ahead of typical loss — great progress." : info.status === 'slower' ? "You're losing slower than average. Normal early on or at lower doses." : "Your loss is in line with typical results for your medication.";
-                  const statusColor = info.status === 'ahead' ? 'text-green-500' : info.status === 'slower' ? 'text-gold-400' : 'text-green-500';
-                  return (
-                    <div className="space-y-2">
-                      <p className="text-gray-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
-                      <p className={`text-sm font-medium ${statusColor}`}>{statusMsg}</p>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Your loss vs typical — cumulative weight loss chart */}
-            {getYouVsTypicalChartData().length > 0 && (
-              <div className="ui-card overflow-hidden">
-                <div className="px-5 pt-5 pb-1">
-                  <h3 className="text-gray-300 text-sm font-medium mb-1">Your loss vs typical</h3>
-                  <p className="text-gray-500 text-xs mb-4">Cumulative lbs lost: you vs average for your medication at your dose (clinical trials).</p>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <ComposedChart data={getYouVsTypicalChartData()} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="0" stroke="#334155" vertical={false} strokeOpacity={0.4} />
-                      <XAxis dataKey="weekLabel" axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} interval="preserveStartEnd" minTickGap={24} />
-                      <YAxis axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} width={32} domain={[0, 'auto']} tickFormatter={(v) => `${v}`} />
-                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.96)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '8px 12px' }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} formatter={(value) => [value != null ? value.toFixed(1) : '-', '']} labelFormatter={(label, payload) => payload?.[0]?.payload?.weekLabel ? `${payload[0].payload.weekLabel} — You: ${(payload[0].payload.userLoss ?? 0).toFixed(1)} lb, Typical: ${(payload[0].payload.typicalLoss ?? 0).toFixed(1)} lb` : label} />
-                      <Line type="monotone" dataKey="userLoss" name="You" stroke="#e8b84c" strokeWidth={2.5} dot={{ fill: '#e8b84c', r: 3 }} connectNulls />
-                      <Line type="monotone" dataKey="typicalLoss" name="Typical" stroke="#64748b" strokeWidth={2} strokeDasharray="4 4" dot={{ fill: '#64748b', r: 2 }} connectNulls />
-                      <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => <span className="text-gray-300">{value}</span>} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {/* Milestones — 5 lb down, 10 lb down, ... */}
-            {getMilestones().length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-gold-400" />Milestones</h3>
-                <div className="flex flex-wrap gap-2">
-                  {getMilestones().map((m, i) => (
-                    <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.achieved ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-slate-700/50 text-gray-400 border border-white/[0.04]'}`}>
-                      {m.achieved ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-gray-500 flex-shrink-0" />}
-                      <span>{m.label}</span>
-                      {!m.achieved && m.toGo > 0 && <span className="text-gray-500 text-xs">— {m.toGo.toFixed(0)} lb to go</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Upcoming Injections */}
-            {upcomingInjections.length > 0 && (
-              <div className="ui-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-gold-400" />Upcoming Injections</h3>
-                  <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('notifications'); }} className="text-gold-400 hover:text-gold-300 text-xs font-medium flex items-center gap-1">
-                    <Bell className="h-3.5 w-3" />Remind me
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {upcomingInjections.slice(0, 3).map((inj, idx) => {
-                    const suggestedSite = getSuggestedInjectionSite(inj.medication);
-                    return (
-                      <div key={idx} className="rounded-lg p-3 ui-card-inner space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(inj.medication)}20` }}>
-                              <Syringe className="h-4 w-4" style={{ color: getMedicationColor(inj.medication) }} />
-                            </div>
-                            <span className="text-white">{inj.medication}</span>
-                          </div>
-                          <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-gold-400' : 'text-gray-400'}`}>
-                            {inj.isOverdue
-                              ? `${Math.abs(inj.daysUntil)} ${Math.abs(inj.daysUntil) === 1 ? 'day' : 'days'} overdue`
-                              : inj.isDueToday
-                                ? 'Due today'
-                                : inj.daysUntil === 1
-                                  ? 'Tomorrow'
-                                  : `In ${inj.daysUntil} days`}
-                          </div>
-                        </div>
-                        {suggestedSite && (
-                          <p className="text-gray-500 text-xs pl-11">Suggested site: <span className="text-gold-400">{suggestedSite}</span></p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Last Dose vs Recommended - GLP-1 Titration Tracking */}
-            {titrationPlans.filter(p => {
-              const med = MEDICATIONS.find(m => m.name === p.medication);
-              return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
-            }).length > 0 && (
-              <div className="ui-card p-4 border-accent/20 bg-accent/5">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-violet-400" />
-                  Dose Tracking
-                </h3>
-                {titrationPlans.filter(p => {
-                  const med = MEDICATIONS.find(m => m.name === p.medication);
-                  return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
-                }).map(plan => {
-                  const current = getCurrentTitrationDose(plan);
-                  if (!current) return null;
-                  
-                  // Get last actual injection
-                  const lastInjection = injectionEntries
-                    .filter(inj => inj.type === plan.medication)
-                    .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
-                  
-                  if (!lastInjection) return null;
-                  
-                  // Compare last injection to recommended dose
-                  const lastDose = parseFloat(lastInjection.dose);
-                  const recommendedDose = parseFloat(current.dose);
-                  const isOnTrack = lastDose === recommendedDose;
-                  const isBehind = lastDose < recommendedDose;
-                  const isAhead = lastDose > recommendedDose;
-                  
-                  return (
-                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.06] bg-[var(--bg-card)]">
-                      <div className="text-white font-medium mb-3">{plan.medication}</div>
-                      
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        {/* Last Dose Taken */}
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-gray-400 text-xs mb-1">Last Dose Taken</div>
-                          <div className="text-2xl font-bold text-gold-400">
-                            {lastInjection.dose}{lastInjection.unit}
-                          </div>
-                          <div className="text-gray-500 text-xs mt-1">
-                            {new Date(parseLocalDate(lastInjection.date)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
-                        </div>
-                        
-                        {/* Recommended Dose */}
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-gray-400 text-xs mb-1">Recommended Dose</div>
-                          <div className="text-2xl font-bold text-violet-400">
-                            {current.dose}{current.unit}
-                          </div>
-                          <div className="text-gray-500 text-xs mt-1">
-                            Step {current.step} of {plan.steps.length}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Status - Clickable when behind schedule */}
-                      {isBehind ? (
-                        <button
-                          onClick={() => {
-                            setActiveTab('more');
-                            setActiveMoreSection('tools');
-                            setActiveToolSection('titration');
-                          }}
-                          className="w-full rounded-lg p-3 text-center text-sm bg-accent/20 text-gold-400 hover:bg-accent/30 transition-colors border border-accent/30"
-                        >
-                          <div className="font-medium">Ready to increase?</div>
-                          <div className="text-xs mt-1">Plan next dose at {current.dose}{current.unit}</div>
-                          <div className="text-xs text-gold-400/70 mt-1">Tap to view titration plan →</div>
-                        </button>
-                      ) : (
-                        <div className={`rounded-lg p-2 text-center text-sm ${
-                          isOnTrack ? 'bg-green-500/20 text-green-500' : 
-                          'bg-accent/20 text-gold-400'
-                        }`}>
-                          {isOnTrack && '✓ On Track - Taking recommended dose'}
-                          {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
-                        </div>
-                      )}
-                      
-                      {/* Next Step Preview */}
-                      {current.nextDose && !current.completed && (
-                        <div className="mt-2 text-xs text-gray-400 text-center">
-                          Next: {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Titration Progress */}
-            {titrationPlans.length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-violet-400" />Titration Progress</h3>
-                {titrationPlans.map(plan => {
-                  const current = getCurrentTitrationDose(plan);
-                  if (!current) return null;
-                  return (
-                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-700/40">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-white font-medium">{plan.medication}</span>
-                        {current.completed && <span className="text-xs bg-green-500/20 text-green-500 px-2 py-1 rounded">Complete</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl font-bold" style={{ color: getMedicationColor(plan.medication) }}>{current.dose}{current.unit}</div>
-                        {current.nextDose && <span className="text-gray-400 text-sm">→ {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks</span>}
-                      </div>
-                      <div className="mt-2 bg-slate-600 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-accent" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
-                      </div>
-                      <div className="text-gray-400 text-xs mt-1">Step {current.step} of {plan.steps.length}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Weight chart — clean, modern (goal weight is at top of Summary + editable in More → Profile) */}
+            {/* Weight chart — directly after Weight Change */}
             {weightEntries.length > 0 && (() => {
               const summaryData = getSummaryChartData(chartRangeWeeks);
               const pointCount = summaryData.length;
-              // Limit X-axis ticks so labels don't overlap (4w can have ~28 points → unreadable)
               const xInterval = pointCount > 12 ? Math.max(0, Math.floor(pointCount / 6)) : 0;
               const showAllDots = pointCount <= 35;
-              // Y-axis domain from actual weight values only (avoids bad top tick like "0002")
               const weightValues = summaryData.map(p => p.weight).filter(w => w != null && !isNaN(w));
               const wMin = weightValues.length ? Math.min(...weightValues) : 0;
               const wMax = weightValues.length ? Math.max(...weightValues) : 100;
               const yDomain = [Math.floor(wMin) - 2, Math.ceil(wMax) + 2];
-              // Current weight = most recent point with a value (for reference line + highlight)
               const lastPointWithWeight = [...summaryData].reverse().find(p => p.weight != null);
               const currentWeight = lastPointWithWeight?.weight;
               const currentWeightDate = lastPointWithWeight?.fullDate;
@@ -4151,9 +3873,9 @@ const wipeAllData = () => {
                     </div>
                   </div>
                 </div>
-                <div className="-mx-2 sm:-mx-3 w-[calc(100%+0.5rem)] sm:w-[calc(100%+0.75rem)]">
+                <div className="-mx-1 sm:-mx-2 w-full">
                   <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 40, bottom: 4 }}>
+                    <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 28, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.2} />
@@ -4177,8 +3899,8 @@ const wipeAllData = () => {
                         tickLine={false} 
                         stroke="#64748b" 
                         fontSize={11} 
-                        tickMargin={8}
-                        width={40}
+                        tickMargin={6}
+                        width={32}
                         domain={yDomain}
                         tickFormatter={(v) => `${v}`}
                         allowDecimals={false}
@@ -4314,6 +4036,451 @@ const wipeAllData = () => {
               </div>
               );
             })()}
+
+            {/* Estimated goal + Goal tracker side by side */}
+            <div className="grid gap-4 md:grid-cols-2">
+              {stats.estimatedGoalDate && (
+                <div className="ui-card p-4 border-accent/25 bg-accent/10">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
+                    <div>
+                      <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
+                      <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
+                      <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {userProfile?.goalWeight && (() => {
+                const goal = parseFloat(userProfile.goalWeight);
+                const current = parseFloat(stats.current) || 0;
+                const hasWeight = current > 0;
+                const filtered = getFilteredData(weightEntries);
+                const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
+                const totalToLose = startWeight - goal;
+                const progress = totalToLose > 0 && hasWeight ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
+                return (
+                  <div className="ui-card p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-400 text-sm">Goal</span>
+                      <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>{hasWeight ? `${stats.current} lbs now` : 'Add weight to see progress'}</span>
+                      <span>{hasWeight ? (stats.toGoal || '—') + ' to go' : '—'}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Week in review */}
+            {(() => {
+              const d = getWeeklyDigest();
+              return (
+                <div className="ui-card p-4 border-accent/20 bg-accent/5">
+                  <h3 className="text-gold-400 text-sm font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" />This week</h3>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-200 text-sm">
+                    <span><Scale className="h-3.5 w-3 inline mr-1 text-gray-400" />Weight {d.weightStr}</span>
+                    <span><Syringe className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.injStr} injections</span>
+                    <span><Droplets className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.hydrationStr} hydrated</span>
+                    {d.avgGlucose != null && <span className="text-green-500">Glucose avg {d.avgGlucose} mg/dL</span>}
+                    {d.avgGlucose == null && d.lastGlucose && <span className="text-green-500">Last glucose {d.lastGlucose.value} mg/dL</span>}
+                    {d.lastA1c && <span className="text-cyan-400">A1C {d.lastA1c.value}%</span>}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Hydration goal progress — always show; default goal 64 oz if not set */}
+            {(() => {
+              const goal = Number(userProfile?.hydrationGoalOz) || 64;
+              const current = Math.round(hydrationToday);
+              const pct = goal > 0 ? Math.min(100, (current / goal) * 100) : 0;
+              return (
+                <div className="ui-card p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm flex items-center gap-1.5"><Droplet className="h-4 w-4 text-sky-400" />Hydration today</span>
+                    <span className="text-white font-medium">{current} / {goal} oz</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between mt-2 gap-2">
+                    {goal > 0 && (
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => addQuickWater(8)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
+                          +8 oz
+                        </button>
+                        <button type="button" onClick={() => addQuickWater(16)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
+                          +16 oz
+                        </button>
+                      </div>
+                    )}
+                    <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs ml-auto">
+                      Edit goal
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Logging streak */}
+            {(() => {
+              const streak = getLoggingStreak();
+              if (streak.daysLoggedLast7 === 0 && streak.weeksInRow === 0) return null;
+              return (
+                <div className="text-gray-400 text-xs">
+                  {streak.daysLoggedLast7 > 0 && <span>Logged weight {streak.daysLoggedLast7} of last 7 days</span>}
+                  {streak.weeksInRow > 0 && streak.daysLoggedLast7 > 0 && ' · '}
+                  {streak.weeksInRow > 0 && <span>{streak.weeksInRow} week{streak.weeksInRow !== 1 ? 's' : ''} in a row</span>}
+                </div>
+              );
+            })()}
+
+            {/* In-app reminder: all doses due today or overdue in one box */}
+            {upcomingInjections.some(inj => inj.isDueToday || inj.isOverdue) && (() => {
+              const dueOrOverdue = upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue);
+              if (dueOrOverdue.length === 0) return null;
+              const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
+              return (
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
+                  className="injection-reminder-card w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors animate-injection-reminder"
+                >
+                  <div className="flex items-center gap-3">
+                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0 injection-reminder-bell" />
+                    <div className="flex-1 min-w-0">
+                      <span className={`font-semibold text-sm block ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
+                        {dueOrOverdue.length === 1
+                          ? (dueOrOverdue[0].isOverdue
+                              ? `${dueOrOverdue[0].medication} — ${Math.abs(dueOrOverdue[0].daysUntil)} day${Math.abs(dueOrOverdue[0].daysUntil) !== 1 ? 's' : ''} overdue`
+                              : `${dueOrOverdue[0].medication} due today`)
+                          : hasOverdue && dueOrOverdue.every(inj => inj.isOverdue)
+                            ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} — overdue`
+                            : dueOrOverdue.every(inj => inj.isDueToday)
+                              ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} due today`
+                              : dueOrOverdue.map(inj => inj.isOverdue ? `${inj.medication} (${Math.abs(inj.daysUntil)}d overdue)` : `${inj.medication} (today)`).join(', ')}
+                      </span>
+                      <p className="text-gray-400 text-xs mt-0.5">Tap to log injection</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })()}
+
+            {/* Dashboard phase line: current phase for all active meds */}
+            {getMedicationInsights().length > 0 && (() => {
+              const insights = getMedicationInsights().filter(i => i.phase);
+              if (insights.length === 0) return null;
+              return (
+                <div className="ui-card p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-400 text-sm">Current phase</span>
+                    <button type="button" onClick={() => setActiveTab('insights')} className="text-gold-400 hover:text-gold-300 text-xs font-medium">View Insights</button>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                    {insights.map(insight => (
+                      <span key={insight.medication} className="text-sm">
+                        <span className={`font-semibold ${insight.phaseColor}`}>{insight.phase}</span>
+                        <span className="text-gray-400"> for {insight.medication}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Your vials — remaining volume on Summary */}
+            {vials.length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
+                <div className="space-y-2">
+                  {vials.map(v => {
+                    const remMg = v.remainingMg ?? v.totalMg;
+                    const totalMg = v.totalMg;
+                    const conc = v.concentration;
+                    const remMl = conc > 0 ? remMg / conc : null;
+                    const totalMl = conc > 0 ? totalMg / conc : null;
+                    const isLow = remMg <= 0;
+                    return (
+                      <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
+                        <span className="text-white font-medium">{v.medication}</span>
+                        <span className="text-gray-400">
+                          {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
+                          {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">· {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
+              </div>
+            )}
+
+            {/* Progress + comparison section in a responsive grid */}
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* On track? — compare to typical GLP-1 loss */}
+              {getOnTrackInfo() && (
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-gold-400" />On track?</h3>
+                  {(() => {
+                    const info = getOnTrackInfo();
+                    const statusMsg = info.status === 'ahead' ? "You're ahead of typical loss — great progress." : info.status === 'slower' ? "You're losing slower than average. Normal early on or at lower doses." : "Your loss is in line with typical results for your medication.";
+                    const statusColor = info.status === 'ahead' ? 'text-green-500' : info.status === 'slower' ? 'text-gold-400' : 'text-green-500';
+                    const milestones = getMilestones();
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-gray-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
+                        <p className={`text-sm font-medium ${statusColor}`}>{statusMsg}</p>
+                        {info.daysOnMed && (
+                          <p className="text-gray-400 text-xs">
+                            On this medication for <span className="text-gray-200 font-medium">{info.daysOnMed} day{info.daysOnMed !== 1 ? 's' : ''}</span>.
+                          </p>
+                        )}
+                        {milestones.length > 0 && info.userLoss > 0 && (
+                          <div className="pt-1 border-t border-white/[0.06] mt-2">
+                            <p className="text-gray-400 text-[11px] mb-1 font-medium">At this pace:</p>
+                            <ul className="space-y-0.5 text-[11px]">
+                              {milestones.map((m, idx) => {
+                                const weeksTo = m.achieved || m.toGo <= 0 ? 0 : m.toGo / info.userLoss;
+                                const isAchieved = m.achieved || m.toGo <= 0;
+                                const etaText = isAchieved
+                                  ? 'reached'
+                                  : weeksTo < 1
+                                    ? `${Math.max(1, Math.round(weeksTo * 7))} day${Math.max(1, Math.round(weeksTo * 7)) !== 1 ? 's' : ''}`
+                                    : `${weeksTo.toFixed(1)} week${weeksTo >= 2 ? 's' : ''}`;
+                                return (
+                                  <li key={idx} className="flex items-center gap-2">
+                                    {isAchieved ? (
+                                      <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
+                                    ) : (
+                                      <span className="w-3 h-3 rounded-full border border-gray-500 flex-shrink-0" />
+                                    )}
+                                    <span className={`flex-1 ${isAchieved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {m.label}
+                                    </span>
+                                    <span className={`text-right ${isAchieved ? 'text-green-500' : 'text-gray-400'}`}>
+                                      {isAchieved ? 'reached' : `~${etaText}`}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Milestones — 5 lb down, 10 lb down, ... */}
+              {getMilestones().length > 0 && (
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-gold-400" />Milestones</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {getMilestones().map((m, i) => (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.achieved ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-slate-700/50 text-gray-400 border border-white/[0.04]'}`}>
+                        {m.achieved ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-gray-500 flex-shrink-0" />}
+                        <span>{m.label}</span>
+                        {!m.achieved && m.toGo > 0 && <span className="text-gray-500 text-xs">— {m.toGo.toFixed(0)} lb to go</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Your loss vs typical — cumulative weight loss chart (full width on md+) */}
+              {getYouVsTypicalChartData().length > 0 && (
+                <div className="ui-card overflow-hidden md:col-span-2">
+                  <div className="px-5 pt-5 pb-1">
+                    <h3 className="text-gray-300 text-sm font-medium mb-1">Your loss vs typical</h3>
+                    <p className="text-gray-500 text-xs mb-4">Cumulative lbs lost: you vs average for your medication at your dose (clinical trials).</p>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <ComposedChart data={getYouVsTypicalChartData()} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="0" stroke="#334155" vertical={false} strokeOpacity={0.4} />
+                        <XAxis dataKey="weekLabel" axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} interval="preserveStartEnd" minTickGap={24} />
+                        <YAxis axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} width={32} domain={[0, 'auto']} tickFormatter={(v) => `${v}`} />
+                        <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.96)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '8px 12px' }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} formatter={(value) => [value != null ? value.toFixed(1) : '-', '']} labelFormatter={(label, payload) => payload?.[0]?.payload?.weekLabel ? `${payload[0].payload.weekLabel} — You: ${(payload[0].payload.userLoss ?? 0).toFixed(1)} lb, Typical: ${(payload[0].payload.typicalLoss ?? 0).toFixed(1)} lb` : label} />
+                        <Line type="monotone" dataKey="userLoss" name="You" stroke="#e8b84c" strokeWidth={2.5} dot={{ fill: '#e8b84c', r: 3 }} connectNulls />
+                        <Line type="monotone" dataKey="typicalLoss" name="Typical" stroke="#64748b" strokeWidth={2} strokeDasharray="4 4" dot={{ fill: '#64748b', r: 2 }} connectNulls />
+                        <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => <span className="text-gray-300">{value}</span>} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Upcoming Injections (full width on md+) */}
+              {upcomingInjections.length > 0 && (
+                <div className="ui-card p-4 md:col-span-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-white font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-gold-400" />Upcoming Injections</h3>
+                    <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('notifications'); }} className="text-gold-400 hover:text-gold-300 text-xs font-medium flex items-center gap-1">
+                      <Bell className="h-3.5 w-3" />Remind me
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {upcomingInjections.slice(0, 3).map((inj, idx) => {
+                      const suggestedSite = getSuggestedInjectionSite(inj.medication);
+                      return (
+                        <div key={idx} className="rounded-lg p-3 ui-card-inner space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(inj.medication)}20` }}>
+                                <Syringe className="h-4 w-4" style={{ color: getMedicationColor(inj.medication) }} />
+                              </div>
+                              <span className="text-white">{inj.medication}</span>
+                            </div>
+                            <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-gold-400' : 'text-gray-400'}`}>
+                              {inj.isOverdue
+                                ? `${Math.abs(inj.daysUntil)} ${Math.abs(inj.daysUntil) === 1 ? 'day' : 'days'} overdue`
+                                : inj.isDueToday
+                                  ? 'Due today'
+                                  : inj.daysUntil === 1
+                                    ? 'Tomorrow'
+                                    : `In ${inj.daysUntil} days`}
+                            </div>
+                          </div>
+                          {suggestedSite && (
+                            <p className="text-gray-500 text-xs pl-11">Suggested site: <span className="text-gold-400">{suggestedSite}</span></p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Last Dose vs Recommended - GLP-1 Titration Tracking */}
+            {titrationPlans.filter(p => {
+              const med = MEDICATIONS.find(m => m.name === p.medication);
+              return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
+            }).length > 0 && (
+              <div className="ui-card p-4 border-accent/20 bg-accent/5">
+                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-violet-400" />
+                  Dose Tracking
+                </h3>
+                {titrationPlans.filter(p => {
+                  const med = MEDICATIONS.find(m => m.name === p.medication);
+                  return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
+                }).map(plan => {
+                  const current = getCurrentTitrationDose(plan);
+                  if (!current) return null;
+                  
+                  // Get last actual injection
+                  const lastInjection = injectionEntries
+                    .filter(inj => inj.type === plan.medication)
+                    .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
+                  
+                  if (!lastInjection) return null;
+                  
+                  // Compare last injection to recommended dose
+                  const lastDose = parseFloat(lastInjection.dose);
+                  const recommendedDose = parseFloat(current.dose);
+                  const isOnTrack = lastDose === recommendedDose;
+                  const isBehind = lastDose < recommendedDose;
+                  const isAhead = lastDose > recommendedDose;
+                  
+                  return (
+                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.06] bg-[var(--bg-card)]">
+                      <div className="text-white font-medium mb-3">{plan.medication}</div>
+                      
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        {/* Last Dose Taken */}
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-gray-400 text-xs mb-1">Last Dose Taken</div>
+                          <div className="text-2xl font-bold text-gold-400">
+                            {lastInjection.dose}{lastInjection.unit}
+                          </div>
+                          <div className="text-gray-500 text-xs mt-1">
+                            {new Date(parseLocalDate(lastInjection.date)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </div>
+                        </div>
+                        
+                        {/* Recommended Dose */}
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <div className="text-gray-400 text-xs mb-1">Recommended Dose</div>
+                          <div className="text-2xl font-bold text-violet-400">
+                            {current.dose}{current.unit}
+                          </div>
+                          <div className="text-gray-500 text-xs mt-1">
+                            Step {current.step} of {plan.steps.length}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Status - Clickable when behind schedule */}
+                      {isBehind ? (
+                        <button
+                          onClick={() => {
+                            setActiveTab('more');
+                            setActiveMoreSection('tools');
+                            setActiveToolSection('titration');
+                          }}
+                          className="w-full rounded-lg p-3 text-center text-sm bg-accent/20 text-gold-400 hover:bg-accent/30 transition-colors border border-accent/30"
+                        >
+                          <div className="font-medium">Ready to increase?</div>
+                          <div className="text-xs mt-1">Plan next dose at {current.dose}{current.unit}</div>
+                          <div className="text-xs text-gold-400/70 mt-1">Tap to view titration plan →</div>
+                        </button>
+                      ) : (
+                        <div className={`rounded-lg p-2 text-center text-sm ${
+                          isOnTrack ? 'bg-green-500/20 text-green-500' : 
+                          'bg-accent/20 text-gold-400'
+                        }`}>
+                          {isOnTrack && '✓ On Track - Taking recommended dose'}
+                          {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
+                        </div>
+                      )}
+                      
+                      {/* Next Step Preview */}
+                      {current.nextDose && !current.completed && (
+                        <div className="mt-2 text-xs text-gray-400 text-center">
+                          Next: {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Titration Progress */}
+            {titrationPlans.length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-medium mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-violet-400" />Titration Progress</h3>
+                {titrationPlans.map(plan => {
+                  const current = getCurrentTitrationDose(plan);
+                  if (!current) return null;
+                  return (
+                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-700/40">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-white font-medium">{plan.medication}</span>
+                        {current.completed && <span className="text-xs bg-green-500/20 text-green-500 px-2 py-1 rounded">Complete</span>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-2xl font-bold" style={{ color: getMedicationColor(plan.medication) }}>{current.dose}{current.unit}</div>
+                        {current.nextDose && <span className="text-gray-400 text-sm">→ {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks</span>}
+                      </div>
+                      <div className="mt-2 bg-slate-600 rounded-full h-2">
+                        <div className="h-2 rounded-full bg-accent" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
+                      </div>
+                      <div className="text-gray-400 text-xs mt-1">Step {current.step} of {plan.steps.length}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
           </div>
         )}
 
@@ -4326,109 +4493,32 @@ const wipeAllData = () => {
               <p className="text-gray-400 text-sm mt-1">Your medication levels at a glance</p>
             </div>
 
-            {/* Side effects from logs */}
-            {getSideEffectsSummary().length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-semibold mb-2 text-sm">From your logs</h3>
-                <p className="text-gray-400 text-xs mb-2">Most mentioned side effects</p>
-                <div className="flex flex-wrap gap-2">
-                  {getSideEffectsSummary().map(se => (
-                    <span key={se} className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-1 rounded-lg">{se}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Side effects by day in cycle — reference only; shows all your logged meds */}
-            {(() => {
-              const loggedMeds = getLoggedMedications();
-              if (loggedMeds.length === 0) return null;
-              return (
-                <div className="ui-card overflow-hidden">
-                  <h3 className="text-white font-semibold mb-1 text-sm px-4 pt-4">Side effects by day in cycle</h3>
-                  <p className="text-gray-400 text-xs mb-3 px-4">Reference: what’s commonly reported by day. Tap a medication to expand.</p>
-                  <div className="divide-y divide-white/10">
-                    {loggedMeds.map(medName => {
-                      const med = MEDICATIONS.find(m => m.name === medName);
-                      const color = med?.color || '#6b7280';
-                      const byDay = TYPICAL_SIDE_EFFECTS_BY_DAY[medName];
-                      const hasData = byDay && Array.isArray(byDay) && byDay.length > 0;
-                      const isExpanded = insightsSideEffectsExpandedMed === medName;
-                      return (
-                        <div key={medName} className="overflow-hidden" style={{ borderLeftWidth: '4px', borderLeftColor: color }}>
-                          <button type="button" onClick={() => setInsightsSideEffectsExpandedMed(isExpanded ? null : medName)} className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition-colors">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                              <span className="text-white font-medium text-sm truncate">{medName}</span>
-                            </div>
-                            <ChevronDown className={`h-4 w-4 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                          </button>
-                          {isExpanded && (
-                          <div className="px-4 pb-4 pt-0 border-t border-white/[0.04]">
-                            {hasData ? (
-                              <div className="space-y-2.5 mt-3">
-                                {byDay.map(({ day, effects }, i) => (
-                                  <div key={i}>
-                                    <div className="text-gray-500 text-[10px] font-medium uppercase tracking-wider mb-1">{day}</div>
-                                    <div className="flex flex-wrap gap-1">
-                                      {effects.map(ef => (
-                                        <span key={ef} className="text-gray-300 text-xs bg-slate-700/60 px-2 py-0.5 rounded">{ef}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-xs mt-3">No reference pattern for this compound yet. Log side effects when you inject to see your patterns in the cards above.</p>
-                            )}
-                          </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Side-effect intelligence — correlate symptoms with dosing, suggest tips */}
-            {(() => {
-              const patterns = getSideEffectPatterns();
-              return patterns && patterns.length > 0 && (
-              <div className="ui-card p-4 border border-gold-500/20 bg-gold-500/5">
-                <h3 className="text-white font-semibold mb-2 text-sm flex items-center gap-2">Side-effect patterns</h3>
-                <p className="text-gray-400 text-xs mb-3">Correlated with your injection timing. Use this to adjust dosing.</p>
-                <div className="space-y-3">
-                  {patterns.slice(0, 5).map((p, i) => (
-                    <div key={i} className="bg-slate-800/50 rounded-lg p-3">
-                      <div className="text-gold-400 font-medium text-xs">{p.med} · {p.sideEffect}</div>
-                      <p className="text-gray-300 text-xs mt-1">{p.suggestion}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-gray-500 text-xs mt-2">Tip: Try evening injections, split doses, or increase electrolytes to smooth peaks.</p>
-              </div>
-              );
-            })()}
-
-            {/* How levels work — one line + optional expand */}
-            <div className="ui-card overflow-hidden">
-              <button type="button" onClick={() => setInsightsShowLevelsHelp(!insightsShowLevelsHelp)} className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition-colors">
-                <span className="text-gray-300 text-sm">Levels can be &gt;100% when doses build up (steady state). SubQ vs IM affects the curve.</span>
-                <ChevronDown className={`h-4 w-4 text-gray-500 flex-shrink-0 transition-transform ${insightsShowLevelsHelp ? 'rotate-180' : ''}`} />
-              </button>
-              {insightsShowLevelsHelp && (
-                <div className="px-4 pb-4 pt-0 border-t border-white/[0.04]">
-                  <p className="text-gray-400 text-xs mt-3">When you inject regularly, new doses add to what's still in your system — that's steady-state accumulation. 0–100% = single dose range; 100–150% = building up; 150–200% = steady state (optimal). Route (SubQ vs IM) is modeled so IM shows faster absorption.</p>
-                  <div className="flex gap-2 mt-3">
-                    <div className="flex-1 bg-slate-700/50 rounded-lg p-2 text-center text-xs"><div className="text-gray-400">Single</div><div className="text-white font-medium">0–100%</div></div>
-                    <div className="flex-1 bg-yellow-500/10 rounded-lg p-2 text-center text-xs"><div className="text-yellow-400">Building</div><div className="text-white font-medium">100–150%</div></div>
-                    <div className="flex-1 bg-green-500/10 rounded-lg p-2 text-center text-xs"><div className="text-green-500">Steady ✓</div><div className="text-white font-medium">150–200%</div></div>
-                  </div>
-                </div>
-              )}
+            {/* How levels work — simple explanation */}
+            <div className="ui-card p-4">
+              <h3 className="text-white font-semibold text-sm mb-2">How levels work</h3>
+              <p className="text-gray-400 text-xs">
+                Levels can be &gt;100% when doses build up (steady state). SubQ vs IM affects how fast the curve rises, but your total weekly dose still drives the long‑term level.
+              </p>
             </div>
 
+            {/* Level phases legend — immediately under explanation */}
+            <div className="ui-card p-4">
+              <h3 className="text-white font-semibold text-sm mb-2">Level phases at a glance</h3>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex-1 bg-slate-700/60 rounded-lg p-2.5 text-xs text-center">
+                  <div className="text-gray-400">Single dose</div>
+                  <div className="text-white font-medium">0–100%</div>
+                </div>
+                <div className="flex-1 bg-yellow-500/10 rounded-lg p-2.5 text-xs text-center">
+                  <div className="text-yellow-400">Building up</div>
+                  <div className="text-white font-medium">100–150%</div>
+                </div>
+                <div className="flex-1 bg-green-500/10 rounded-lg p-2.5 text-xs text-center">
+                  <div className="text-green-500">Steady state ✓</div>
+                  <div className="text-white font-medium">150–200%</div>
+                </div>
+              </div>
+            </div>
             {/* Single unified graph: estimated medication levels from half-life (all peptides/hormones) */}
             {getMedicationInsights().length > 0 && (() => {
               const { data: unifiedData, medications: unifiedMeds } = getUnifiedMedicationLevelChartData();
@@ -4624,6 +4714,166 @@ const wipeAllData = () => {
               );
             })()}
 
+            {/* Weekly breakdown: dose & weight change */}
+            {(() => {
+              const { rows, meds } = getWeeklyDoseAndWeightSummary();
+              if (!rows.length) return null;
+              const totalWeightChange = rows.reduce((sum, row) => {
+                return row.weightChange != null ? sum + row.weightChange : sum;
+              }, 0);
+              return (
+                <div className="ui-card p-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-gold-400" />
+                      Weekly dose &amp; weight change
+                    </h3>
+                    <div className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                      totalWeightChange < 0
+                        ? 'border-green-400 text-green-300 bg-green-500/10'
+                        : totalWeightChange > 0
+                          ? 'border-red-400 text-red-300 bg-red-500/10'
+                          : 'border-gray-500 text-gray-300 bg-white/5'
+                    }`}>
+                      Total weight change:{' '}
+                      {totalWeightChange === 0
+                        ? '0.0 lb'
+                        : `${totalWeightChange.toFixed(1)} lb`}
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-xs mb-3">
+                    Weekly totals per medication (using the units you logged), plus your net weight change for that week (compared to the prior week&apos;s weight).
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 border-b border-white/10">
+                          <th className="py-2 pr-4 text-left font-medium">Week</th>
+                          {meds.map((medName) => (
+                            <th key={medName} className="py-2 px-4 text-right font-medium">{medName}</th>
+                          ))}
+                          <th className="py-2 pl-4 text-right font-medium">Weight change (lb)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.slice(-12).map((row, idx) => (
+                          <tr key={idx} className="border-b border-white/[0.04] last:border-b-0">
+                            <td className="py-2 pr-4 text-gray-200">
+                              <span className="text-gray-500 mr-1 text-[11px]">W{row.weekIndex}</span>
+                              <span>{row.weekLabel}</span>
+                            </td>
+                            {meds.map((medName) => {
+                              const medEntry = row.perMed?.[medName];
+                              if (!medEntry || !medEntry.dose) {
+                                return (
+                                  <td key={medName} className="py-2 px-4 text-right text-gray-500">
+                                    —
+                                  </td>
+                                );
+                              }
+                              return (
+                                <td key={medName} className="py-2 px-4 text-right text-gray-200">
+                                  {medEntry.dose.toFixed(1)}{medEntry.unit ? ` ${medEntry.unit}` : ''}
+                                </td>
+                              );
+                            })}
+                            <td className={`py-2 pl-4 text-right ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
+                              {row.weightChange == null ? '—' : row.weightChange.toFixed(1)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Side effects from logs */}
+            {getSideEffectsSummary().length > 0 && (
+              <div className="ui-card p-4">
+                <h3 className="text-white font-semibold mb-2 text-sm">From your logs</h3>
+                <p className="text-gray-400 text-xs mb-2">Most mentioned side effects</p>
+                <div className="flex flex-wrap gap-2">
+                  {getSideEffectsSummary().map(se => (
+                    <span key={se} className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-1 rounded-lg">{se}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Side effects by day in cycle — reference only; shows all your logged meds */}
+            {(() => {
+              const loggedMeds = getLoggedMedications();
+              if (loggedMeds.length === 0) return null;
+              return (
+                <div className="ui-card overflow-hidden">
+                  <h3 className="text-white font-semibold mb-1 text-sm px-4 pt-4">Side effects by day in cycle</h3>
+                  <p className="text-gray-400 text-xs mb-3 px-4">Reference: what’s commonly reported by day. Tap a medication to expand.</p>
+                  <div className="divide-y divide-white/10">
+                    {loggedMeds.map(medName => {
+                      const med = MEDICATIONS.find(m => m.name === medName);
+                      const color = med?.color || '#6b7280';
+                      const byDay = TYPICAL_SIDE_EFFECTS_BY_DAY[medName];
+                      const hasData = byDay && Array.isArray(byDay) && byDay.length > 0;
+                      const isExpanded = insightsSideEffectsExpandedMed === medName;
+                      return (
+                        <div key={medName} className="overflow-hidden" style={{ borderLeftWidth: '4px', borderLeftColor: color }}>
+                          <button type="button" onClick={() => setInsightsSideEffectsExpandedMed(isExpanded ? null : medName)} className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                              <span className="text-white font-medium text-sm truncate">{medName}</span>
+                            </div>
+                            <ChevronDown className={`h-4 w-4 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {isExpanded && (
+                          <div className="px-4 pb-4 pt-0 border-t border-white/[0.04]">
+                            {hasData ? (
+                              <div className="space-y-2.5 mt-3">
+                                {byDay.map(({ day, effects }, i) => (
+                                  <div key={i}>
+                                    <div className="text-gray-500 text-[10px] font-medium uppercase tracking-wider mb-1">{day}</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {effects.map(ef => (
+                                        <span key={ef} className="text-gray-300 text-xs bg-slate-700/60 px-2 py-0.5 rounded">{ef}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-xs mt-3">No reference pattern for this compound yet. Log side effects when you inject to see your patterns in the cards above.</p>
+                            )}
+                          </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Side-effect intelligence — correlate symptoms with dosing, suggest tips */}
+            {(() => {
+              const patterns = getSideEffectPatterns();
+              return patterns && patterns.length > 0 && (
+              <div className="ui-card p-4 border border-gold-500/20 bg-gold-500/5">
+                <h3 className="text-white font-semibold mb-2 text-sm flex items-center gap-2">Side-effect patterns</h3>
+                <p className="text-gray-400 text-xs mb-3">Correlated with your injection timing. Use this to adjust dosing.</p>
+                <div className="space-y-3">
+                  {patterns.slice(0, 5).map((p, i) => (
+                    <div key={i} className="bg-slate-800/50 rounded-lg p-3">
+                      <div className="text-gold-400 font-medium text-xs">{p.med} · {p.sideEffect}</div>
+                      <p className="text-gray-300 text-xs mt-1">{p.suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-gray-500 text-xs mt-2">Tip: Try evening injections, split doses, or increase electrolytes to smooth peaks.</p>
+              </div>
+              );
+            })()}
+
             {getMedicationInsights().length === 0 ? (
               <div className="ui-card p-8 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
@@ -4782,9 +5032,9 @@ const wipeAllData = () => {
                     </div>
                     )}
                   </div>
-                );
+                    );
                 })}
-              </>
+            </>
             )}
           </div>
         )}
@@ -4842,9 +5092,31 @@ const wipeAllData = () => {
             )}
 
             <div className="ui-card p-4">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center mb-4 gap-2">
                 <h3 className="text-white font-medium">History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={weightHistoryFilterDate}
+                    onChange={(e) => setWeightHistoryFilterDate(e.target.value)}
+                    className="bg-slate-800 text-gray-200 text-xs rounded-lg px-2 py-1.5"
+                    title="Filter by week (pick any day in the week)"
+                  />
+                  {weightHistoryFilterDate && (
+                    <button
+                      type="button"
+                      onClick={() => setWeightHistoryFilterDate('')}
+                      className="text-gray-500 hover:text-gray-300 text-xs"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  {!showAddForm && (
+                    <button onClick={() => setShowAddForm(true)} className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg">
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
               </div>
               {weightEntries.length === 0 ? (
                 <div className="text-center py-12 px-4">
@@ -4864,7 +5136,26 @@ const wipeAllData = () => {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {sortWeightByDateDesc(weightEntries).map((entry) => (
+                  {(() => {
+                    const sorted = sortWeightByDateDesc(weightEntries);
+                    if (!weightHistoryFilterDate) return sorted;
+                    const selected = parseLocalDate(weightHistoryFilterDate);
+                    if (!selected) return sorted;
+                    const startOfWeek = (d) => {
+                      const date = new Date(d);
+                      const day = date.getDay();
+                      const diff = day === 0 ? -6 : 1 - day;
+                      date.setDate(date.getDate() + diff);
+                      date.setHours(0, 0, 0, 0);
+                      return date;
+                    };
+                    const ws = startOfWeek(selected);
+                    const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
+                    return sorted.filter(entry => {
+                      const d = parseLocalDate(entry.date);
+                      return d && d >= ws && d <= we;
+                    });
+                  })().map((entry) => (
                     <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
                       <div className="flex items-center gap-3">
                         <div className="bg-pink-500/20 p-2 rounded-lg"><Scale className="h-5 w-5 text-pink-400" /></div>
@@ -5179,8 +5470,11 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-gray-400 text-sm block mb-1">Date</label>
-                    <input type="date" value={injectionDate} onChange={(e) => setInjectionDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
+                    <label className="text-gray-400 text-sm block mb-1">Date &amp; time</label>
+                    <div className="flex gap-2">
+                      <input type="date" value={injectionDate} onChange={(e) => setInjectionDate(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3" />
+                      <input type="time" value={injectionTime} onChange={(e) => setInjectionTime(e.target.value)} className="w-[7rem] bg-slate-700 text-white rounded-lg px-3 py-3" />
+                    </div>
                   </div>
                   {(() => {
                     const matchingVials = vials.filter(v => v.medication === injectionType);
@@ -5263,8 +5557,24 @@ const wipeAllData = () => {
 
             <div className="ui-card p-4">
               <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
-                <h3 className="text-white font-medium">History</h3>
+              <h3 className="text-white font-medium">History</h3>
                 <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={injectionHistoryFilterDate}
+                  onChange={(e) => setInjectionHistoryFilterDate(e.target.value)}
+                  className="bg-slate-800 text-gray-200 text-xs rounded-lg px-2 py-1.5"
+                  title="Filter by week (pick any day in the week)"
+                />
+                {injectionHistoryFilterDate && (
+                  <button
+                    type="button"
+                    onClick={() => setInjectionHistoryFilterDate('')}
+                    className="text-gray-500 hover:text-gray-300 text-xs"
+                  >
+                    Clear
+                  </button>
+                )}
                   <button
                     type="button"
                     onClick={() => setInjectionHistorySort(prev => prev === 'byMed' ? 'byDate' : 'byMed')}
@@ -5282,9 +5592,26 @@ const wipeAllData = () => {
               ) : (
                 <div className={`space-y-3 overflow-y-auto ${injectionHistorySort === 'byMed' ? 'max-h-[32rem]' : 'max-h-[32rem]'}`}>
                   {injectionHistorySort === 'byDate' ? (
-                    [...injectionEntries]
-                      .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))
-                      .map((entry) => {
+                    (() => {
+                      const sorted = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+                      if (!injectionHistoryFilterDate) return sorted;
+                      const selected = parseLocalDate(injectionHistoryFilterDate);
+                      if (!selected) return sorted;
+                      const startOfWeek = (d) => {
+                        const date = new Date(d);
+                        const day = date.getDay();
+                        const diff = day === 0 ? -6 : 1 - day;
+                        date.setDate(date.getDate() + diff);
+                        date.setHours(0, 0, 0, 0);
+                        return date;
+                      };
+                      const ws = startOfWeek(selected);
+                      const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
+                      return sorted.filter(entry => {
+                        const d = parseLocalDate(entry.date);
+                        return d && d >= ws && d <= we;
+                      });
+                    })().map((entry) => {
                         const color = getMedicationColor(entry.type);
                         return (
                           <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
