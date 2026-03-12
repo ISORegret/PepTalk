@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="PepTalk — track weight, injections, vials, and progress. Low-vial popup, injection reminders, estimated medication levels, and export. One app for your health journey." />
+  <meta name="description" content="PepTalk v1.3.3 — track weight, injections, vials, and progress. Low-vial alerts, weekly dose & weight table, estimated medication levels, goal tracking, and export. One app for your health journey." />
   <title>PepTalk — Your Health Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12,26 +12,30 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --bg: #060608;
-      --bg-elevated: rgba(14, 14, 18, 0.92);
+      --bg-card: rgba(14, 14, 18, 0.92);
+      --bg-elevated: rgba(18, 18, 24, 0.95);
       --accent: #d4a853;
-      --accent-glow: rgba(212, 168, 83, 0.4);
+      --accent-glow: rgba(212, 168, 83, 0.35);
       --accent-soft: rgba(212, 168, 83, 0.12);
       --accent-hover: #e4b863;
       --text: #f5f5f7;
-      --text-muted: #8a8a9a;
+      --text-muted: #9ca3af;
       --border: rgba(255, 255, 255, 0.06);
+      --radius: 0.875rem;
+      --radius-sm: 0.5rem;
+    }
+    html {
+      scroll-behavior: smooth;
     }
     html, body {
-      height: 100%;
-      overflow: hidden;
+      min-height: 100%;
     }
     body {
       font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       -webkit-font-smoothing: antialiased;
-      display: flex;
-      flex-direction: column;
+      line-height: 1.5;
     }
 
     .bg-wrap {
@@ -46,8 +50,9 @@
       position: absolute;
       inset: 0;
       background:
-        radial-gradient(ellipse 100% 80% at 50% -30%, rgba(212, 168, 83, 0.18), transparent 55%),
-        radial-gradient(ellipse 70% 50% at 100% 50%, rgba(212, 168, 83, 0.08), transparent 45%),
+        radial-gradient(ellipse 120% 70% at 50% -20%, rgba(212, 168, 83, 0.12), transparent 50%),
+        radial-gradient(ellipse 60% 80% at 100% 60%, rgba(212, 168, 83, 0.06), transparent 45%),
+        radial-gradient(ellipse 50% 50% at 0% 80%, rgba(212, 168, 83, 0.04), transparent 40%),
         var(--bg);
     }
     .grid-overlay {
@@ -57,47 +62,38 @@
       background-image:
         linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-      background-size: 60px 60px;
+      background-size: 48px 48px;
       pointer-events: none;
     }
 
     .page {
       position: relative;
       z-index: 1;
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      padding: clamp(0.5rem, 2vw, 1rem) clamp(1rem, 4vw, 1.5rem);
-      padding-bottom: 2rem;
-      overflow-y: auto;
-      overflow-x: hidden;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: clamp(1rem, 4vw, 2rem) clamp(1.25rem, 5vw, 2rem) 3rem;
     }
 
-    /* Hero — compact */
+    /* ——— Hero ——— */
     .hero {
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
       text-align: center;
-      padding: 0.5rem 0 0.75rem;
+      padding: clamp(1.5rem, 5vw, 2.5rem) 0;
     }
     .hero .badge {
       display: inline-block;
-      padding: 0.25rem 0.6rem;
+      padding: 0.3rem 0.7rem;
       border-radius: 999px;
-      font-size: 0.65rem;
+      font-size: 0.7rem;
       font-weight: 600;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       background: var(--accent-soft);
       color: var(--accent);
-      border: 1px solid rgba(212, 168, 83, 0.2);
-      margin-bottom: 0.4rem;
+      border: 1px solid rgba(212, 168, 83, 0.25);
+      margin-bottom: 0.75rem;
     }
     .hero .logo {
-      font-size: clamp(1.75rem, 5vw, 2.5rem);
+      font-size: clamp(2rem, 6vw, 3rem);
       font-weight: 800;
       letter-spacing: -0.04em;
       background: linear-gradient(135deg, #f0c674, var(--accent), #a67c52);
@@ -107,47 +103,49 @@
     }
     .hero .tagline {
       color: var(--text-muted);
-      font-size: 0.7rem;
-      margin-top: 0.2rem;
+      font-size: 0.8rem;
+      margin-top: 0.35rem;
       font-weight: 500;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
     }
     .hero h2 {
-      font-size: clamp(1rem, 2.5vw, 1.35rem);
+      font-size: clamp(1.1rem, 2.8vw, 1.4rem);
       font-weight: 700;
       letter-spacing: -0.02em;
-      max-width: 480px;
-      margin-top: 0.4rem;
-      line-height: 1.3;
+      max-width: 520px;
+      margin: 0.75rem auto 0;
+      line-height: 1.35;
+      color: var(--text);
     }
-    .hero .value-strip {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      margin-top: 0.5rem;
+    .hero .version {
       font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
       font-weight: 600;
       letter-spacing: 0.04em;
-      color: var(--text-muted);
     }
-    .hero .value-strip span { color: var(--accent); opacity: 0.9; }
-    .hero .value-strip .dot { opacity: 0.4; user-select: none; }
+    .hero-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
     .btn-download {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0.4rem;
+      gap: 0.45rem;
       background: linear-gradient(135deg, var(--accent), #c49a4a);
       color: #08080a;
       font-family: inherit;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       font-weight: 700;
       text-decoration: none;
-      padding: 0.6rem 1.25rem;
-      border-radius: 0.6rem;
+      padding: 0.7rem 1.4rem;
+      border-radius: var(--radius-sm);
       border: none;
       cursor: pointer;
       transition: transform 0.2s, box-shadow 0.2s;
@@ -157,20 +155,19 @@
       transform: translateY(-2px);
       box-shadow: 0 6px 24px rgba(212, 168, 83, 0.5);
     }
-    .btn-download svg { width: 1rem; height: 1rem; flex-shrink: 0; }
     .btn-browser {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0.4rem;
+      gap: 0.45rem;
       background: var(--bg-elevated);
       color: var(--accent);
       font-family: inherit;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       font-weight: 700;
       text-decoration: none;
-      padding: 0.6rem 1.25rem;
-      border-radius: 0.6rem;
+      padding: 0.7rem 1.4rem;
+      border-radius: var(--radius-sm);
       border: 1px solid rgba(212, 168, 83, 0.4);
       cursor: pointer;
       transition: transform 0.2s, background 0.2s, border-color 0.2s;
@@ -180,179 +177,81 @@
       background: var(--accent-soft);
       border-color: var(--accent);
     }
-    .hero-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6rem;
-      margin-top: 1rem;
-    }
-    .btn-coffee {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      padding: 0.4rem 0.75rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--accent);
-      background: transparent;
-      border: 1px solid rgba(212, 168, 83, 0.4);
-      border-radius: 0.5rem;
-      text-decoration: none;
-      transition: background 0.2s, border-color 0.2s;
-    }
-    .btn-coffee:hover {
-      background: var(--accent-soft);
-      border-color: var(--accent);
-    }
 
-    /* Value strip — one line punch */
-    .value-block {
-      flex-shrink: 0;
+    /* ——— Value one-liner ——— */
+    .value-oneliner {
       text-align: center;
-      padding: 0.5rem 1rem;
-      margin: 0.25rem 0;
-      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      margin: 0.5rem 0 1.5rem;
+      border-radius: var(--radius);
       background: linear-gradient(135deg, rgba(212, 168, 83, 0.08), rgba(212, 168, 83, 0.02));
       border: 1px solid rgba(212, 168, 83, 0.15);
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 600;
-      letter-spacing: 0.03em;
       color: var(--text-muted);
     }
-    .value-block strong { color: var(--accent); font-weight: 700; }
-    .value-block-highlight { font-size: 0.75rem; line-height: 1.5; max-width: 640px; margin: 0.75rem auto 1rem; }
+    .value-oneliner strong { color: var(--accent); font-weight: 700; }
 
-    /* Features — benefit sections (MeAgain/Glapp style) */
-    .features-wrap {
-      flex: 0 0 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 0.5rem 0;
-      text-align: center;
-    }
-    .features-header .features-label {
+    /* ——— Section headings ——— */
+    .section-label {
       display: inline-block;
-      padding: 0.2rem 0.55rem;
+      padding: 0.25rem 0.6rem;
       border-radius: 999px;
-      font-size: 0.6rem;
+      font-size: 0.65rem;
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       background: var(--accent-soft);
       color: var(--accent);
       border: 1px solid rgba(212, 168, 83, 0.2);
-      margin-bottom: 0.5rem;
-    }
-    .features-header .features-headline {
-      font-size: clamp(1rem, 2.5vw, 1.35rem);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      line-height: 1.25;
-      margin-bottom: 0.35rem;
-    }
-    .features-header .features-desc {
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      line-height: 1.5;
-      max-width: 420px;
-      margin: 0 auto 0.75rem;
-    }
-    .benefit-sections {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 0.75rem;
-      max-width: 700px;
-      width: 100%;
-      flex: 0 0 auto;
-      text-align: left;
-    }
-    .benefit-block {
-      padding: 0.85rem 1rem;
-      border-radius: 0.875rem;
-      border: 1px solid var(--border);
-      background: var(--bg-elevated);
-      backdrop-filter: blur(8px);
-      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-    }
-    .benefit-block:hover {
-      border-color: rgba(212, 168, 83, 0.25);
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-      transform: translateY(-2px);
-    }
-    .benefit-block h3 {
-      font-size: 0.95rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      color: var(--text);
-      margin-bottom: 0.25rem;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-    .benefit-block h3::before {
-      content: '';
-      width: 3px;
-      height: 1em;
-      border-radius: 2px;
-      background: linear-gradient(180deg, var(--accent), rgba(212, 168, 83, 0.5));
-    }
-    .benefit-block .benefit-desc {
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      line-height: 1.45;
       margin-bottom: 0.6rem;
     }
-    .benefit-block ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
+    .section-title {
+      font-size: clamp(1.15rem, 2.8vw, 1.5rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.4rem;
+      color: var(--text);
     }
-    .benefit-block li {
-      font-size: 0.8rem;
+    .section-desc {
       color: var(--text-muted);
-      padding: 0.2rem 0;
-      padding-left: 1rem;
-      position: relative;
-    }
-    .benefit-block li::before {
-      content: '·';
-      position: absolute;
-      left: 0;
-      color: var(--accent);
-      font-weight: 700;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      max-width: 560px;
     }
 
-    /* Screenshots row — larger, sharper thumbnails */
+    /* ——— Screenshots ——— */
+    .screens-section {
+      margin: 2.5rem 0;
+    }
+    .screens-section .section-desc {
+      margin-bottom: 1.25rem;
+    }
     .screens-row {
-      flex-shrink: 0;
       display: flex;
       justify-content: center;
       align-items: flex-start;
-      gap: 0.75rem;
-      margin-top: 1.25rem;
-      padding: 0.5rem 0 0.35rem;
-      clear: both;
+      gap: clamp(0.6rem, 2vw, 1rem);
+      flex-wrap: wrap;
+      padding: 0.5rem 0;
     }
     .phone-frame {
-      width: clamp(130px, 22vw, 200px);
-      background: var(--bg-elevated);
+      width: clamp(140px, 24vw, 200px);
+      background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 1rem;
-      padding: 4px;
+      border-radius: 1.1rem;
+      padding: 5px;
       cursor: pointer;
       transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
     }
     .phone-frame:hover {
-      transform: translateY(-3px);
-      border-color: rgba(212, 168, 83, 0.3);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 168, 83, 0.1);
+      transform: translateY(-4px);
+      border-color: rgba(212, 168, 83, 0.35);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(212, 168, 83, 0.1);
     }
     .phone-frame-inner {
-      border-radius: 0.65rem;
+      border-radius: 0.7rem;
       overflow: hidden;
       aspect-ratio: 9 / 19.5;
       background: #0a0a0c;
@@ -366,25 +265,102 @@
     }
     .phone-frame-caption {
       text-align: center;
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       font-weight: 600;
       color: var(--text-muted);
-      margin-top: 0.35rem;
+      margin-top: 0.4rem;
     }
 
-    /* Strip + footer */
-    .strip {
-      flex-shrink: 0;
+    /* ——— Feature flow (tab-based) ——— */
+    .features-flow {
+      margin: 2rem 0;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover {
+      border-color: rgba(212, 168, 83, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    }
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.35rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .feature-card h3::before {
+      content: '';
+      width: 4px;
+      height: 1.1em;
+      border-radius: 2px;
+      background: linear-gradient(180deg, var(--accent), rgba(212, 168, 83, 0.5));
+    }
+    .feature-card p.sub {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+    }
+    .feature-card ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .feature-card li {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      padding: 0.28rem 0;
+      padding-left: 1rem;
+      position: relative;
+      line-height: 1.45;
+    }
+    .feature-card li::before {
+      content: '·';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* ——— Highlights strip ——— */
+    .highlights {
       text-align: center;
-      padding: 0.75rem 0.25rem 0.5rem;
-      margin-top: 0.5rem;
+      padding: 1.25rem 1rem;
+      margin: 1.5rem 0;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(212, 168, 83, 0.06), rgba(212, 168, 83, 0.02));
+      border: 1px solid rgba(212, 168, 83, 0.12);
+    }
+    .highlights p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .highlights strong { color: var(--accent); }
+
+    /* ——— CTA strip ——— */
+    .strip {
+      text-align: center;
+      padding: 1.5rem 0.5rem 1rem;
+      margin-top: 1rem;
       border-top: 1px solid var(--border);
     }
     .strip p {
       color: var(--text-muted);
-      font-size: 0.7rem;
-      line-height: 1.4;
-      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin-bottom: 0.5rem;
     }
     .strip .strip-buttons {
       margin-top: 1rem;
@@ -392,21 +368,21 @@
       flex-wrap: wrap;
       align-items: center;
       justify-content: center;
-      gap: 0.5rem;
+      gap: 0.6rem;
     }
     .strip .btn-download { margin: 0; }
     .btn-ios {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0.35rem;
-      padding: 0.55rem 1.1rem;
-      font-size: 0.85rem;
+      gap: 0.4rem;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.88rem;
       font-weight: 700;
       color: var(--text);
       background: var(--bg-elevated);
       border: 1px solid var(--border);
-      border-radius: 0.6rem;
+      border-radius: var(--radius-sm);
       text-decoration: none;
       transition: border-color 0.2s, background 0.2s;
     }
@@ -414,37 +390,53 @@
       border-color: rgba(212, 168, 83, 0.4);
       background: rgba(212, 168, 83, 0.08);
     }
-    .strip .note { font-size: 0.6rem; opacity: 0.85; margin-top: 0.75rem; }
-    .apk-version {
+    .btn-coffee {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: transparent;
+      border: 1px solid rgba(212, 168, 83, 0.4);
+      border-radius: var(--radius-sm);
+      text-decoration: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-coffee:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+    .strip .note {
       font-size: 0.7rem;
+      opacity: 0.9;
+      margin-top: 0.85rem;
       color: var(--text-muted);
-      margin-top: 0.35rem;
+    }
+    .strip .version {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
       font-weight: 600;
       letter-spacing: 0.04em;
     }
     footer {
-      flex-shrink: 0;
       text-align: center;
-      padding: 0.75rem 0 0;
-      margin-top: 0.25rem;
+      padding: 1rem 0 0.5rem;
+      margin-top: 0.5rem;
       color: var(--text-muted);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
     }
     footer a { color: var(--accent); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
 
-    /* Responsive */
-    @media (max-width: 600px) {
-      .benefit-sections { grid-template-columns: 1fr; max-width: 360px; }
-      .screens-row { flex-wrap: wrap; justify-content: center; }
-    }
-
-    /* Lightbox */
+    /* ——— Lightbox ——— */
     .lightbox {
       position: fixed;
       inset: 0;
       z-index: 100;
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.92);
       display: none;
       align-items: center;
       justify-content: center;
@@ -478,12 +470,12 @@
     }
     .lightbox-close:hover { background: rgba(255, 255, 255, 0.2); }
 
-    /* iOS Add to Home Screen popup */
+    /* ——— iOS popup ——— */
     .ios-popup {
       position: fixed;
       inset: 0;
       z-index: 101;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.88);
       display: none;
       align-items: center;
       justify-content: center;
@@ -526,13 +518,11 @@
       color: var(--accent);
       background: transparent;
       border: 1px solid rgba(212, 168, 83, 0.4);
-      border-radius: 0.5rem;
+      border-radius: var(--radius-sm);
       cursor: pointer;
       font-family: inherit;
     }
-    .ios-popup .btn-close-popup:hover {
-      background: var(--accent-soft);
-    }
+    .ios-popup .btn-close-popup:hover { background: var(--accent-soft); }
     .ios-popup .btn-open-safari {
       padding: 0.5rem 1rem;
       font-size: 0.9rem;
@@ -540,12 +530,17 @@
       color: #08080a;
       background: linear-gradient(135deg, var(--accent), #c49a4a);
       border: none;
-      border-radius: 0.5rem;
+      border-radius: var(--radius-sm);
       cursor: pointer;
       text-decoration: none;
       font-family: inherit;
     }
     .ios-popup .btn-open-safari:hover { filter: brightness(1.08); }
+
+    @media (max-width: 600px) {
+      .screens-row { gap: 0.5rem; }
+      .feature-card { padding: 1rem 1.15rem; }
+    }
   </style>
 </head>
 <body>
@@ -558,63 +553,19 @@
       <h1 class="logo">PepTalk</h1>
       <p class="tagline">Weight · Injections · Insights · Tools</p>
       <h2>Track weight, doses, and progress in one place</h2>
-      <p class="value-strip"><span>Track</span> <span class="dot">·</span> <span>Low-vial alerts</span> <span class="dot">·</span> <span>Med levels &amp; reminders</span></p>
+      <p class="version">v1.3.3</p>
       <div class="hero-buttons">
         <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
         <a href="/PepTalk/PepTalk/" class="btn-browser" target="_blank" rel="noopener noreferrer">Use in browser</a>
       </div>
-      <p class="apk-version">v1.3.0</p>
     </section>
 
-    <p class="value-block"><strong>One app.</strong> No account. <strong>Your data stays yours.</strong></p>
+    <p class="value-oneliner"><strong>One app.</strong> No account. <strong>Your data stays on your device.</strong></p>
 
-    <div class="features-wrap">
-      <header class="features-header">
-        <span class="features-label">What’s inside</span>
-        <h2 class="features-headline">Built for your routine</h2>
-        <p class="features-desc">Log weight and injections. See weekly totals, total loss, and never miss a low vial or due dose.</p>
-      </header>
-      <p class="value-block value-block-highlight"><strong>Low-vial popup</strong> when you return to Summary so you notice before you run out. <strong>One notification</strong> for all due/overdue injections. Export (PDF, CSV, JSON), reconstitution calculator, and typical-loss comparison — no paywall.</p>
-      <div class="benefit-sections">
-        <div class="benefit-block">
-          <h3>Log with ease</h3>
-          <p class="benefit-desc">Weight, injections, glucose, and vials in one place.</p>
-          <ul>
-            <li>Weight & trends — charts, goals, BMI, estimated goal date, current weight on chart</li>
-            <li>Injections — doses, sites, route, side effects; link to vial, auto-deduct</li>
-            <li>Glucose & A1C — fasting, random, trends</li>
-            <li>Profile — goal weight, height, daily hydration goal</li>
-          </ul>
-        </div>
-        <div class="benefit-block">
-          <h3>Summary & alerts</h3>
-          <p class="benefit-desc">Dashboard, goal progress, and alerts at a glance.</p>
-          <ul>
-            <li>Summary — goal progress, milestones, vials remaining, week in review</li>
-            <li>Low-vial popup when you open Summary — never miss &quot;less than one dose left&quot;</li>
-            <li>Single reminder box for all due/overdue injections (header + Summary)</li>
-          </ul>
-        </div>
-        <div class="benefit-block">
-          <h3>Insights & tools</h3>
-          <p class="benefit-desc">Medication levels, calculators, reminders, export.</p>
-          <ul>
-            <li>Insights — estimated medication levels over time (smooth curves, week/month/3mo/all), phases, side effects by day</li>
-            <li>Vial inventory — reconstitution calculator; mg, mcg, ml, units, IU; expiry & use-by</li>
-            <li>Calculators — BMI, TDEE; export to JSON, CSV, or PDF for doctors</li>
-            <li>Reminders — injection and weigh-in, even when the app is closed</li>
-          </ul>
-        </div>
-        <div class="benefit-block">
-          <h3>Your stack, your data</h3>
-          <p class="benefit-desc">GLP-1s, peptides, hormones. Private by design.</p>
-          <ul>
-            <li>Semaglutide, tirzepatide, Retatrutide, BPC-157, testosterone, HCG, and more — injection or oral (e.g. Rybelsus)</li>
-            <li>Data stays on your device — no account, no selling data</li>
-          </ul>
-        </div>
-      </div>
-
+    <section class="screens-section">
+      <span class="section-label">See the app</span>
+      <h2 class="section-title">PepTalk in action</h2>
+      <p class="section-desc">Summary dashboard, weight & history, injections & vials, and insights with weekly dose and medication levels.</p>
       <div class="screens-row">
         <div class="phone-frame" data-screenshot="screenshots/summary.png" data-alt="Summary" role="button" tabindex="0" title="Click to enlarge">
           <div class="phone-frame-inner">
@@ -641,12 +592,77 @@
           <p class="phone-frame-caption">Insights</p>
         </div>
       </div>
+    </section>
+
+    <section class="features-flow">
+      <span class="section-label">What’s inside</span>
+      <h2 class="section-title">Built for your routine</h2>
+      <p class="section-desc" style="margin-bottom: 1.25rem;">Log weight and injections, see weekly dose and weight change, estimated medication levels, and never miss a low vial or due dose.</p>
+
+      <div class="feature-card">
+        <h3>Summary</h3>
+        <p class="sub">Your dashboard: quick log buttons, weight change stats, and goal progress.</p>
+        <ul>
+          <li>Log weight & Log injection buttons at the top; weight change stats (total, weekly avg, BMI, % change, to goal) right below</li>
+          <li>Vial low warning banner when less than one dose remains — right where you see it</li>
+          <li>Weight over time graph (wider on mobile); estimated goal date and goal tracker side by side</li>
+          <li>On track? card: typical loss vs yours, time on medication, projected dates to each milestone (achieved ones marked)</li>
+          <li>Week in review, hydration progress, logging streak</li>
+        </ul>
+      </div>
+
+      <div class="feature-card">
+        <h3>Weight</h3>
+        <p class="sub">Current weight, BMI, history, and trends.</p>
+        <ul>
+          <li>Height for BMI; current weight and BMI cards; link to Calorie / TDEE calculator</li>
+          <li>History list with calendar-style filter — pick a date to see that week’s entries</li>
+          <li>Add, edit, delete entries; data drives Summary and Insights</li>
+        </ul>
+      </div>
+
+      <div class="feature-card">
+        <h3>Injections</h3>
+        <p class="sub">Log doses, track vials, rotate sites.</p>
+        <ul>
+          <li>Log injection with medication, dose, units, date, and <strong>time</strong> (morning, midday, evening, night or custom)</li>
+          <li>Side effects and notes; history with week filter so you can focus on a given week</li>
+          <li>Your vials: remaining vs total (mg/ml); injection site rotation grid (green / yellow / red by usage)</li>
+        </ul>
+      </div>
+
+      <div class="feature-card">
+        <h3>Insights</h3>
+        <p class="sub">Medication levels, weekly dose table, and per-med summaries.</p>
+        <ul>
+          <li>How levels work — short explanation at the top; level phases (Single dose, Building up, Steady state) right under the graph</li>
+          <li>Estimated medication levels over time (half-life model from your logs); Week / Month / 3 mo / All</li>
+          <li>Weekly dose & weight change table: one row per week, columns per medication (doses in the units you logged), total weight change highlighted in the header</li>
+          <li>Active medication cards: current level %, phase, next dose reminder, phase tips; expand for details</li>
+          <li>Side effects from logs and by day in cycle (reference)</li>
+        </ul>
+      </div>
+
+      <div class="feature-card">
+        <h3>Tools & privacy</h3>
+        <p class="sub">Vials, calculators, export, reminders. No account.</p>
+        <ul>
+          <li>Vial inventory and reconstitution calculator (mg, mcg, ml, units, IU); expiry and use-by</li>
+          <li>BMI, TDEE, titration plans; export to JSON, CSV, or PDF for doctors</li>
+          <li>Reminders for injections and weigh-ins; low-vial popup when you open Summary</li>
+          <li>Data stays on your device — no account, no selling data</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="highlights">
+      <p><strong>Low-vial popup</strong> when you return to Summary so you notice before you run out. <strong>One reminder</strong> for all due/overdue injections. <strong>Weekly dose & weight table</strong> with per-medication columns and total weight change. Export (PDF, CSV, JSON), reconstitution calculator, and typical-loss comparison — no paywall.</p>
     </div>
 
     <section class="strip">
       <p><strong>Private.</strong> Your data stays on your device. No accounts, no selling data.</p>
-      <p>Low-vial alerts, injection reminders, and med levels — all in one app. Download free.</p>
-      <p class="apk-version">v1.3.0</p>
+      <p>Low-vial alerts, injection reminders, med levels, and goal tracking — all in one app. Download free.</p>
+      <p class="version">v1.3.3</p>
       <div class="strip-buttons">
         <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
         <a href="/PepTalk/PepTalk/" class="btn-browser" target="_blank" rel="noopener noreferrer">Use in browser</a>
