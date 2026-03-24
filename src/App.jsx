@@ -4,7 +4,7 @@ import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown } from 'lucide-react';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.3.3';
+const APP_VERSION = '1.3.4';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1149,6 +1149,7 @@ const PepTalk = () => {
   const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
   const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
   const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
+  const [weeklyDoseWeightExcludedMeds, setWeeklyDoseWeightExcludedMeds] = useState([]); // med names hidden from Weekly dose & weight change table
 
   // Weight form states
   const [weight, setWeight] = useState('');
@@ -1352,7 +1353,14 @@ const PepTalk = () => {
         const parsed = JSON.parse(vialsData);
         setVials(parsed.map(v => ({ ...v, remainingMg: v.remainingMg ?? v.totalMg })));
       }
-      
+      const weeklyDoseExcluded = localStorage.getItem('health-weekly-dose-weight-excluded-meds');
+      if (weeklyDoseExcluded) {
+        try {
+          const parsed = JSON.parse(weeklyDoseExcluded);
+          if (Array.isArray(parsed)) setWeeklyDoseWeightExcludedMeds(parsed);
+        } catch (_) { /* ignore */ }
+      }
+
       // Check notification permission status (web vs native)
       if (Capacitor.isNativePlatform()) {
         try {
@@ -2072,6 +2080,7 @@ const wipeAllData = () => {
     'health-lab-entries',
     'health-user-profile',
     'health-vials',
+    'health-weekly-dose-weight-excluded-meds',
   ];
 
   keysToRemove.forEach((k) => localStorage.removeItem(k));
@@ -2088,6 +2097,7 @@ const wipeAllData = () => {
   setA1cEntries([]);
   setLabEntries([]);
   setVials([]);
+  setWeeklyDoseWeightExcludedMeds([]);
   setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
 
   setShowWipeConfirm(false);
@@ -2236,8 +2246,8 @@ const wipeAllData = () => {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const injectionsLast7Days = injectionEntries.filter(e => medName(e) === injectionMed && parseLocalDate(e.date) >= sevenDaysAgo);
     const weeklyDoseMg = injectionsLast7Days.length > 0
-      ? injectionsLast7Days.reduce((sum, inj) => sum + toDoseMg(inj), 0)
-      : toDoseMg(lastInjection);
+      ? injectionsLast7Days.reduce((sum, inj) => sum + toDoseMgForLevel(inj), 0)
+      : toDoseMgForLevel(lastInjection);
     const typical = getTypicalWeeklyLossForDose(injectionMed, weeklyDoseMg);
     const userLoss = -parseFloat(stats.weeklyAvg); // positive = lbs lost per week
     const doseLabel = injectionsLast7Days.length > 1 ? `${weeklyDoseMg} mg/week` : `${lastInjection.dose}${lastInjection.unit}`;
@@ -2444,7 +2454,7 @@ const wipeAllData = () => {
   const getTypicalDoseMg = (medicationName) => {
     const last = injectionEntries.filter(e => e.type === medicationName).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
     if (!last) return null;
-    return toDoseMg({ dose: last.dose, unit: last.unit || 'mg' });
+    return toDoseMgForLevel(last);
   };
 
   const getLowVials = () => {
@@ -2505,11 +2515,7 @@ const wipeAllData = () => {
       const doseData = {};
       const unitData = {};
       dayInjections.forEach(inj => {
-        let doseInMg = parseFloat(inj.dose);
-        if (inj.unit === 'mcg') doseInMg = inj.dose / 1000;
-        if (inj.unit === 'ml') doseInMg = inj.dose;
-        if (inj.unit === 'units') doseInMg = inj.dose / 100;
-        if (inj.unit === 'IU') doseInMg = inj.dose / 1000;
+        const doseInMg = toDoseMgForLevel(inj);
         doseData[inj.type] = doseInMg;
         unitData[inj.type] = inj.unit;
       });
@@ -2861,12 +2867,24 @@ const wipeAllData = () => {
     return dose; // mg
   };
 
-  // For vial deduction: ml → mg using vial concentration (0.5 ml × 250 mg/ml = 125 mg)
+  // mg/ml from vial record (stored concentration, or totalMg ÷ bac water when reconstituted)
+  const getVialConcentrationMgPerMl = (v) => {
+    if (!v) return 0;
+    const c = parseFloat(v.concentration);
+    if (!isNaN(c) && c > 0) return c;
+    const bac = parseFloat(v.bacWaterMl);
+    const total = parseFloat(v.totalMg);
+    if (!isNaN(bac) && bac > 0 && !isNaN(total) && total > 0) return total / bac;
+    return 0;
+  };
+
+  // For vial deduction: ml → mg using concentration; units (U100 syringe) → ml via ÷100 then × concentration
   const getDoseMgForVial = (dose, unit, vialId) => {
-    if (unit === 'ml' && vialId) {
-      const v = vials.find(x => x.id === vialId);
-      if (v?.concentration && v.concentration > 0) return parseFloat(dose) * v.concentration;
-    }
+    const u = (unit || 'mg').toLowerCase();
+    const v = vialId ? vials.find(x => x.id === vialId) : null;
+    const conc = getVialConcentrationMgPerMl(v);
+    if (u === 'ml' && vialId && conc > 0) return parseFloat(dose) * conc;
+    if (u === 'units' && vialId && conc > 0) return (parseFloat(dose) / 100) * conc;
     return toDoseMg({ dose, unit: unit || 'mg' });
   };
 
@@ -2878,9 +2896,17 @@ const wipeAllData = () => {
     const treatAsMl = unit === 'ml' || (doseNum > 0 && doseNum < 2 && inj.type && /testosterone|cypionate|enanthate/i.test(inj.type));
     if (treatAsMl) {
       if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId);
-      const v = vials.find((v) => v.medication === inj.type && v.concentration && v.concentration > 0);
-      if (v) return doseNum * v.concentration;
+      const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
+      if (v) return doseNum * getVialConcentrationMgPerMl(v);
       return 0;
+    }
+    if (unit === 'units') {
+      if (inj.vialId) {
+        const mg = getDoseMgForVial(inj.dose, 'units', inj.vialId);
+        if (mg > 0) return mg;
+      }
+      const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
+      if (v) return (doseNum / 100) * getVialConcentrationMgPerMl(v);
     }
     return toDoseMg(inj);
   };
@@ -4718,9 +4744,17 @@ const wipeAllData = () => {
             {(() => {
               const { rows, meds } = getWeeklyDoseAndWeightSummary();
               if (!rows.length) return null;
+              const visibleMeds = meds.filter((m) => !weeklyDoseWeightExcludedMeds.includes(m));
               const totalWeightChange = rows.reduce((sum, row) => {
                 return row.weightChange != null ? sum + row.weightChange : sum;
               }, 0);
+              const toggleWeeklyDoseMedExcluded = (medName) => {
+                setWeeklyDoseWeightExcludedMeds((prev) => {
+                  const next = prev.includes(medName) ? prev.filter((x) => x !== medName) : [...prev, medName];
+                  saveData('health-weekly-dose-weight-excluded-meds', next);
+                  return next;
+                });
+              };
               return (
                 <div className="ui-card p-4">
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -4741,15 +4775,50 @@ const wipeAllData = () => {
                         : `${totalWeightChange.toFixed(1)} lb`}
                     </div>
                   </div>
-                  <p className="text-gray-400 text-xs mb-3">
-                    Weekly totals per medication (using the units you logged), plus your net weight change for that week (compared to the prior week&apos;s weight).
+                  <p className="text-gray-400 text-xs mb-2">
+                    Weekly dose per medication (units you logged) and net weight change for that week. Uncheck meds you don&apos;t want here (e.g. peptides that aren&apos;t for weight loss)—weight change still reflects your scale.
                   </p>
+                  {meds.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 pb-3 border-b border-white/10">
+                      <span className="text-gray-500 text-[11px] uppercase tracking-wide w-full sm:w-auto">Dose columns</span>
+                      {meds.map((medName) => {
+                        const show = !weeklyDoseWeightExcludedMeds.includes(medName);
+                        const dot = MEDICATIONS.find((m) => m.name === medName)?.color || '#9ca3af';
+                        return (
+                          <label key={medName} className="inline-flex items-center gap-2 cursor-pointer text-xs text-gray-200">
+                            <input
+                              type="checkbox"
+                              className="rounded border-white/20 bg-slate-700 text-accent focus:ring-accent"
+                              checked={show}
+                              onChange={() => toggleWeeklyDoseMedExcluded(medName)}
+                            />
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+                              {medName}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {meds.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWeeklyDoseWeightExcludedMeds([]);
+                            saveData('health-weekly-dose-weight-excluded-meds', []);
+                          }}
+                          className="text-xs font-medium text-accent hover:text-gold-400 ml-auto"
+                        >
+                          Show all
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-xs">
                       <thead>
                         <tr className="text-gray-400 border-b border-white/10">
                           <th className="py-2 pr-4 text-left font-medium">Week</th>
-                          {meds.map((medName) => (
+                          {visibleMeds.map((medName) => (
                             <th key={medName} className="py-2 px-4 text-right font-medium">{medName}</th>
                           ))}
                           <th className="py-2 pl-4 text-right font-medium">Weight change (lb)</th>
@@ -4762,7 +4831,7 @@ const wipeAllData = () => {
                               <span className="text-gray-500 mr-1 text-[11px]">W{row.weekIndex}</span>
                               <span>{row.weekLabel}</span>
                             </td>
-                            {meds.map((medName) => {
+                            {visibleMeds.map((medName) => {
                               const medEntry = row.perMed?.[medName];
                               if (!medEntry || !medEntry.dose) {
                                 return (

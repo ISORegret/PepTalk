@@ -27,12 +27,14 @@ const apkDest = path.join(root, 'website', 'PepTalk.apk');
 fs.mkdirSync(path.dirname(apkDest), { recursive: true });
 fs.copyFileSync(apkSrc, apkDest);
 
-// 5. Update version in website/index.html
+// 5. Update version in website/index.html (placeholders + any vX.Y.Z in meta / .version lines)
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const version = pkg.version;
 const indexPath = path.join(root, 'website', 'index.html');
 let indexHtml = fs.readFileSync(indexPath, 'utf8');
 indexHtml = indexHtml.replace(/__APK_VERSION__/g, version);
+indexHtml = indexHtml.replace(/PepTalk v\d+\.\d+\.\d+ —/g, `PepTalk v${version} —`);
+indexHtml = indexHtml.replace(/<p class="version">v\d+\.\d+\.\d+<\/p>/g, `<p class="version">v${version}</p>`);
 fs.writeFileSync(indexPath, indexHtml);
 
 console.log(`\nAPK copied to website/PepTalk.apk (v${version})`);
