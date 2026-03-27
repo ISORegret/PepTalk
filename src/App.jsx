@@ -7,7 +7,7 @@ import { checkForAppUpdate, dismissUpdatePrompt, openDownloadUrl } from './lib/a
 import { formatCloudError, scheduleCloudSync } from './lib/cloudSync.js';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.3.7';
+const APP_VERSION = '1.3.8';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1106,6 +1106,21 @@ const sortWeightByDateDesc = (entries) => [...entries].sort((a, b) => {
   return d !== 0 ? d : ((b.id || 0) - (a.id || 0));
 });
 
+const getVialRemainingMg = (v) => {
+  if (!v) return 0;
+  const r = v.remainingMg;
+  if (r !== undefined && r !== null && String(r) !== '' && !isNaN(Number(r))) return Number(r);
+  const t = v.totalMg;
+  if (t !== undefined && t !== null && !isNaN(Number(t))) return Number(t);
+  return 0;
+};
+
+/** Drop vials with no remaining product (inventory empty). */
+const pruneEmptyVials = (list) => {
+  if (!Array.isArray(list)) return [];
+  return list.filter((v) => getVialRemainingMg(v) > 0);
+};
+
 const PepTalk = () => {
   const {
     user,
@@ -1445,7 +1460,10 @@ const PepTalk = () => {
       const vialsData = localStorage.getItem('health-vials');
       if (vialsData) {
         const parsed = JSON.parse(vialsData);
-        setVials(parsed.map(v => ({ ...v, remainingMg: v.remainingMg ?? v.totalMg })));
+        const normalized = parsed.map(v => ({ ...v, remainingMg: v.remainingMg ?? v.totalMg }));
+        const pruned = pruneEmptyVials(normalized);
+        if (pruned.length !== normalized.length) saveData('health-vials', pruned);
+        setVials(pruned);
       }
       const weeklyDoseExcluded = localStorage.getItem('health-weekly-dose-weight-excluded-meds');
       if (weeklyDoseExcluded) {
@@ -1787,6 +1805,7 @@ const PepTalk = () => {
       updatedVials = updatedVials.map(v => v.id === selectedVialId ? { ...v, remainingMg: Math.max(0, (v.remainingMg ?? v.totalMg) - doseMg) } : v);
     }
     if (editingInjection?.vialId || selectedVialId) {
+      updatedVials = pruneEmptyVials(updatedVials);
       setVials(updatedVials);
       saveData('health-vials', updatedVials);
     }
@@ -7256,7 +7275,7 @@ const wipeAllData = () => {
                             const concManual = vialConcentrationForMl ? parseFloat(vialConcentrationForMl) : undefined;
                             const concFromBac = !isNaN(bacMl) && bacMl > 0 ? totalMg / bacMl : undefined;
                             const concentration = (concManual && concManual > 0) ? concManual : (concFromBac && concFromBac > 0) ? concFromBac : undefined;
-                            const updated = vials.map(v => v.id === editingVialId ? {
+                            let updated = vials.map(v => v.id === editingVialId ? {
                               ...v,
                               medication: vialMedication,
                               totalMg,
@@ -7266,6 +7285,7 @@ const wipeAllData = () => {
                               expiry: vialExpiry || null,
                               reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null
                             } : v);
+                            updated = pruneEmptyVials(updated);
                             setVials(updated);
                             saveData('health-vials', updated);
                             setEditingVialId(null);
