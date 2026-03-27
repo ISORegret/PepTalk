@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Capacitor } from '@capacitor/core'
 import App from './App.jsx'
+import { SupabaseAuthProvider } from './context/SupabaseAuthContext.jsx'
 import './index.css'
 
 // Android/iOS: CSS is in assets/*.css so relative url must be from there to app root
@@ -14,6 +15,8 @@ document.documentElement.style.setProperty('--bg-image', bgUrl)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <SupabaseAuthProvider>
+      <App />
+    </SupabaseAuthProvider>
   </React.StrictMode>,
 )

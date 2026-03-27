@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="PepTalk v1.3.5 — track weight, injections, vials, and progress. Low-vial alerts, weekly dose & weight table, estimated medication levels, goal tracking, and export. One app for your health journey." />
+  <meta name="description" content="PepTalk v1.3.7 — track weight, injections, vials, and progress. Optional cloud backup, offline-first logging, low-vial alerts, weekly dose & weight table, estimated medication levels, goal tracking, and export." />
   <title>PepTalk — Your Health Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -553,14 +553,20 @@
       <h1 class="logo">PepTalk</h1>
       <p class="tagline">Weight · Injections · Insights · Tools</p>
       <h2>Track weight, doses, and progress in one place</h2>
-      <p class="version">v1.3.5</p>
+      <p class="version">v1.3.7</p>
       <div class="hero-buttons">
         <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
         <a href="/PepTalk/PepTalk/" class="btn-browser" target="_blank" rel="noopener noreferrer">Use in browser</a>
       </div>
     </section>
 
-    <p class="value-oneliner"><strong>One app.</strong> No account. <strong>Your data stays on your device.</strong></p>
+    <p class="value-oneliner"><strong>One app.</strong> Log everything locally — <strong>optional sign-in</strong> to back up and sync to the cloud. <strong>Works offline.</strong></p>
+
+    <section class="features-flow" style="margin-top: 0.5rem;">
+      <span class="section-label">What’s new</span>
+      <h2 class="section-title">v1.3.7 highlights</h2>
+      <p class="section-desc" style="margin-bottom: 1rem;">Cloud backup with Supabase, clearer offline &amp; network messages, optional in-app update notices when you publish a new APK, and a smoother restore-from-cloud flow.</p>
+    </section>
 
     <section class="screens-section">
       <span class="section-label">See the app</span>
@@ -644,32 +650,42 @@
       </div>
 
       <div class="feature-card">
-        <h3>Tools & privacy</h3>
-        <p class="sub">Vials, calculators, export, reminders. No account.</p>
+        <h3>Account &amp; cloud backup</h3>
+        <p class="sub">Optional sign-in to sync your encrypted data to your Supabase project.</p>
+        <ul>
+          <li>When configured, sign in with email — your data stays on the device and is backed up to the cloud</li>
+          <li>Restore on a new phone or resolve local vs cloud when both have data</li>
+          <li>Background sync after saves; clear messages when you’re offline or the network fails</li>
+        </ul>
+      </div>
+
+      <div class="feature-card">
+        <h3>Tools &amp; privacy</h3>
+        <p class="sub">Vials, calculators, export, reminders. Local-first.</p>
         <ul>
           <li>Vial inventory and reconstitution calculator (mg, mcg, ml, units, IU); expiry and use-by</li>
           <li>BMI, TDEE, titration plans; export to JSON, CSV, or PDF for doctors</li>
           <li>Reminders for injections and weigh-ins; low-vial popup when you open Summary</li>
-          <li>Data stays on your device — no account, no selling data</li>
+          <li>Without cloud setup, everything stays on your device — no selling data</li>
         </ul>
       </div>
     </section>
 
     <div class="highlights">
-      <p><strong>Low-vial popup</strong> when you return to Summary so you notice before you run out. <strong>One reminder</strong> for all due/overdue injections. <strong>Weekly dose & weight table</strong> with per-medication columns and total weight change. Export (PDF, CSV, JSON), reconstitution calculator, and typical-loss comparison — no paywall.</p>
+      <p><strong>Low-vial popup</strong> when you return to Summary so you notice before you run out. <strong>One reminder</strong> for all due/overdue injections. <strong>Weekly dose &amp; weight table</strong> with per-medication columns and total weight change. Export (PDF, CSV, JSON), reconstitution calculator, and typical-loss comparison — no paywall. <strong>Optional cloud backup</strong> when you configure Supabase.</p>
     </div>
 
     <section class="strip">
-      <p><strong>Private.</strong> Your data stays on your device. No accounts, no selling data.</p>
+      <p><strong>Private by default.</strong> Your logs stay on your device; optional cloud backup when you enable it.</p>
       <p>Low-vial alerts, injection reminders, med levels, and goal tracking — all in one app. Download free.</p>
-      <p class="version">v1.3.5</p>
+      <p class="version">v1.3.7</p>
       <div class="strip-buttons">
         <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
         <a href="/PepTalk/PepTalk/" class="btn-browser" target="_blank" rel="noopener noreferrer">Use in browser</a>
         <a href="/PepTalk/PepTalk/" class="btn-ios" id="btn-ios" target="_blank" rel="noopener noreferrer">Add to Home Screen (iOS)</a>
         <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
       </div>
-      <p class="note">Free · Android: APK above · Use in browser: opens the app · iOS: open in Safari, then Share → Add to Home Screen</p>
+      <p class="note">Free · Android: APK above · Use in browser: opens the app · iOS: open in Safari, then Share → Add to Home Screen · Host <code style="font-size:0.8em;opacity:0.9;">peptalk-update.json</code> next to the APK for in-app update prompts</p>
     </section>
 
     <footer>

@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown, Cloud, WifiOff, Download } from 'lucide-react';
+import { useSupabaseAuth } from './context/SupabaseAuthContext.jsx';
+import { checkForAppUpdate, dismissUpdatePrompt, openDownloadUrl } from './lib/appUpdateCheck.js';
+import { formatCloudError, scheduleCloudSync } from './lib/cloudSync.js';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
 
-const APP_VERSION = '1.3.5';
+const APP_VERSION = '1.3.7';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -13,6 +16,7 @@ const MEDICATIONS = [
   { name: 'Tirzepatide', category: 'GLP-1/GIP', color: '#14b8a6', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
+  // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true },
   { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168, preConstituted: true },
@@ -41,6 +45,9 @@ const MEDICATIONS = [
   { name: 'Anamorelin', category: 'Peptide', color: '#ca8a04', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
   { name: 'Other', category: 'Other', color: '#6b7280', defaultSchedule: 7, halfLife: 168, peakHours: 24, effectDuration: 168 }
 ];
+
+/** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
+const RETATRUTIDE_UNITS_PER_MG = 10;
 
 // Effect profiles for different medication categories
 const EFFECT_PROFILES = {
@@ -1100,6 +1107,24 @@ const sortWeightByDateDesc = (entries) => [...entries].sort((a, b) => {
 });
 
 const PepTalk = () => {
+  const {
+    user,
+    authLoading: supabaseAuthLoading,
+    isConfigured: supabaseConfigured,
+    pendingCloudRestore,
+    resolveCloudRestore,
+    signIn: supabaseSignIn,
+    signUp: supabaseSignUp,
+    signOut: supabaseSignOut,
+    syncNow: supabaseSyncNow,
+  } = useSupabaseAuth();
+  const [cloudEmail, setCloudEmail] = useState('');
+  const [cloudPassword, setCloudPassword] = useState('');
+  const [cloudAuthMessage, setCloudAuthMessage] = useState('');
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
+  const [backgroundSyncError, setBackgroundSyncError] = useState('');
+
   const [activeTab, setActiveTab] = useState('summary');
   const [weightEntries, setWeightEntries] = useState([]);
   const [injectionEntries, setInjectionEntries] = useState([]);
@@ -1125,6 +1150,7 @@ const PepTalk = () => {
   const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
+  const [updatePrompt, setUpdatePrompt] = useState(null);
   const [showLowVialPopup, setShowLowVialPopup] = useState(false);
   const previousActiveTabRef = useRef(null);
   const [selectedVialId, setSelectedVialId] = useState(null);
@@ -1187,6 +1213,7 @@ const PepTalk = () => {
   const [editingInjection, setEditingInjection] = useState(null);
   const [showMedDropdown, setShowMedDropdown] = useState(false);
   const [medSearchTerm, setMedSearchTerm] = useState('');
+  const [trialTargetMg, setTrialTargetMg] = useState(''); // protocol mg → suggest units/mL (Log Injection)
 
   // Measurement form states
   const [measurementType, setMeasurementType] = useState('Waist');
@@ -1272,16 +1299,83 @@ const PepTalk = () => {
 
   useEffect(() => { loadData(); }, []);
 
-  // Show welcome/update modal when app version changes (unless user chose "Do not show again")
+  // Welcome/tutorial: after local data loads, when Supabase is off — version-based only. When Supabase is on — only after sign-in (version change or first signed-in tutorial).
   useEffect(() => {
     if (isLoading) return;
+    if (supabaseConfigured && (!user || supabaseAuthLoading)) return;
     try {
       const hideForever = localStorage.getItem('peptalk-welcome-hide-forever') === 'true';
+      if (hideForever) return;
       const lastSeenVersion = localStorage.getItem('peptalk-welcome-version');
-      if (!hideForever && lastSeenVersion !== APP_VERSION) setShowWelcomeModal(true);
+      const seenSignedIn = localStorage.getItem('peptalk-welcome-seen-signed-in') === 'true';
+      const needVersionWelcome = lastSeenVersion !== APP_VERSION;
+      const needPostAuthWelcome = supabaseConfigured && user && !seenSignedIn;
+      if (!supabaseConfigured && needVersionWelcome) setShowWelcomeModal(true);
+      else if (supabaseConfigured && user && (needVersionWelcome || needPostAuthWelcome)) setShowWelcomeModal(true);
     } catch (_) {}
-  }, [isLoading]);
-  
+  }, [isLoading, supabaseConfigured, user, supabaseAuthLoading]);
+
+  useEffect(() => {
+    if (supabaseConfigured && !user && !supabaseAuthLoading) setShowWelcomeModal(false);
+  }, [supabaseConfigured, user, supabaseAuthLoading]);
+
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onResult = (e) => {
+      if (e.detail?.ok) setBackgroundSyncError('');
+      else if (e.detail?.message) setBackgroundSyncError(e.detail.message);
+    };
+    window.addEventListener('peptalk:cloud-sync-result', onResult);
+    return () => window.removeEventListener('peptalk:cloud-sync-result', onResult);
+  }, []);
+
+  useEffect(() => {
+    if (!isOnline) setBackgroundSyncError('');
+  }, [isOnline]);
+
+  const updateManifestUrl = import.meta.env.VITE_APP_UPDATE_MANIFEST_URL || '';
+
+  useEffect(() => {
+    if (!updateManifestUrl || isLoading) return;
+    if (supabaseConfigured && !user) return;
+    if (showWelcomeModal) return;
+    let cancelled = false;
+    const run = async () => {
+      const info = await checkForAppUpdate(updateManifestUrl, APP_VERSION);
+      if (cancelled || !info.updateAvailable) return;
+      setUpdatePrompt(info);
+    };
+    const t = setTimeout(run, 2800);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [isLoading, supabaseConfigured, user, showWelcomeModal, updateManifestUrl]);
+
+  useEffect(() => {
+    if (!updateManifestUrl || isLoading) return;
+    if (supabaseConfigured && !user) return;
+    if (showWelcomeModal) return;
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      checkForAppUpdate(updateManifestUrl, APP_VERSION).then((info) => {
+        if (info.updateAvailable) setUpdatePrompt(info);
+      });
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [isLoading, supabaseConfigured, user, showWelcomeModal, updateManifestUrl]);
+
   // Hide splash screen after data loads
   useEffect(() => {
     if (!isLoading) {
@@ -1381,11 +1475,12 @@ const PepTalk = () => {
 
   const saveData = (key, data) => {
     try { localStorage.setItem(key, JSON.stringify(data)); } catch (error) { console.error('Error saving:', error); }
+    scheduleCloudSync();
   };
 
   // Form reset functions
   const resetWeightForm = () => { setWeight(''); setWeightDate(getTodayLocal()); setEditingWeight(null); setShowAddForm(false); };
-  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionTime('09:00'); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); };
+  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionTime('09:00'); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); setTrialTargetMg(''); };
   const resetMeasurementForm = () => { setMeasurementType('Waist'); setMeasurementValue(''); setMeasurementDate(getTodayLocal()); setShowAddForm(false); };
   const resetJournalForm = () => { setJournalContent(''); setJournalMood('neutral'); setJournalEnergy(5); setJournalHunger(5); setJournalDate(getTodayLocal()); setEditingJournal(null); setShowAddForm(false); };
   const resetFastingForm = () => { setFastingHours(''); setFastingDate(getTodayLocal()); setEditingFasting(null); setShowFastingForm(false); };
@@ -1674,7 +1769,7 @@ const PepTalk = () => {
 
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
-    const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId);
+    const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
     const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, time: injectionTime, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects, vialId: selectedVialId || undefined };
     let updated = editingInjection
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
@@ -1685,7 +1780,7 @@ const PepTalk = () => {
     // Vial: add back old dose when editing, then deduct new dose if a vial is selected
     let updatedVials = [...vials];
     if (editingInjection?.vialId) {
-      const oldDoseMg = getDoseMgForVial(editingInjection.dose, editingInjection.unit || 'mg', editingInjection.vialId);
+      const oldDoseMg = getDoseMgForVial(editingInjection.dose, editingInjection.unit || 'mg', editingInjection.vialId, editingInjection.type);
       updatedVials = updatedVials.map(v => v.id === editingInjection.vialId ? { ...v, remainingMg: (v.remainingMg ?? v.totalMg) + oldDoseMg } : v);
     }
     if (selectedVialId) {
@@ -2862,7 +2957,10 @@ const wipeAllData = () => {
     if (isNaN(dose)) return 0;
     if (inj.unit === 'mcg') return dose / 1000;
     if (inj.unit === 'ml') return dose; // generic: no vial context
-    if (inj.unit === 'units') return dose / 100;
+    if (inj.unit === 'units') {
+      if (inj.type === 'Retatrutide') return dose / RETATRUTIDE_UNITS_PER_MG;
+      return dose / 100;
+    }
     if (inj.unit === 'IU') return dose / 1000;
     return dose; // mg
   };
@@ -2878,14 +2976,19 @@ const wipeAllData = () => {
     return 0;
   };
 
-  // For vial deduction: ml → mg using concentration; units (U100 syringe) → ml via ÷100 then × concentration
-  const getDoseMgForVial = (dose, unit, vialId) => {
+  // For vial deduction: ml × conc; U-100 units × conc; Retatrutide pen dial = units ÷ 10 per mg (not U-100 volume)
+  const getDoseMgForVial = (dose, unit, vialId, medicationName) => {
     const u = (unit || 'mg').toLowerCase();
     const v = vialId ? vials.find(x => x.id === vialId) : null;
+    const med = medicationName ?? v?.medication;
+    const d = parseFloat(dose);
+    if (u === 'units' && med === 'Retatrutide') {
+      return isNaN(d) ? 0 : d / RETATRUTIDE_UNITS_PER_MG;
+    }
     const conc = getVialConcentrationMgPerMl(v);
-    if (u === 'ml' && vialId && conc > 0) return parseFloat(dose) * conc;
-    if (u === 'units' && vialId && conc > 0) return (parseFloat(dose) / 100) * conc;
-    return toDoseMg({ dose, unit: unit || 'mg' });
+    if (u === 'ml' && vialId && conc > 0) return d * conc;
+    if (u === 'units' && vialId && conc > 0) return (d / 100) * conc;
+    return toDoseMg({ dose, unit: unit || 'mg', type: med });
   };
 
   // For level/curve only: ml → mg using linked vial or any vial for this med. If ml with no vial, return 0 so we don't guess (guessing 200 mg/ml inflated levels to 1000%+).
@@ -2895,14 +2998,15 @@ const wipeAllData = () => {
     const unit = (inj.unit || '').toLowerCase();
     const treatAsMl = unit === 'ml' || (doseNum > 0 && doseNum < 2 && inj.type && /testosterone|cypionate|enanthate/i.test(inj.type));
     if (treatAsMl) {
-      if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId);
+      if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId, inj.type);
       const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
       if (v) return doseNum * getVialConcentrationMgPerMl(v);
       return 0;
     }
     if (unit === 'units') {
+      if (inj.type === 'Retatrutide') return doseNum / RETATRUTIDE_UNITS_PER_MG;
       if (inj.vialId) {
-        const mg = getDoseMgForVial(inj.dose, 'units', inj.vialId);
+        const mg = getDoseMgForVial(inj.dose, 'units', inj.vialId, inj.type);
         if (mg > 0) return mg;
       }
       const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
@@ -3376,7 +3480,21 @@ const wipeAllData = () => {
   const upcomingInjections = getNextInjections();
   const measurementStats = getMeasurementStats();
 
-  if (isLoading || showSplash) {
+  const dismissWelcomeModal = () => {
+    setShowWelcomeModal(false);
+    try {
+      localStorage.setItem('peptalk-welcome-version', APP_VERSION);
+      if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true');
+      if (supabaseConfigured && user) localStorage.setItem('peptalk-welcome-seen-signed-in', 'true');
+    } catch (_) {}
+  };
+
+  const showBlockingSplash = isLoading || showSplash || (supabaseConfigured && supabaseAuthLoading);
+  const splashSubtitle = isLoading ? 'Loading your data...' : supabaseAuthLoading ? 'Checking session…' : 'Loading your data...';
+  const showOfflineBanner = supabaseConfigured && !isOnline;
+  const showSyncFailBanner = supabaseConfigured && isOnline && user && !!backgroundSyncError;
+
+  if (showBlockingSplash) {
     return (
       <div className="min-h-screen flex items-center justify-center overflow-hidden bg-[var(--bg-base)]">
         <div className="text-center relative">
@@ -3390,7 +3508,7 @@ const wipeAllData = () => {
             <Activity className="h-24 w-24 text-gold-400 mx-auto relative splash-float" strokeWidth={1.5} />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2 tracking-tight splash-title">PepTalk</h1>
-          <p className="text-gold-400 text-sm font-medium splash-subtitle">Loading your data...</p>
+          <p className="text-gold-400 text-sm font-medium splash-subtitle">{splashSubtitle}</p>
           <div className="flex justify-center gap-1 mt-4 splash-dots">
             <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0s' }} />
             <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0.2s' }} />
@@ -3460,8 +3578,101 @@ const wipeAllData = () => {
     );
   }
 
+  if (supabaseConfigured && !user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[var(--bg-base)] gap-3">
+        {showOfflineBanner && (
+          <div className="w-full max-w-md flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100/95 text-sm">
+            <WifiOff className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-400" aria-hidden />
+            <span>
+              <strong className="text-amber-50">You&apos;re offline.</strong> Sign-in needs a network connection. Your data on this device stays put until you can connect.
+            </span>
+          </div>
+        )}
+        <div className="w-full max-w-md ui-card p-6 border border-cyan-500/25">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent/15 border border-accent/30 mb-3">
+              <Activity className="h-8 w-8 text-gold-400" strokeWidth={1.5} />
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">PepTalk</h1>
+            <p className="text-gray-400 text-sm mt-2">Sign in or create an account to use the app and sync your data.</p>
+          </div>
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setCloudAuthMessage('');
+              setCloudBusy(true);
+              const { error } = await supabaseSignIn(cloudEmail, cloudPassword);
+              setCloudBusy(false);
+              if (error) setCloudAuthMessage(formatCloudError(error));
+              else {
+                setCloudPassword('');
+                setCloudAuthMessage('');
+              }
+            }}
+          >
+            <div>
+              <label className="text-gray-400 text-sm block mb-1">Email</label>
+              <input type="email" autoComplete="email" value={cloudEmail} onChange={(e) => setCloudEmail(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="you@example.com" />
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm block mb-1">Password</label>
+              <input type="password" autoComplete="current-password" value={cloudPassword} onChange={(e) => setCloudPassword(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="••••••••" />
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="submit" disabled={cloudBusy} className="flex-1 min-w-[8rem] ui-btn-primary py-2.5 disabled:opacity-50">Sign in</button>
+              <button
+                type="button"
+                disabled={cloudBusy}
+                className="flex-1 min-w-[8rem] py-2.5 rounded-lg font-medium bg-white/10 text-gray-200 hover:bg-white/15 disabled:opacity-50"
+                onClick={async () => {
+                  setCloudAuthMessage('');
+                  setCloudBusy(true);
+                  const { error } = await supabaseSignUp(cloudEmail, cloudPassword);
+                  setCloudBusy(false);
+                  if (error) setCloudAuthMessage(formatCloudError(error));
+                  else setCloudAuthMessage('Check your email to confirm your account (if required by your Supabase project).');
+                }}
+              >
+                Sign up
+              </button>
+            </div>
+            {cloudAuthMessage && <p className="text-gray-400 text-xs pt-1">{cloudAuthMessage}</p>}
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-3 pb-28 transition-all duration-300 bg-[var(--bg-base)]">
+      {(showOfflineBanner || showSyncFailBanner) && (
+        <div className="sticky top-0 z-40 space-y-2 mb-2 -mt-1">
+          {showOfflineBanner && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100/95 text-sm shadow-lg shadow-black/20">
+              <WifiOff className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-400" aria-hidden />
+              <span>
+                <strong className="text-amber-50">You&apos;re offline.</strong> Changes are saved on this device. Cloud backup will resume when you&apos;re back online.
+              </span>
+            </div>
+          )}
+          {showSyncFailBanner && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-sm text-red-100/90 shadow-lg shadow-black/20">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-400" aria-hidden />
+              <span className="flex-1 min-w-0">{backgroundSyncError}</span>
+              <button
+                type="button"
+                onClick={() => setBackgroundSyncError('')}
+                className="text-red-200/90 hover:text-white p-1 rounded-lg shrink-0"
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {/* Success Celebration Popup */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -3515,13 +3726,13 @@ const wipeAllData = () => {
   </div>
 )}
 
-      {/* Welcome / Update modal — shows when app version changes; "Do not show again" hides forever */}
+      {/* Welcome / Update modal — after sign-in when cloud is on; version updates; "Do not show again" hides forever */}
       {showWelcomeModal && (
-        <div className="ui-modal-overlay" onClick={() => { setShowWelcomeModal(false); try { localStorage.setItem('peptalk-welcome-version', APP_VERSION); if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true'); } catch (_) {} }}>
+        <div className="ui-modal-overlay" onClick={dismissWelcomeModal}>
           <div className="ui-modal max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white flex items-center gap-2"><BookOpen className="h-6 w-6 text-gold-400" />Welcome to PepTalk</h3>
-              <button type="button" onClick={() => { setShowWelcomeModal(false); try { localStorage.setItem('peptalk-welcome-version', APP_VERSION); if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true'); } catch (_) {} }} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
+              <button type="button" onClick={dismissWelcomeModal} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
             </div>
             <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} — How to use the app</p>
             <div className="text-gray-300 text-sm space-y-3 mb-4 pr-2">
@@ -3539,9 +3750,85 @@ const wipeAllData = () => {
               <input type="checkbox" checked={welcomeDontShowAgain} onChange={(e) => setWelcomeDontShowAgain(e.target.checked)} className="mt-1" />
               <span className="text-gray-200 text-sm">Do not show this again (even after updates)</span>
             </label>
-            <button type="button" onClick={() => { setShowWelcomeModal(false); try { localStorage.setItem('peptalk-welcome-version', APP_VERSION); if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true'); } catch (_) {} }} className="w-full ui-btn-primary py-3">
+            <button type="button" onClick={dismissWelcomeModal} className="w-full ui-btn-primary py-3">
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* APK / app update — optional manifest URL on your site (see VITE_APP_UPDATE_MANIFEST_URL) */}
+      {updatePrompt && (
+        <div className="ui-modal-overlay" onClick={() => { dismissUpdatePrompt(updatePrompt.latestVersion); setUpdatePrompt(null); }}>
+          <div className="ui-modal max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-2">
+              <Download className="h-6 w-6 text-cyan-400 flex-shrink-0" />
+              <h3 className="text-white font-semibold text-lg">Update available</h3>
+            </div>
+            <p className="text-gold-400 text-sm font-medium mb-3">
+              Version {updatePrompt.latestVersion} is ready (you have v{APP_VERSION}).
+            </p>
+            {updatePrompt.releaseNotes ? (
+              <p className="text-gray-300 text-sm mb-4 whitespace-pre-wrap">{updatePrompt.releaseNotes}</p>
+            ) : (
+              <p className="text-gray-400 text-sm mb-4">Download the new APK from the site to install this update.</p>
+            )}
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                className="w-full py-3 rounded-lg font-medium bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center gap-2"
+                onClick={() => {
+                  openDownloadUrl(updatePrompt.downloadUrl);
+                  dismissUpdatePrompt(updatePrompt.latestVersion);
+                  setUpdatePrompt(null);
+                }}
+              >
+                <Download className="h-4 w-4" />
+                Download update
+              </button>
+              <button
+                type="button"
+                className="w-full py-3 rounded-lg font-medium bg-white/10 hover:bg-white/15 text-gray-200"
+                onClick={() => {
+                  dismissUpdatePrompt(updatePrompt.latestVersion);
+                  setUpdatePrompt(null);
+                }}
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cloud backup: choose local vs account when both exist */}
+      {pendingCloudRestore && (
+        <div className="ui-modal-overlay" onClick={() => {}}>
+          <div className="ui-modal max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-semibold text-lg mb-2 flex items-center gap-2"><Cloud className="h-6 w-6 text-cyan-400" />Restore from your account?</h3>
+            <p className="text-gray-400 text-sm mb-4">
+              We found a saved backup in your cloud account
+              {pendingCloudRestore.updatedAt && (
+                <span> (last updated {new Date(pendingCloudRestore.updatedAt).toLocaleString()})</span>
+              )}.
+              This device already has data. Choose what to keep.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                className="w-full py-3 rounded-lg font-medium bg-cyan-600 hover:bg-cyan-500 text-white"
+                onClick={() => resolveCloudRestore('cloud')}
+              >
+                Use cloud backup (replace this device)
+              </button>
+              <button
+                type="button"
+                className="w-full py-3 rounded-lg font-medium bg-white/10 hover:bg-white/15 text-gray-200"
+                onClick={() => resolveCloudRestore('local')}
+              >
+                Keep this device &amp; upload to cloud (overwrite backup)
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -5571,29 +5858,108 @@ const wipeAllData = () => {
                         {selectedVialId && injectionDose && (() => {
                           const v = vials.find(x => x.id === selectedVialId);
                           const remaining = v ? (v.remainingMg ?? v.totalMg) : 0;
-                          const deduct = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId);
+                          const deduct = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
                           const after = Math.max(0, remaining - deduct);
                           const conc = getVialConcentrationMgPerMl(v);
                           const u = (injectionUnit || '').toLowerCase();
                           let breakdown = null;
-                          if (conc > 0 && deduct > 0) {
-                            if (u === 'units') {
-                              const ml = parseFloat(injectionDose) / 100;
-                              breakdown = `${injectionDose} units = ${ml.toFixed(3)} mL (U-100) × ${conc.toFixed(2)} mg/mL ≈ ${deduct.toFixed(2)} mg`;
-                            } else if (u === 'ml') {
-                              breakdown = `${injectionDose} mL × ${conc.toFixed(2)} mg/mL ≈ ${deduct.toFixed(2)} mg`;
+                          if (deduct > 0) {
+                            if (injectionType === 'Retatrutide' && u === 'units') {
+                              breakdown = `${injectionDose} units ÷ ${RETATRUTIDE_UNITS_PER_MG} = ${deduct.toFixed(2)} mg (Retatrutide pen dial)`;
+                            } else if (conc > 0) {
+                              if (u === 'units') {
+                                const ml = parseFloat(injectionDose) / 100;
+                                breakdown = `${injectionDose} units = ${ml.toFixed(3)} mL (U-100) × ${conc.toFixed(2)} mg/mL ≈ ${deduct.toFixed(2)} mg`;
+                              } else if (u === 'ml') {
+                                breakdown = `${injectionDose} mL × ${conc.toFixed(2)} mg/mL ≈ ${deduct.toFixed(2)} mg`;
+                              }
                             }
                           }
                           return (
                             <div className="text-gray-500 text-xs mt-1 space-y-0.5">
                               {breakdown && <p className="text-gray-400">{breakdown}</p>}
-                              {conc <= 0 && (u === 'units' || u === 'ml') && (
+                              {conc <= 0 && (u === 'units' || u === 'ml') && injectionType !== 'Retatrutide' && (
                                 <p className="text-amber-400/90">Set vial total (mg) + BAC (ml) or concentration so units convert to mg.</p>
                               )}
                               <p>After this dose: {after.toFixed(1)} mg remaining in vial</p>
                             </div>
                           );
                         })()}
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const target = parseFloat(trialTargetMg);
+                    const hasTarget = !isNaN(target) && target > 0;
+                    const vPick = selectedVialId ? vials.find((x) => x.id === selectedVialId) : vials.find((x) => x.medication === injectionType && getVialConcentrationMgPerMl(x) > 0);
+                    const conc = vPick ? getVialConcentrationMgPerMl(vPick) : 0;
+                    let unitsOut = null;
+                    let mlOut = null;
+                    let hint = null;
+                    if (hasTarget) {
+                      if (injectionType === 'Retatrutide') {
+                        unitsOut = target * RETATRUTIDE_UNITS_PER_MG;
+                        hint = 'Retatrutide pen: 10 units = 1 mg on the dial.';
+                      } else if (conc > 0) {
+                        mlOut = target / conc;
+                        unitsOut = mlOut * 100;
+                        hint = `U-100 syringe: ${conc.toFixed(2)} mg/mL from vial${vPick && selectedVialId !== vPick.id ? ' (first vial with concentration for this med)' : ''}.`;
+                      } else {
+                        hint = 'Add this medication under Tools → Vials with total mg + BAC (or mg/mL) so concentration is known.';
+                      }
+                    }
+                    return (
+                      <div className="rounded-xl border border-accent/25 bg-accent/5 p-3 space-y-2">
+                        <label className="text-gray-300 text-sm font-medium block">Trial / protocol target (mg per dose)</label>
+                        <p className="text-gray-500 text-xs">From study notes—see suggested syringe units (or mL) for your current vial.</p>
+                        <div className="flex flex-wrap gap-2 items-end">
+                          <div className="flex-1 min-w-[8rem]">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={trialTargetMg}
+                              onChange={(e) => setTrialTargetMg(e.target.value)}
+                              className="w-full bg-slate-700 text-white rounded-lg px-3 py-2.5"
+                              placeholder="e.g. 1"
+                            />
+                          </div>
+                          {hasTarget && unitsOut != null && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInjectionDose(unitsOut.toFixed(1));
+                                setInjectionUnit('units');
+                              }}
+                              className="px-3 py-2.5 rounded-lg text-sm font-medium bg-accent text-gray-900 hover:brightness-105"
+                            >
+                              Apply units to dose
+                            </button>
+                          )}
+                          {hasTarget && mlOut != null && mlOut > 0 && injectionType !== 'Retatrutide' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInjectionDose(mlOut.toFixed(3));
+                                setInjectionUnit('ml');
+                              }}
+                              className="px-3 py-2.5 rounded-lg text-sm font-medium bg-white/10 text-gray-200 hover:bg-white/15"
+                            >
+                              Apply mL to dose
+                            </button>
+                          )}
+                        </div>
+                        {hasTarget && unitsOut != null && (
+                          <p className="text-gold-400/95 text-sm">
+                            ≈ <strong>{unitsOut.toFixed(1)}</strong> units
+                            {mlOut != null && mlOut > 0 && injectionType !== 'Retatrutide' && (
+                              <span className="text-gray-400 font-normal"> · {mlOut.toFixed(3)} mL</span>
+                            )}
+                          </p>
+                        )}
+                        {hasTarget && hint && (
+                          <p className={`text-xs ${conc <= 0 && injectionType !== 'Retatrutide' ? 'text-amber-400/90' : 'text-gray-500'}`}>{hint}</p>
+                        )}
                       </div>
                     );
                   })()}
@@ -5713,7 +6079,7 @@ const wipeAllData = () => {
                                 </div>
                               </div>
                               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                                 <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                               </div>
                             </div>
@@ -5753,7 +6119,7 @@ const wipeAllData = () => {
                                       </div>
                                     </div>
                                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                                       <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                                     </div>
                                   </div>
@@ -5905,6 +6271,109 @@ const wipeAllData = () => {
             </div>
             {activeMoreSection === 'profile' && (
               <div className="space-y-4">
+                <div className="ui-card p-4 border border-cyan-500/20">
+                  <h3 className="text-white font-medium mb-2 flex items-center gap-2"><Cloud className="h-5 w-5 text-cyan-400" />Account &amp; cloud backup</h3>
+                  <p className="text-gray-400 text-xs mb-4">
+                    Sign in to save your data to Supabase. If you lose your phone, sign in on a new device to restore. Data is still stored locally on this device.
+                  </p>
+                  {supabaseConfigured && user && (
+                    <p className="text-gray-500 text-xs mb-3 -mt-2">
+                      Backup runs in the background after you save. Offline? Everything stays on this device until you&apos;re online again.
+                    </p>
+                  )}
+                  {!supabaseConfigured && (
+                    <p className="text-amber-400/90 text-xs mb-3">
+                      Add <code className="text-gray-300">VITE_SUPABASE_URL</code> and <code className="text-gray-300">VITE_SUPABASE_ANON_KEY</code> to your <code className="text-gray-300">.env</code> file and rebuild.
+                    </p>
+                  )}
+                  {supabaseConfigured && supabaseAuthLoading && (
+                    <p className="text-gray-500 text-xs mb-2">Checking session…</p>
+                  )}
+                  {supabaseConfigured && !user && !supabaseAuthLoading && (
+                    <form
+                      className="space-y-3"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setCloudAuthMessage('');
+                        setCloudBusy(true);
+                        const { error } = await supabaseSignIn(cloudEmail, cloudPassword);
+                        setCloudBusy(false);
+                        if (error) setCloudAuthMessage(formatCloudError(error));
+                        else {
+                          setCloudPassword('');
+                          setCloudAuthMessage('Signed in. Syncing…');
+                        }
+                      }}
+                    >
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Email</label>
+                        <input type="email" autoComplete="email" value={cloudEmail} onChange={(e) => setCloudEmail(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="you@example.com" />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 text-sm block mb-1">Password</label>
+                        <input type="password" autoComplete="current-password" value={cloudPassword} onChange={(e) => setCloudPassword(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="••••••••" />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="submit" disabled={cloudBusy} className="flex-1 min-w-[8rem] ui-btn-primary py-2.5 disabled:opacity-50">Sign in</button>
+                        <button
+                          type="button"
+                          disabled={cloudBusy}
+                          className="flex-1 min-w-[8rem] py-2.5 rounded-lg font-medium bg-white/10 text-gray-200 hover:bg-white/15 disabled:opacity-50"
+                          onClick={async () => {
+                            setCloudAuthMessage('');
+                            setCloudBusy(true);
+                            const { error } = await supabaseSignUp(cloudEmail, cloudPassword);
+                            setCloudBusy(false);
+                            if (error) setCloudAuthMessage(formatCloudError(error));
+                            else setCloudAuthMessage('Check your email to confirm your account (if required by your Supabase project).');
+                          }}
+                        >
+                          Sign up
+                        </button>
+                      </div>
+                      {cloudAuthMessage && <p className="text-gray-400 text-xs">{cloudAuthMessage}</p>}
+                    </form>
+                  )}
+                  {supabaseConfigured && user && (
+                    <div className="space-y-3">
+                      <p className="text-gray-300 text-sm">Signed in as <strong className="text-white">{user.email}</strong></p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="px-4 py-2.5 rounded-lg font-medium bg-cyan-600 hover:bg-cyan-500 text-white text-sm disabled:opacity-50"
+                          disabled={cloudBusy}
+                          onClick={async () => {
+                            setCloudBusy(true);
+                            setCloudAuthMessage('');
+                            const r = await supabaseSyncNow();
+                            setCloudBusy(false);
+                            if (r?.ok) {
+                              setCloudAuthMessage('Backup saved to cloud.');
+                              setBackgroundSyncError('');
+                            } else if (r?.code === 'no_session' || r?.code === 'not_configured') {
+                              setCloudAuthMessage('');
+                            } else {
+                              setCloudAuthMessage(r?.message ? `Sync failed: ${r.message}` : 'Sync failed.');
+                            }
+                          }}
+                        >
+                          {cloudBusy ? 'Syncing…' : 'Sync now'}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-4 py-2.5 rounded-lg font-medium bg-white/10 text-gray-200 hover:bg-white/15 text-sm"
+                          onClick={async () => {
+                            setCloudAuthMessage('');
+                            await supabaseSignOut();
+                          }}
+                        >
+                          Sign out
+                        </button>
+                      </div>
+                      {cloudAuthMessage && <p className="text-gray-400 text-xs">{cloudAuthMessage}</p>}
+                    </div>
+                  )}
+                </div>
                 <div className="ui-card p-4">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2"><User className="h-5 w-5 text-gold-400" />Profile & goals</h3>
                   <p className="text-gray-400 text-xs mb-4">Set your goal weight, height (for BMI), and daily hydration goal. These drive progress and reminders.</p>

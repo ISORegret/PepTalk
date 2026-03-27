@@ -1,0 +1,5 @@
+{
+  "latestVersion": "1.3.7",
+  "androidDownloadUrl": "https://isoregret.github.io/PepTalk/PepTalk.apk",
+  "releaseNotes": "v1.3.7 — Cloud backup & sign-in, offline-aware sync messages, optional in-app update notices, and smoother cloud restore."
+}
