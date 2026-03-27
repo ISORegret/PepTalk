@@ -3170,16 +3170,9 @@ const wipeAllData = () => {
 
       const medName = inj.type || 'Other';
       if (!bucket.perMed[medName]) {
-        bucket.perMed[medName] = {
-          dose: 0,
-          unit: inj.unit || ''
-        };
+        bucket.perMed[medName] = { doseMg: 0 };
       }
-      const perMedEntry = bucket.perMed[medName];
-      const numericDose = parseFloat(inj.dose);
-      if (!isNaN(numericDose)) {
-        perMedEntry.dose += numericDose;
-      }
+      bucket.perMed[medName].doseMg += doseMg || 0;
     });
 
     const rows = [];
@@ -4776,7 +4769,7 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <p className="text-gray-400 text-xs mb-2">
-                    Weekly dose per medication (units you logged) and net weight change for that week. Uncheck meds you don&apos;t want here (e.g. peptides that aren&apos;t for weight loss)—weight change still reflects your scale.
+                    Weekly <strong className="text-gray-300">total mg</strong> per medication (from vial concentration when you log units or ml with a vial). Uncheck meds you don&apos;t want here—weight change still reflects your scale.
                   </p>
                   {meds.length > 0 && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 pb-3 border-b border-white/10">
@@ -4819,7 +4812,10 @@ const wipeAllData = () => {
                         <tr className="text-gray-400 border-b border-white/10">
                           <th className="py-2 pr-4 text-left font-medium">Week</th>
                           {visibleMeds.map((medName) => (
-                            <th key={medName} className="py-2 px-4 text-right font-medium">{medName}</th>
+                            <th key={medName} className="py-2 px-4 text-right font-medium">
+                              <span className="block">{medName}</span>
+                              <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / week</span>
+                            </th>
                           ))}
                           <th className="py-2 pl-4 text-right font-medium">Weight change (lb)</th>
                         </tr>
@@ -4832,8 +4828,8 @@ const wipeAllData = () => {
                               <span>{row.weekLabel}</span>
                             </td>
                             {visibleMeds.map((medName) => {
-                              const medEntry = row.perMed?.[medName];
-                              if (!medEntry || !medEntry.dose) {
+                              const mg = row.perMed?.[medName]?.doseMg;
+                              if (mg == null || mg <= 0) {
                                 return (
                                   <td key={medName} className="py-2 px-4 text-right text-gray-500">
                                     —
@@ -4842,7 +4838,7 @@ const wipeAllData = () => {
                               }
                               return (
                                 <td key={medName} className="py-2 px-4 text-right text-gray-200">
-                                  {medEntry.dose.toFixed(1)}{medEntry.unit ? ` ${medEntry.unit}` : ''}
+                                  {mg.toFixed(2)} mg
                                 </td>
                               );
                             })}
@@ -5577,7 +5573,26 @@ const wipeAllData = () => {
                           const remaining = v ? (v.remainingMg ?? v.totalMg) : 0;
                           const deduct = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId);
                           const after = Math.max(0, remaining - deduct);
-                          return <p className="text-gray-500 text-xs mt-1">After this dose: {after.toFixed(1)} mg remaining</p>;
+                          const conc = getVialConcentrationMgPerMl(v);
+                          const u = (injectionUnit || '').toLowerCase();
+                          let breakdown = null;
+                          if (conc > 0 && deduct > 0) {
+                            if (u === 'units') {
+                              const ml = parseFloat(injectionDose) / 100;
+                              breakdown = `${injectionDose} units = ${ml.toFixed(3)} mL (U-100) × ${conc.toFixed(2)} mg/mL ≈ ${deduct.toFixed(2)} mg`;
+                            } else if (u === 'ml') {
+                              breakdown = `${injectionDose} mL × ${conc.toFixed(2)} mg/mL ≈ ${deduct.toFixed(2)} mg`;
+                            }
+                          }
+                          return (
+                            <div className="text-gray-500 text-xs mt-1 space-y-0.5">
+                              {breakdown && <p className="text-gray-400">{breakdown}</p>}
+                              {conc <= 0 && (u === 'units' || u === 'ml') && (
+                                <p className="text-amber-400/90">Set vial total (mg) + BAC (ml) or concentration so units convert to mg.</p>
+                              )}
+                              <p>After this dose: {after.toFixed(1)} mg remaining in vial</p>
+                            </div>
+                          );
                         })()}
                       </div>
                     );
@@ -6721,7 +6736,7 @@ const wipeAllData = () => {
                       <>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-gold-400 font-medium text-sm">Edit vial</span>
-                          <button type="button" onClick={() => { setEditingVialId(null); setVialTotalMg(''); setVialRemainingMg(''); setVialConcentrationForMl(''); setVialExpiry(''); setVialReconstituted(false); setVialReconstitutedDate(''); }} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                          <button type="button" onClick={() => { setEditingVialId(null); setVialTotalMg(''); setVialRemainingMg(''); setVialConcentrationForMl(''); setVialBacWaterMl(''); setVialExpiry(''); setVialReconstituted(false); setVialReconstitutedDate(''); }} className="text-gray-400 hover:text-white text-sm">Cancel</button>
                         </div>
                         <div>
                           <label className="text-gray-400 text-sm block mb-1">Medication</label>
@@ -6740,8 +6755,14 @@ const wipeAllData = () => {
                           </div>
                         </div>
                         <div>
-                          <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml) — optional, for display</label>
-                          <input type="number" step="0.1" min="0" value={vialConcentrationForMl} onChange={(e) => setVialConcentrationForMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 250" />
+                          <label className="text-gray-400 text-sm block mb-1">Bac water (mL)</label>
+                          <input type="number" step="0.1" min="0" value={vialBacWaterMl} onChange={(e) => setVialBacWaterMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 2.5" />
+                          <p className="text-gray-500 text-xs mt-1">Used with total mg to compute mg/mL for unit doses. Leave blank if you only use concentration below.</p>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Concentration (mg/ml)</label>
+                          <input type="number" step="0.1" min="0" value={vialConcentrationForMl} onChange={(e) => setVialConcentrationForMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 26.7 or leave blank" />
+                          <p className="text-gray-500 text-xs mt-1">Optional if you entered BAC; otherwise total mg ÷ BAC.</p>
                         </div>
                         <div>
                           <label className="text-gray-400 text-sm block mb-1">Expiry / use-by (optional)</label>
@@ -6762,13 +6783,17 @@ const wipeAllData = () => {
                             const totalMg = parseFloat(vialTotalMg);
                             const remainingMg = parseFloat(vialRemainingMg);
                             if (isNaN(totalMg) || totalMg <= 0) return;
-                            const conc = vialConcentrationForMl ? parseFloat(vialConcentrationForMl) : undefined;
+                            const bacMl = parseFloat(vialBacWaterMl);
+                            const concManual = vialConcentrationForMl ? parseFloat(vialConcentrationForMl) : undefined;
+                            const concFromBac = !isNaN(bacMl) && bacMl > 0 ? totalMg / bacMl : undefined;
+                            const concentration = (concManual && concManual > 0) ? concManual : (concFromBac && concFromBac > 0) ? concFromBac : undefined;
                             const updated = vials.map(v => v.id === editingVialId ? {
                               ...v,
                               medication: vialMedication,
                               totalMg,
                               remainingMg: isNaN(remainingMg) || remainingMg < 0 ? v.remainingMg : Math.min(remainingMg, totalMg),
-                              concentration: conc && conc > 0 ? conc : v.concentration,
+                              concentration: concentration && concentration > 0 ? concentration : v.concentration,
+                              bacWaterMl: !isNaN(bacMl) && bacMl > 0 ? bacMl : v.bacWaterMl,
                               expiry: vialExpiry || null,
                               reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null
                             } : v);
@@ -6778,6 +6803,7 @@ const wipeAllData = () => {
                             setVialTotalMg('');
                             setVialRemainingMg('');
                             setVialConcentrationForMl('');
+                            setVialBacWaterMl('');
                             setVialExpiry('');
                             setVialReconstituted(false);
                             setVialReconstitutedDate('');
@@ -6905,7 +6931,7 @@ const wipeAllData = () => {
                               {v.reconstitutedDate && <span className="text-gray-500 text-xs ml-2 block">Recon {v.reconstitutedDate}{useBy ? ` · use by ${useBy}` : ''}</span>}
                             </div>
                             <div className="flex items-center gap-1">
-                              <button onClick={() => { setEditingVialId(v.id); setVialMedication(v.medication); setVialTotalMg(String(v.totalMg)); setVialRemainingMg(String(v.remainingMg ?? v.totalMg)); setVialConcentrationForMl(v.concentration ? String(v.concentration) : ''); setVialExpiry(v.expiry || ''); setVialReconstituted(!!v.reconstitutedDate); setVialReconstitutedDate(v.reconstitutedDate || ''); }} className="p-2 text-gray-400 hover:text-gold-400 rounded-lg" title="Edit vial"><Edit2 className="h-4 w-4" /></button>
+                              <button onClick={() => { setEditingVialId(v.id); setVialMedication(v.medication); setVialTotalMg(String(v.totalMg)); setVialRemainingMg(String(v.remainingMg ?? v.totalMg)); setVialConcentrationForMl(v.concentration ? String(v.concentration) : ''); setVialBacWaterMl(v.bacWaterMl != null ? String(v.bacWaterMl) : ''); setVialExpiry(v.expiry || ''); setVialReconstituted(!!v.reconstitutedDate); setVialReconstitutedDate(v.reconstitutedDate || ''); }} className="p-2 text-gray-400 hover:text-gold-400 rounded-lg" title="Edit vial"><Edit2 className="h-4 w-4" /></button>
                               <button onClick={() => { const updated = vials.filter(x => x.id !== v.id); setVials(updated); saveData('health-vials', updated); if (editingVialId === v.id) setEditingVialId(null); }} className="p-2 text-gray-400 hover:text-red-400 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                             </div>
                           </div>
