@@ -105,6 +105,38 @@ body {
     border-color: rgba(255, 255, 255, 0.11);
   }
 
+  /* Accent “hero” panel — same language as Goals → Your current stack (use sparingly) */
+  .ui-hero-panel {
+    @apply relative rounded-2xl border-2 border-accent/50 bg-slate-950/80 overflow-hidden;
+    box-shadow:
+      0 0 0 1px rgba(245, 158, 11, 0.12),
+      0 12px 40px -8px rgba(0, 0, 0, 0.55),
+      0 0 48px -12px rgba(245, 158, 11, 0.25);
+  }
+  .ui-hero-panel--sticky {
+    @apply sticky top-2;
+  }
+  .ui-hero-panel__wash {
+    @apply absolute inset-0 bg-gradient-to-br from-accent/25 via-amber-600/10 to-violet-900/15 pointer-events-none;
+  }
+  .ui-hero-panel__top-bar {
+    @apply absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-accent to-transparent opacity-80 pointer-events-none;
+  }
+  .ui-hero-panel__body {
+    @apply relative p-4 sm:p-5;
+  }
+
+  /* Insights — Recharts defaults clip overflow; let tooltip extend over the weekly panel below */
+  .insights-level-chart .recharts-responsive-container {
+    overflow: visible !important;
+  }
+  .insights-level-chart .recharts-wrapper {
+    overflow: visible !important;
+  }
+  .insights-level-chart .recharts-surface {
+    overflow: visible;
+  }
+
   /* Primary button / active state */
   .ui-accent {
     @apply font-semibold transition-all duration-200;

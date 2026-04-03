@@ -1,5 +1,5 @@
 {
-  "latestVersion": "1.3.8",
+  "latestVersion": "1.4.0",
   "androidDownloadUrl": "https://your-site.com/path/PepTalk.apk",
-  "releaseNotes": "Cloud backup, offline messaging, update prompts, and fixes."
+  "releaseNotes": "v1.4.0 — Protocol-style summary with PDF; worksheet KPIs, stack table, schedule grid, vials, charts."
 }

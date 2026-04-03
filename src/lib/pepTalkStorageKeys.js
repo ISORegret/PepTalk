@@ -18,6 +18,8 @@ export const PEPTALK_HEALTH_STORAGE_KEYS = [
   'health-lab-entries',
   'health-vials',
   'health-weekly-dose-weight-excluded-meds',
+  'health-goals-user-stack',
+  'health-sleep-entries',
 ];
 
 /** Optional UI prefs (small; safe to sync) */

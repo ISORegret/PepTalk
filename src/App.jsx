@@ -1,13 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown, Cloud, WifiOff, Download } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown, Cloud, WifiOff, Download, Sparkles, ChevronLeft, Stethoscope, Search, Layers, Info, Moon, HelpCircle, FileText, BarChart3 } from 'lucide-react';
 import { useSupabaseAuth } from './context/SupabaseAuthContext.jsx';
 import { checkForAppUpdate, dismissUpdatePrompt, openDownloadUrl } from './lib/appUpdateCheck.js';
 import { formatCloudError, scheduleCloudSync } from './lib/cloudSync.js';
 import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
+import { GOAL_CATEGORIES, GOAL_GUIDE_DISCLAIMER, GOAL_TRACK_ACTIONS, getStackSuggestions, getMedicationEducation } from './goalPeptideGuide.js';
+import { getStackTimingContent } from './lib/stackTimingGuide.js';
+import { PEP_TALK_FAQ } from './lib/pepTalkFaq.js';
+import { downloadClinicianSummaryPdf } from './lib/clinicianPdf.js';
+import { downloadGraphicalSummaryPdf } from './lib/graphicalSummaryPdf.js';
+import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
+import { computeSleepHours } from './lib/sleepUtils.js';
+import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '1.3.8';
+const APP_VERSION = '1.4.1';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -18,8 +26,8 @@ const MEDICATIONS = [
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
-  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true },
-  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168, preConstituted: true },
+  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
+  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
   { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 56, peakHours: 12, effectDuration: 72 },
   { name: 'BPC-157', category: 'Peptide', color: '#e8b84c', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 2, peakHours: 2, effectDuration: 72 },
@@ -1057,9 +1065,15 @@ const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'D
 const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
 
 // Helper function to parse dates in local timezone (fixes off-by-one day bug). Accepts Date or YYYY-MM-DD string.
+// Also handles ISO datetimes (2024-01-15T12:00:00.000Z) — use calendar day only, same as toCalendarDay.
 const parseLocalDate = (dateString) => {
   if (dateString instanceof Date) return new Date(dateString.getTime());
   const s = typeof dateString === 'string' ? dateString.trim() : String(dateString).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+    if (!y || !m || !d) return new Date(NaN);
+    return new Date(y, m - 1, d);
+  }
   const [year, month, day] = s.split('-').map(Number);
   return new Date(year, month - 1, day);
 };
@@ -1163,6 +1177,9 @@ const PepTalk = () => {
   const [csvType, setCsvType] = useState('full'); // 'full' | 'weight' | 'injections'
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
+  const [showGraphicalSummary, setShowGraphicalSummary] = useState(false);
+  const [graphicalPdfBusy, setGraphicalPdfBusy] = useState(false);
+  const graphicalSummaryCaptureRef = useRef(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
   const [updatePrompt, setUpdatePrompt] = useState(null);
@@ -1191,6 +1208,10 @@ const PepTalk = () => {
   const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
   const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
   const [weeklyDoseWeightExcludedMeds, setWeeklyDoseWeightExcludedMeds] = useState([]); // med names hidden from Weekly dose & weight change table
+  const [goalGuideCategoryId, setGoalGuideCategoryId] = useState(null); // null = pick a goal; id = detail view
+  const [goalGuideSearch, setGoalGuideSearch] = useState('');
+  const [goalUserStack, setGoalUserStack] = useState([]); // medication names — conceptual stack from Goals guide
+  const [goalStackInfoMed, setGoalStackInfoMed] = useState(null); // modal: which med to explain
 
   // Weight form states
   const [weight, setWeight] = useState('');
@@ -1306,11 +1327,35 @@ const PepTalk = () => {
   const [journalHunger, setJournalHunger] = useState(5);
   const [editingJournal, setEditingJournal] = useState(null);
 
+  const [sleepEntries, setSleepEntries] = useState([]);
+  const [sleepBedDate, setSleepBedDate] = useState(getTodayLocal());
+  const [sleepBedTime, setSleepBedTime] = useState('22:30');
+  const [sleepWakeTime, setSleepWakeTime] = useState('07:00');
+  const [sleepQuality, setSleepQuality] = useState(3);
+  const [sleepNotes, setSleepNotes] = useState('');
+  const [showSleepForm, setShowSleepForm] = useState(false);
+  const [editingSleep, setEditingSleep] = useState(null);
+  const [todayStepsInput, setTodayStepsInput] = useState('');
+  const [sideEffectSeverity, setSideEffectSeverity] = useState({});
+  const [storageQuotaWarning, setStorageQuotaWarning] = useState(false);
+  const [lastCloudSyncAt, setLastCloudSyncAt] = useState(() => {
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage.getItem('peptalk-last-cloud-sync') || '' : '';
+    } catch {
+      return '';
+    }
+  });
+  const [toastUndo, setToastUndo] = useState(null);
+  const [vialPhotoDataUrl, setVialPhotoDataUrl] = useState(null);
+  const [vialPhotoRemoved, setVialPhotoRemoved] = useState(false);
+  const [faqOpenId, setFaqOpenId] = useState(null);
+
   // Calendar state
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const photoInputRef = useRef(null);
   const moreSectionRefs = useRef({});
+  const undoTimerRef = useRef(null);
 
   useEffect(() => { loadData(); }, []);
 
@@ -1347,8 +1392,14 @@ const PepTalk = () => {
 
   useEffect(() => {
     const onResult = (e) => {
-      if (e.detail?.ok) setBackgroundSyncError('');
-      else if (e.detail?.message) setBackgroundSyncError(e.detail.message);
+      if (e.detail?.ok) {
+        setBackgroundSyncError('');
+        const iso = new Date().toISOString();
+        setLastCloudSyncAt(iso);
+        try {
+          localStorage.setItem('peptalk-last-cloud-sync', iso);
+        } catch (_) {}
+      } else if (e.detail?.message) setBackgroundSyncError(e.detail.message);
     };
     window.addEventListener('peptalk:cloud-sync-result', onResult);
     return () => window.removeEventListener('peptalk:cloud-sync-result', onResult);
@@ -1457,6 +1508,13 @@ const PepTalk = () => {
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
       if (labData) setLabEntries(JSON.parse(labData));
+      const sleepData = localStorage.getItem('health-sleep-entries');
+      if (sleepData) {
+        try {
+          const parsed = JSON.parse(sleepData);
+          if (Array.isArray(parsed)) setSleepEntries(parsed);
+        } catch (_) { /* ignore */ }
+      }
       const vialsData = localStorage.getItem('health-vials');
       if (vialsData) {
         const parsed = JSON.parse(vialsData);
@@ -1470,6 +1528,13 @@ const PepTalk = () => {
         try {
           const parsed = JSON.parse(weeklyDoseExcluded);
           if (Array.isArray(parsed)) setWeeklyDoseWeightExcludedMeds(parsed);
+        } catch (_) { /* ignore */ }
+      }
+      const goalsStackData = localStorage.getItem('health-goals-user-stack');
+      if (goalsStackData) {
+        try {
+          const parsed = JSON.parse(goalsStackData);
+          if (Array.isArray(parsed)) setGoalUserStack(parsed.filter((x) => typeof x === 'string'));
         } catch (_) { /* ignore */ }
       }
 
@@ -1492,13 +1557,32 @@ const PepTalk = () => {
   };
 
   const saveData = (key, data) => {
-    try { localStorage.setItem(key, JSON.stringify(data)); } catch (error) { console.error('Error saving:', error); }
-    scheduleCloudSync();
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setStorageQuotaWarning(false);
+      scheduleCloudSync();
+      return true;
+    } catch (error) {
+      console.error('Error saving:', error);
+      const name = error?.name || '';
+      const code = error?.code;
+      if (name === 'QuotaExceededError' || code === 22) setStorageQuotaWarning(true);
+      return false;
+    }
+  };
+
+  const pushUndoToast = (message, onUndo) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setToastUndo({ message, onUndo });
+    undoTimerRef.current = setTimeout(() => {
+      setToastUndo(null);
+      undoTimerRef.current = null;
+    }, 8000);
   };
 
   // Form reset functions
   const resetWeightForm = () => { setWeight(''); setWeightDate(getTodayLocal()); setEditingWeight(null); setShowAddForm(false); };
-  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionTime('09:00'); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); setTrialTargetMg(''); };
+  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionTime('09:00'); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setSideEffectSeverity({}); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); setTrialTargetMg(''); };
   const resetMeasurementForm = () => { setMeasurementType('Waist'); setMeasurementValue(''); setMeasurementDate(getTodayLocal()); setShowAddForm(false); };
   const resetJournalForm = () => { setJournalContent(''); setJournalMood('neutral'); setJournalEnergy(5); setJournalHunger(5); setJournalDate(getTodayLocal()); setEditingJournal(null); setShowAddForm(false); };
   const resetFastingForm = () => { setFastingHours(''); setFastingDate(getTodayLocal()); setEditingFasting(null); setShowFastingForm(false); };
@@ -1533,9 +1617,20 @@ const PepTalk = () => {
   };
 
   const deleteWeight = (id) => {
-    const updated = weightEntries.filter(e => e.id !== id);
+    const removed = weightEntries.find(e => e.id === id);
+    if (!removed) return;
+    const prev = weightEntries;
+    const updated = prev.filter(e => e.id !== id);
     setWeightEntries(updated);
-    saveData('health-weight-entries', updated);
+    if (!saveData('health-weight-entries', updated)) {
+      setWeightEntries(prev);
+      return;
+    }
+    pushUndoToast('Weight entry removed', () => {
+      const restored = sortWeightByDateAsc([...updated, removed]);
+      setWeightEntries(restored);
+      saveData('health-weight-entries', restored);
+    });
   };
 
   // Glucose & A1C CRUD
@@ -1788,7 +1883,24 @@ const PepTalk = () => {
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
     const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
-    const entryData = { type: injectionType, dose: parseFloat(injectionDose), unit: injectionUnit, date: injectionDate, time: injectionTime, route: injectionRoute, site: injectionSite, notes: injectionNotes, sideEffects: selectedSideEffects, vialId: selectedVialId || undefined };
+    const sev = {};
+    selectedSideEffects.forEach((ef) => {
+      const n = Number(sideEffectSeverity[ef]);
+      sev[ef] = n >= 1 && n <= 5 ? n : 3;
+    });
+    const entryData = {
+      type: injectionType,
+      dose: parseFloat(injectionDose),
+      unit: injectionUnit,
+      date: injectionDate,
+      time: injectionTime,
+      route: injectionRoute,
+      site: injectionSite,
+      notes: injectionNotes,
+      sideEffects: selectedSideEffects,
+      sideEffectSeverity: selectedSideEffects.length ? sev : undefined,
+      vialId: selectedVialId || undefined,
+    };
     let updated = editingInjection
       ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
       : [...injectionEntries, { id: Date.now(), ...entryData }];
@@ -1813,9 +1925,20 @@ const PepTalk = () => {
   };
 
   const deleteInjection = (id) => {
-    const updated = injectionEntries.filter(e => e.id !== id);
+    const removed = injectionEntries.find(e => e.id === id);
+    if (!removed) return;
+    const prev = injectionEntries;
+    const updated = prev.filter(e => e.id !== id);
     setInjectionEntries(updated);
-    saveData('health-injection-entries', updated);
+    if (!saveData('health-injection-entries', updated)) {
+      setInjectionEntries(prev);
+      return;
+    }
+    pushUndoToast('Injection removed', () => {
+      const restored = [...updated, removed].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+      setInjectionEntries(restored);
+      saveData('health-injection-entries', restored);
+    });
   };
 
   const addMeasurement = () => {
@@ -1904,9 +2027,74 @@ const PepTalk = () => {
   };
 
   const deleteJournal = (id) => {
-    const updated = journalEntries.filter(e => e.id !== id);
+    const removed = journalEntries.find(e => e.id === id);
+    if (!removed) return;
+    const prev = journalEntries;
+    const updated = prev.filter(e => e.id !== id);
     setJournalEntries(updated);
-    saveData('health-journal', updated);
+    if (!saveData('health-journal', updated)) {
+      setJournalEntries(prev);
+      return;
+    }
+    pushUndoToast('Journal entry removed', () => {
+      const restored = [...updated, removed];
+      setJournalEntries(restored);
+      saveData('health-journal', restored);
+    });
+  };
+
+  const resetSleepForm = () => {
+    setSleepBedDate(getTodayLocal());
+    setSleepBedTime('22:30');
+    setSleepWakeTime('07:00');
+    setSleepQuality(3);
+    setSleepNotes('');
+    setEditingSleep(null);
+    setShowSleepForm(false);
+  };
+
+  const addOrUpdateSleep = () => {
+    const hours = computeSleepHours(sleepBedDate, sleepBedTime, sleepWakeTime);
+    if (hours == null) return;
+    const q = parseInt(sleepQuality, 10);
+    const row = {
+      id: editingSleep ? editingSleep.id : Date.now(),
+      date: sleepBedDate,
+      bedTime: sleepBedTime,
+      wakeTime: sleepWakeTime,
+      quality: q >= 1 && q <= 5 ? q : 3,
+      hours,
+      notes: sleepNotes.trim() || undefined,
+    };
+    const updated = editingSleep
+      ? sleepEntries.map((e) => (e.id === editingSleep.id ? row : e))
+      : [...sleepEntries, row];
+    updated.sort((a, b) => String(b.date).localeCompare(String(a.date)) || (b.id || 0) - (a.id || 0));
+    setSleepEntries(updated);
+    saveData('health-sleep-entries', updated);
+    resetSleepForm();
+  };
+
+  const deleteSleep = (id) => {
+    const updated = sleepEntries.filter((e) => e.id !== id);
+    setSleepEntries(updated);
+    saveData('health-sleep-entries', updated);
+  };
+
+  const saveTodaySteps = () => {
+    const n = parseInt(todayStepsInput, 10);
+    if (isNaN(n) || n < 0 || n > 200000) return;
+    const todayStr = getTodayLocal();
+    const existing = dailyTrackEntries.find((e) => e.date === todayStr);
+    let updated;
+    if (existing) {
+      updated = dailyTrackEntries.map((e) => (e.date === todayStr ? { ...e, steps: n } : e));
+    } else {
+      updated = [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals: [], steps: n }];
+    }
+    setDailyTrackEntries(updated);
+    saveData('health-daily-track', updated);
+    setTodayStepsInput('');
   };
 
   const handlePhotoUpload = (e) => {
@@ -1937,6 +2125,7 @@ const PepTalk = () => {
       glucoseEntries,
       a1cEntries,
       labEntries,
+      sleepEntries,
       userProfile,
       vials
     };
@@ -2045,6 +2234,10 @@ const PepTalk = () => {
           setLabEntries(imported.labEntries);
           saveData('health-lab-entries', imported.labEntries);
         }
+        if (imported.sleepEntries) {
+          setSleepEntries(imported.sleepEntries);
+          saveData('health-sleep-entries', imported.sleepEntries);
+        }
         if (imported.userProfile) {
           setUserProfile(imported.userProfile);
           saveData('health-user-profile', imported.userProfile);
@@ -2115,6 +2308,40 @@ ${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeig
     win.document.close();
     win.focus();
     setTimeout(() => { try { win.print(); } finally { win.close(); } }, 400);
+  };
+
+  const exportClinicianPdfFile = () => {
+    try {
+      downloadClinicianSummaryPdf({
+        generatedAt: new Date().toISOString(),
+        userProfile,
+        weightEntries,
+        injectionEntries,
+        journalEntries,
+        labEntries,
+        glucoseEntries,
+        sleepEntries,
+        goalStack: goalUserStack,
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Could not generate PDF.');
+    }
+  };
+
+  const handleGraphicalSummaryPdf = async () => {
+    const el = graphicalSummaryCaptureRef.current;
+    if (!el) return;
+    setGraphicalPdfBusy(true);
+    try {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await downloadGraphicalSummaryPdf(el);
+    } catch (err) {
+      console.error(err);
+      alert('Could not save visual summary PDF.');
+    } finally {
+      setGraphicalPdfBusy(false);
+    }
   };
 
   const exportCSV = async () => {
@@ -2195,6 +2422,8 @@ const wipeAllData = () => {
     'health-user-profile',
     'health-vials',
     'health-weekly-dose-weight-excluded-meds',
+    'health-goals-user-stack',
+    'health-sleep-entries',
   ];
 
   keysToRemove.forEach((k) => localStorage.removeItem(k));
@@ -2212,6 +2441,8 @@ const wipeAllData = () => {
   setLabEntries([]);
   setVials([]);
   setWeeklyDoseWeightExcludedMeds([]);
+  setGoalUserStack([]);
+  setSleepEntries([]);
   setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
 
   setShowWipeConfirm(false);
@@ -2231,7 +2462,16 @@ const wipeAllData = () => {
     saveData('health-photos', updated);
   };
 
-  const toggleSideEffect = (effect) => setSelectedSideEffects(prev => prev.includes(effect) ? prev.filter(e => e !== effect) : [...prev, effect]);
+  const toggleSideEffect = (effect) => {
+    setSelectedSideEffects((prev) => (prev.includes(effect) ? prev.filter((e) => e !== effect) : [...prev, effect]));
+    setSideEffectSeverity((prev) => {
+      if (prev[effect] !== undefined) {
+        const { [effect]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [effect]: 3 };
+    });
+  };
   const getMedicationColor = (type) => MEDICATIONS.find(m => m.name === type)?.color || '#6b7280';
 
   // Filtering and calculations
@@ -2240,7 +2480,13 @@ const wipeAllData = () => {
     const months = { '1m': 1, '3m': 3, '6m': 6, '12m': 12 };
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - months[timeRange]);
-    return entries.filter(e => new Date(e.date) >= cutoffDate);
+    cutoffDate.setHours(0, 0, 0, 0);
+    return entries.filter(e => {
+      const day = toCalendarDay(e.date);
+      if (!day) return false;
+      const d = parseLocalDate(day);
+      return !isNaN(d.getTime()) && d >= cutoffDate;
+    });
   };
 
   const getDateRangeLabel = () => {
@@ -2297,7 +2543,38 @@ const wipeAllData = () => {
 
     const lastA1c = a1cEntries.length ? sortByDateDesc(a1cEntries)[0] : null;
 
-    return { weightStr, injStr, hydrationStr, avgGlucose, lastGlucose, lastA1c };
+    const journalInWeek = journalEntries.filter(e => e.date >= startStr && e.date <= todayStr).length;
+    const labsInWeek = labEntries.filter(e => e.date >= startStr && e.date <= todayStr).length;
+    const sleepInWeek = sleepEntries.filter(e => e.date >= startStr && e.date <= todayStr);
+    const avgSleepHours = sleepInWeek.length
+      ? Math.round((sleepInWeek.reduce((s, e) => s + (Number(e.hours) || 0), 0) / sleepInWeek.length) * 10) / 10
+      : null;
+    let stepsSum = 0;
+    let stepsDays = 0;
+    weekDates.forEach((date) => {
+      const row = dailyTrackEntries.find(e => e.date === date);
+      if (row?.steps != null && Number(row.steps) > 0) {
+        stepsSum += Number(row.steps);
+        stepsDays += 1;
+      }
+    });
+    const injWithFx = injectionsInWeek.filter((e) => (e.sideEffects || []).length > 0).length;
+
+    return {
+      weightStr,
+      injStr,
+      hydrationStr,
+      avgGlucose,
+      lastGlucose,
+      lastA1c,
+      journalInWeek,
+      labsInWeek,
+      avgSleepHours,
+      sleepNights: sleepInWeek.length,
+      stepsSum,
+      stepsDays,
+      injWithFx,
+    };
   };
 
   const calculateBMI = (weightLbs, heightInches) => heightInches ? ((weightLbs / (heightInches * heightInches)) * 703).toFixed(1) : null;
@@ -2321,8 +2598,8 @@ const wipeAllData = () => {
     const bmi = calculateBMI(current, userProfile.height);
     const toGoal = current - (userProfile.goalWeight || 200);
     
-    const firstDate = new Date(sortedAsc[0].date);
-    const lastDate = new Date(sorted[0].date);
+    const firstDate = parseLocalDate(toCalendarDay(sortedAsc[0].date));
+    const lastDate = parseLocalDate(toCalendarDay(sorted[0].date));
     const weeks = Math.max(1, (lastDate - firstDate) / (7 * 24 * 60 * 60 * 1000));
     const weeklyAvg = change / weeks;
     
@@ -2403,7 +2680,7 @@ const wipeAllData = () => {
     const filtered = getFilteredData(weightEntries);
     const sorted = sortWeightByDateAsc(filtered);
     if (sorted.length < 2) return [];
-    const startDate = parseLocalDate(sorted[0].date);
+    const startDate = parseLocalDate(toCalendarDay(sorted[0].date));
     const startWeight = parseFloat(sorted[0].weight);
     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
     const now = new Date();
@@ -2415,7 +2692,7 @@ const wipeAllData = () => {
       weekEnd.setDate(weekEnd.getDate() + w * 7);
       const weekLabel = `W${w}`;
       const typicalLoss = onTrack.typical * w;
-      const weightsUpToWeekEnd = sorted.filter(e => parseLocalDate(e.date) <= weekEnd);
+      const weightsUpToWeekEnd = sorted.filter(e => parseLocalDate(toCalendarDay(e.date)) <= weekEnd);
       const latestInWindow = weightsUpToWeekEnd.length ? weightsUpToWeekEnd[weightsUpToWeekEnd.length - 1] : null;
       const userLoss = latestInWindow ? Math.max(0, startWeight - parseFloat(latestInWindow.weight)) : null;
       if (userLoss !== null) {
@@ -2615,17 +2892,22 @@ const wipeAllData = () => {
     const filteredInjections = getFilteredData(injectionEntries);
     // Use only dates that have a weight entry so the line is accurate (no null interpolation)
     const weightDates = new Set();
-    filteredWeights.forEach(e => weightDates.add(e.date));
-    let sortedDates = Array.from(weightDates).sort((a, b) => new Date(a) - new Date(b));
+    filteredWeights.forEach(e => {
+      const day = toCalendarDay(e.date);
+      if (day) weightDates.add(day);
+    });
+    let sortedDates = Array.from(weightDates).sort((a, b) => parseLocalDate(a) - parseLocalDate(b));
     if (maxWeeks > 0 && sortedDates.length > 0) {
-      const cutoff = new Date(sortedDates[sortedDates.length - 1]);
+      const lastDay = parseLocalDate(sortedDates[sortedDates.length - 1]);
+      const cutoff = new Date(lastDay);
       cutoff.setDate(cutoff.getDate() - maxWeeks * 7);
-      sortedDates = sortedDates.filter(d => new Date(d) >= cutoff);
+      cutoff.setHours(0, 0, 0, 0);
+      sortedDates = sortedDates.filter(d => parseLocalDate(d) >= cutoff);
     }
     const points = sortedDates.map(date => {
-      const dayWeights = filteredWeights.filter(e => e.date === date);
+      const dayWeights = filteredWeights.filter(e => toCalendarDay(e.date) === date);
       const weightEntry = dayWeights.length === 0 ? null : dayWeights.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
-      const dayInjections = filteredInjections.filter(e => e.date === date);
+      const dayInjections = filteredInjections.filter(e => toCalendarDay(e.date) === date);
       const doseData = {};
       const unitData = {};
       dayInjections.forEach(inj => {
@@ -2642,7 +2924,9 @@ const wipeAllData = () => {
       const windowStart = new Date(pointDate);
       windowStart.setDate(windowStart.getDate() - 6);
       const inWindow = filteredWeights.filter(e => {
-        const d = parseLocalDate(e.date);
+        const day = toCalendarDay(e.date);
+        if (!day) return false;
+        const d = parseLocalDate(day);
         return d >= windowStart && d <= pointDate;
       });
       p.weightTrend = inWindow.length ? inWindow.reduce((s, e) => s + parseFloat(e.weight), 0) / inWindow.length : null;
@@ -2669,11 +2953,13 @@ const wipeAllData = () => {
   };
 
   const getMeasurementChartData = () => {
-    const dates = [...new Set(measurementEntries.map(e => e.date))].sort();
+    const dates = [...new Set(measurementEntries.map(e => toCalendarDay(e.date)).filter(Boolean))].sort(
+      (a, b) => parseLocalDate(a) - parseLocalDate(b)
+    );
     return dates.map(date => {
       const dataPoint = { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
       MEASUREMENT_TYPES.forEach(type => {
-        const entry = measurementEntries.find(e => e.date === date && e.type === type);
+        const entry = measurementEntries.find(e => toCalendarDay(e.date) === date && e.type === type);
         if (entry) dataPoint[type] = parseFloat(entry.value);
       });
       return dataPoint;
@@ -2970,6 +3256,47 @@ const wipeAllData = () => {
     return BODY_LOCATIONS[nextIdx];
   };
 
+  const filteredGoalCategories = useMemo(() => {
+    const q = goalGuideSearch.trim().toLowerCase();
+    if (!q) return GOAL_CATEGORIES;
+    return GOAL_CATEGORIES.filter((cat) => {
+      if (cat.title.toLowerCase().includes(q) || cat.description.toLowerCase().includes(q)) return true;
+      if (cat.clinicianTips?.some((t) => t.toLowerCase().includes(q))) return true;
+      return cat.items.some(
+        (i) =>
+          i.medicationName.toLowerCase().includes(q) ||
+          i.explain.toLowerCase().includes(q) ||
+          (i.stacksWellWith || []).some(
+            (s) => s.medicationName.toLowerCase().includes(q) || s.why.toLowerCase().includes(q)
+          )
+      );
+    });
+  }, [goalGuideSearch]);
+
+  const stackSuggestionList = useMemo(() => getStackSuggestions(goalUserStack), [goalUserStack]);
+
+  const userHasLoggedMedication = (name) => injectionEntries.some((e) => e.type === name);
+
+  const persistGoalUserStack = (next) => {
+    setGoalUserStack(next);
+    saveData('health-goals-user-stack', next);
+  };
+  const addToGoalUserStack = (medicationName) => {
+    if (!medicationName || goalUserStack.includes(medicationName)) return;
+    persistGoalUserStack([...goalUserStack, medicationName]);
+  };
+  const removeFromGoalUserStack = (medicationName) => {
+    persistGoalUserStack(goalUserStack.filter((x) => x !== medicationName));
+  };
+
+  const goalStackMedColor = (name) => MEDICATIONS.find((m) => m.name === name)?.color || '#94a3b8';
+
+  const handleGoalTrackAction = (action) => {
+    setActiveTab(action.tab);
+    if (action.moreSection) setActiveMoreSection(action.moreSection);
+    setShowAddForm(!!action.openInjectionForm);
+  };
+
   // Convert injection dose to mg-equivalent for pharmacokinetic weighting (same units = comparable)
   const toDoseMg = (inj) => {
     let dose = parseFloat(inj.dose);
@@ -3010,7 +3337,7 @@ const wipeAllData = () => {
     return toDoseMg({ dose, unit: unit || 'mg', type: med });
   };
 
-  // For level/curve only: ml → mg using linked vial or any vial for this med. If ml with no vial, return 0 so we don't guess (guessing 200 mg/ml inflated levels to 1000%+).
+  // For level/curve only: ml → mg using linked vial, inventory vial, or med-specific assumed mg/ml (TRT oil) when no vial is set.
   const toDoseMgForLevel = (inj) => {
     if (!inj || isNaN(parseFloat(inj.dose))) return 0;
     const doseNum = parseFloat(inj.dose);
@@ -3020,6 +3347,9 @@ const wipeAllData = () => {
       if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId, inj.type);
       const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
       if (v) return doseNum * getVialConcentrationMgPerMl(v);
+      const med = MEDICATIONS.find(m => m.name === inj.type);
+      const assumed = med && parseFloat(med.assumedConcentrationMgPerMl);
+      if (!isNaN(assumed) && assumed > 0) return doseNum * assumed;
       return 0;
     }
     if (unit === 'units') {
@@ -3034,15 +3364,15 @@ const wipeAllData = () => {
     return toDoseMg(inj);
   };
 
-  // For level % denominator: use most recent injection (by date) that has a known mg.
-  const getLastKnownDoseMg = (injections) => {
+  // For level % denominator: max single-shot mg in the set (stable vs "most recent" when recent rows are ml or typos).
+  const getReferenceDoseMgForLevelPct = (injections) => {
     if (!Array.isArray(injections) || injections.length === 0) return 0;
-    const byDate = [...injections].sort((a, b) => parseLocalDate(toCalendarDay(b.date)) - parseLocalDate(toCalendarDay(a.date)));
-    for (let i = 0; i < byDate.length; i++) {
-      const mg = toDoseMgForLevel(byDate[i]);
-      if (mg > 0) return mg;
-    }
-    return 0;
+    let maxMg = 0;
+    injections.forEach(inj => {
+      const mg = toDoseMgForLevel(inj);
+      if (mg > maxMg) maxMg = mg;
+    });
+    return maxMg;
   };
 
   // Convert vial amount + unit to mg for storage/deduction
@@ -3070,7 +3400,8 @@ const wipeAllData = () => {
   // Medication level calculations (pharmacokinetics) — weighted by user's actual dose; SubQ vs IM affects curve
   const calculateMedicationLevel = (injection, medication) => {
     const now = new Date();
-    const injectionDate = parseLocalDate(injection.date);
+    const injectionDate = parseLocalDate(toCalendarDay(injection.date));
+    if (!injectionDate || !Number.isFinite(injectionDate.getTime())) return 0;
     const hoursElapsed = (now - injectionDate) / (1000 * 60 * 60);
     
     if (hoursElapsed < 0) return 0; // Future injection
@@ -3152,9 +3483,9 @@ const wipeAllData = () => {
           if (remaining > 0.0001) totalRemainingMg += remaining;
         }
       });
-      // Display as % of last known dose (use last injection with known mg so ml-without-vial doesn't inflate %).
-      const lastDoseMg = getLastKnownDoseMg(injections);
-      const rawLevel = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
+      // Display as % of largest logged dose (mg) in this window — avoids 1000% when "most recent" dose parses tiny but older shots still contribute.
+      const refDoseMg = getReferenceDoseMgForLevelPct(injections);
+      const rawLevel = refDoseMg > 0 ? (totalRemainingMg / refDoseMg) * 100 : 0;
       const currentLevel = Math.min(1000, rawLevel);
       
       // Get current phase from timeline (medication-specific first, then category)
@@ -3204,7 +3535,7 @@ const wipeAllData = () => {
     
     const recentInjections = injectionEntries
       .filter(inj => inj.type === medName)
-      .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+      .sort((a, b) => parseLocalDate(toCalendarDay(a.date)) - parseLocalDate(toCalendarDay(b.date)));
     
     if (recentInjections.length === 0) return [];
     
@@ -3232,9 +3563,8 @@ const wipeAllData = () => {
         const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
         if (remaining > 0.0001) totalRemainingMg += remaining;
       });
-      // Use last injection with known mg so ml-without-vial doesn't inflate %
-      const lastDoseMg = getLastKnownDoseMg(injectionsBeforeDate);
-      const level = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : 0;
+      const refDoseMg = getReferenceDoseMgForLevelPct(injectionsBeforeDate);
+      const level = refDoseMg > 0 ? (totalRemainingMg / refDoseMg) * 100 : 0;
       const injectionDatesSet = new Set(recentInjections.map(inj => toCalendarDay(inj.date)));
       const hasInjection = injectionDatesSet.has(dateStr);
 
@@ -3254,8 +3584,8 @@ const wipeAllData = () => {
     if (weightEntries.length < 2 || injectionEntries.length === 0) return { rows: [], meds: [] };
     const medNames = [...new Set(injectionEntries.map(inj => inj.type).filter(Boolean))];
     const sortedWeights = sortWeightByDateAsc(weightEntries);
-    const startDate = parseLocalDate(sortedWeights[0].date);
-    const endDate = parseLocalDate(sortedWeights[sortedWeights.length - 1].date);
+    const startDate = parseLocalDate(toCalendarDay(sortedWeights[0].date));
+    const endDate = parseLocalDate(toCalendarDay(sortedWeights[sortedWeights.length - 1].date));
     if (!startDate || !endDate) return { rows: [], meds: medNames };
 
     const msPerDay = 24 * 60 * 60 * 1000;
@@ -3277,17 +3607,17 @@ const wipeAllData = () => {
 
     const injectionsByWeek = {};
     injectionEntries.forEach(inj => {
-      const d = parseLocalDate(inj.date);
-      if (!d) return;
-      const weekStart = startOfWeek(d).toISOString().slice(0, 10);
+      const d = parseLocalDate(toCalendarDay(inj.date));
+      if (!d || !Number.isFinite(d.getTime())) return;
+      const weekKey = formatDateLocal(startOfWeek(d));
       const doseMg = toDoseMgForLevel(inj);
-      if (!injectionsByWeek[weekStart]) {
-        injectionsByWeek[weekStart] = {
+      if (!injectionsByWeek[weekKey]) {
+        injectionsByWeek[weekKey] = {
           totalMg: 0,
           perMed: {}
         };
       }
-      const bucket = injectionsByWeek[weekStart];
+      const bucket = injectionsByWeek[weekKey];
       const safeDose = doseMg || 0;
       bucket.totalMg += safeDose;
 
@@ -3302,13 +3632,13 @@ const wipeAllData = () => {
     for (let i = 0; i < weekCount; i++) {
       const ws = new Date(firstWeekStart.getTime() + i * msPerWeek);
       const we = new Date(ws.getTime() + msPerWeek - 1);
-      const wsKey = ws.toISOString().slice(0, 10);
+      const wsKey = formatDateLocal(ws);
 
       // Weight change in this week:
       // - Start = last weight before week start (if any), otherwise first weight in this week
       // - End   = last weight recorded in this week
       const weekWeights = sortedWeights.filter(w => {
-        const d = parseLocalDate(w.date);
+        const d = parseLocalDate(toCalendarDay(w.date));
         return d && d >= ws && d <= we;
       });
       const hasDoses = !!injectionsByWeek[wsKey];
@@ -3317,7 +3647,7 @@ const wipeAllData = () => {
       let change = null;
       if (weekWeights.length > 0) {
         const weightsBeforeWeek = sortedWeights.filter(w => {
-          const d = parseLocalDate(w.date);
+          const d = parseLocalDate(toCalendarDay(w.date));
           return d && d < ws;
         });
         const startW = weightsBeforeWeek.length
@@ -3404,7 +3734,7 @@ const wipeAllData = () => {
         fullDate: dateStr,
         timestamp: timeForRow,
         isToday,
-        injectionMeds,
+        injectionMedNames: [],
         injectionDoses,
         phaseByMed,
         remainingMgByMed
@@ -3440,8 +3770,8 @@ const wipeAllData = () => {
         });
         totalActiveMg += totalRemainingMg;
         remainingMgByMed[med.name] = totalRemainingMg;
-        const lastDoseMg = getLastKnownDoseMg(injectionsBeforeDate);
-        const pct = lastDoseMg > 0 ? (totalRemainingMg / lastDoseMg) * 100 : null;
+        const refDoseMg = getReferenceDoseMgForLevelPct(injectionsBeforeDate);
+        const pct = refDoseMg > 0 ? (totalRemainingMg / refDoseMg) * 100 : null;
         row[med.name] = pct != null && Number.isFinite(pct) ? Math.min(1000, Math.round(pct)) : null;
         const lastInj = injectionsBeforeDate[injectionsBeforeDate.length - 1];
         const lastDayStr = lastInj ? toCalendarDay(lastInj.date) : '';
@@ -3455,6 +3785,7 @@ const wipeAllData = () => {
           ? 'Injection'
           : (phaseFromTimeline ? phaseFromTimeline.name : getPhaseLabelForDay(hoursSinceInjection, med, isInjectionDay));
       });
+      row.injectionMedNames = Array.from(injectionMeds);
       row.totalActiveMg = totalActiveMg;
       if (isToday) {
         const insights = getMedicationInsights();
@@ -3666,6 +3997,17 @@ const wipeAllData = () => {
 
   return (
     <div className="min-h-screen p-3 pb-28 transition-all duration-300 bg-[var(--bg-base)]">
+      {storageQuotaWarning && (
+        <div className="sticky top-0 z-40 mb-2 -mt-1">
+          <div className="flex items-start gap-2 rounded-xl border border-orange-500/35 bg-orange-500/10 px-3 py-2.5 text-orange-100/95 text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-orange-400" aria-hidden />
+            <span>
+              <strong className="text-orange-50">Storage almost full.</strong> Could not save some data. Export a backup (More → Tools → Data), then remove old photos or vial images, or clear space.
+            </span>
+            <button type="button" onClick={() => setStorageQuotaWarning(false)} className="text-orange-200 hover:text-white p-1 rounded-lg shrink-0" aria-label="Dismiss"><X className="h-4 w-4" /></button>
+          </div>
+        </div>
+      )}
       {(showOfflineBanner || showSyncFailBanner) && (
         <div className="sticky top-0 z-40 space-y-2 mb-2 -mt-1">
           {showOfflineBanner && (
@@ -3746,6 +4088,25 @@ const wipeAllData = () => {
 )}
 
       {/* Welcome / Update modal — after sign-in when cloud is on; version updates; "Do not show again" hides forever */}
+      <GraphicalSummaryModal
+        ref={graphicalSummaryCaptureRef}
+        open={showGraphicalSummary}
+        onClose={() => setShowGraphicalSummary(false)}
+        onDownloadPdf={handleGraphicalSummaryPdf}
+        pdfBusy={graphicalPdfBusy}
+        weightEntries={weightEntries}
+        injectionEntries={injectionEntries}
+        sleepEntries={sleepEntries}
+        glucoseEntries={glucoseEntries}
+        labEntries={labEntries}
+        journalEntries={journalEntries}
+        dailyTrackEntries={dailyTrackEntries}
+        measurementEntries={measurementEntries}
+        userProfile={userProfile}
+        schedules={schedules}
+        vials={vials}
+      />
+
       {showWelcomeModal && (
         <div className="ui-modal-overlay" onClick={dismissWelcomeModal}>
           <div className="ui-modal max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -4053,11 +4414,19 @@ const wipeAllData = () => {
               { id: 'injections', icon: Syringe, label: 'Injections' },
               { id: 'insights', icon: Activity, label: 'Insights' },
               { id: 'journal', icon: BookOpen, label: 'Journal' },
+              { id: 'goals', icon: Sparkles, label: 'Goals' },
               { id: 'more', icon: MoreHorizontal, label: 'More' }
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setShowAddForm(false); }}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setShowAddForm(false);
+                  if (tab.id === 'goals') {
+                    setGoalGuideCategoryId(null);
+                    setGoalGuideSearch('');
+                  }
+                }}
                 className={`ui-tab whitespace-nowrap ${activeTab === tab.id ? 'ui-tab-active' : ''}`}
               >
                 <tab.icon className="h-4 w-4 shrink-0" />
@@ -4132,37 +4501,43 @@ const wipeAllData = () => {
               );
             })()}
 
-            {/* Weight Change — directly under quick actions */}
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-white">Weight Change</h2>
-              <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
-                <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
-                <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
-                <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
-                <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+            {/* Weight Change — hero block (matches Goals stack accent treatment) */}
+            <div className="ui-hero-panel">
+              <div className="ui-hero-panel__wash" aria-hidden />
+              <div className="ui-hero-panel__top-bar" aria-hidden />
+              <div className="ui-hero-panel__body space-y-3">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-white">Weight Change</h2>
+                  <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="ui-card p-4">
+                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
+                    <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+                  </div>
+                  <div className="ui-card p-4">
+                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
+                    <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
+                  </div>
+                  <div className="ui-card p-4">
+                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
+                    <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="ui-card p-4">
+                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
+                    <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
+                  </div>
+                  <div className="ui-card p-4">
+                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
+                    <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
+                  </div>
+                  <div className="ui-card p-4">
+                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
+                    <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -4180,7 +4555,10 @@ const wipeAllData = () => {
               const currentWeight = lastPointWithWeight?.weight;
               const currentWeightDate = lastPointWithWeight?.fullDate;
               return (
-              <div className="ui-card overflow-hidden">
+              <div className="ui-hero-panel overflow-hidden relative z-10">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="relative">
                 <div className="px-2 sm:px-3 pt-5 pb-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <h3 className="text-gray-300 text-sm font-medium">Weight over time</h3>
@@ -4358,6 +4736,7 @@ const wipeAllData = () => {
                     <p className="text-gray-500 text-xs">Green ring = injection that day{!showAllDots && ' · Dots only on injection days when zoomed out'}</p>
                   </div>
                 </div>
+                </div>
               </div>
               );
             })()}
@@ -4403,7 +4782,7 @@ const wipeAllData = () => {
               })()}
             </div>
 
-            {/* Week in review */}
+            {/* Week in review + protocol snapshot */}
             {(() => {
               const d = getWeeklyDigest();
               return (
@@ -4417,6 +4796,13 @@ const wipeAllData = () => {
                     {d.avgGlucose == null && d.lastGlucose && <span className="text-green-500">Last glucose {d.lastGlucose.value} mg/dL</span>}
                     {d.lastA1c && <span className="text-cyan-400">A1C {d.lastA1c.value}%</span>}
                   </div>
+                  <p className="text-gray-500 text-[11px] mt-2 leading-relaxed border-t border-white/[0.06] pt-2">
+                    <span className="text-gray-400 font-medium">At a glance: </span>
+                    {d.journalInWeek} journal · {d.labsInWeek} labs
+                    {d.sleepNights > 0 ? ` · ~${d.avgSleepHours}h sleep avg (${d.sleepNights} night${d.sleepNights !== 1 ? 's' : ''})` : ''}
+                    {d.stepsDays > 0 ? ` · ${d.stepsSum.toLocaleString()} steps logged (${d.stepsDays} day${d.stepsDays !== 1 ? 's' : ''})` : ''}
+                    {d.injWithFx > 0 ? ` · ${d.injWithFx} injection${d.injWithFx !== 1 ? 's' : ''} with side effects noted` : ''}.
+                  </p>
                 </div>
               );
             })()}
@@ -4523,7 +4909,10 @@ const wipeAllData = () => {
 
             {/* Your vials — remaining volume on Summary */}
             {vials.length > 0 && (
-              <div className="ui-card p-4">
+              <div className="ui-hero-panel">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="ui-hero-panel__body">
                 <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
                 <div className="space-y-2">
                   {vials.map(v => {
@@ -4545,6 +4934,7 @@ const wipeAllData = () => {
                   })}
                 </div>
                 <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
+                </div>
               </div>
             )}
 
@@ -4844,6 +5234,41 @@ const wipeAllData = () => {
                 </div>
               </div>
             </div>
+            {(() => {
+              const cutoff = new Date();
+              cutoff.setDate(cutoff.getDate() - 30);
+              const recent = injectionEntries.filter((e) => parseLocalDate(e.date) >= cutoff);
+              const agg = {};
+              recent.forEach((inj) => {
+                (inj.sideEffects || []).forEach((fx) => {
+                  const sev = inj.sideEffectSeverity?.[fx] ?? 3;
+                  if (!agg[fx]) agg[fx] = { sum: 0, n: 0 };
+                  agg[fx].sum += sev;
+                  agg[fx].n += 1;
+                });
+              });
+              const rows = Object.entries(agg)
+                .map(([fx, v]) => ({ fx, avg: Math.round((v.sum / v.n) * 10) / 10, n: v.n }))
+                .sort((a, b) => b.avg - a.avg);
+              if (rows.length === 0) return null;
+              return (
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-semibold text-sm mb-2">Side effect intensity (last 30 days)</h3>
+                  <p className="text-gray-500 text-xs mb-3">Averages of the 1–5 scores you logged with each injection.</p>
+                  <div className="space-y-2">
+                    {rows.map((r) => (
+                      <div key={r.fx} className="flex items-center gap-3 text-sm">
+                        <span className="text-gray-300 flex-1 min-w-0 truncate">{r.fx}</span>
+                        <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden max-w-[120px]">
+                          <div className="h-full rounded-full bg-orange-500/70" style={{ width: `${(r.avg / 5) * 100}%` }} />
+                        </div>
+                        <span className="text-orange-300 text-xs w-[4.5rem] text-right shrink-0">{r.avg}/5 · {r.n}×</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Single unified graph: estimated medication levels from half-life (all peptides/hormones) */}
             {getMedicationInsights().length > 0 && (() => {
               const { data: unifiedData, medications: unifiedMeds } = getUnifiedMedicationLevelChartData();
@@ -4866,7 +5291,10 @@ const wipeAllData = () => {
                 });
               };
               return (
-                <div className="ui-card p-4">
+                <div className="ui-hero-panel relative z-30 overflow-visible">
+                  <div className="ui-hero-panel__wash" aria-hidden />
+                  <div className="ui-hero-panel__top-bar" aria-hidden />
+                  <div className="relative p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                     <h3 className="text-white font-semibold text-sm">Estimated medication levels</h3>
                     <div className="flex rounded-lg bg-white/[0.06] p-0.5">
@@ -4876,7 +5304,8 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <p className="text-gray-500 text-xs mb-4">Half-life model from logged doses. Hover for dose & phase · click legend to toggle.</p>
-                  <ResponsiveContainer width="100%" height={280}>
+                  <div className="insights-level-chart overflow-visible relative">
+                  <ResponsiveContainer width="100%" height={280} className="!overflow-visible">
                     <ComposedChart data={unifiedData} margin={{ top: 20, right: 12, left: 4, bottom: 24 }}>
                       <defs>
                         {visibleMeds.map(med => (
@@ -4903,7 +5332,7 @@ const wipeAllData = () => {
                       <YAxis stroke="#64748b" fontSize={10} tickFormatter={(v) => `${v}%`} domain={[0, yMax]} ticks={yTicks} width={36} tickLine={false} axisLine={false} />
                       <Tooltip
                         cursor={{ stroke: '#64748b', strokeWidth: 1, strokeOpacity: 0.5 }}
-                        wrapperStyle={{ zIndex: 1000 }}
+                        wrapperStyle={{ zIndex: 10000 }}
                         contentStyle={{ backgroundColor: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
@@ -5006,23 +5435,20 @@ const wipeAllData = () => {
                           dot={(props) => {
                             const { cx, cy, payload, dataKey } = props;
                             if (payload == null || payload[dataKey] == null) return null;
-                            const isInjectionDay = payload.injectionMeds && typeof payload.injectionMeds.has === 'function' && payload.injectionMeds.has(dataKey);
-                            const dayIndex = payload.timestamp ? Math.floor(payload.timestamp / 86400000) : 0;
-                            const showDot = isInjectionDay || dayIndex % 5 === 0;
-                            if (!showDot) return null;
-                            const rOuter = isInjectionDay ? 6 : 4;
-                            const rInner = isInjectionDay ? 3 : 2;
+                            const names = payload.injectionMedNames;
+                            const isInjectionDay = Array.isArray(names) && names.includes(dataKey);
+                            if (!isInjectionDay) return null;
                             return (
                               <g key={props.key}>
-                                <circle cx={cx} cy={cy} r={rOuter} fill={med.color} fillOpacity={isInjectionDay ? 0.45 : 0.3} />
-                                <circle cx={cx} cy={cy} r={rInner} fill="rgba(255,255,255,0.95)" stroke={med.color} strokeWidth={1} />
-                                {isInjectionDay && <circle cx={cx} cy={cy} r={5} fill="none" stroke="#eab308" strokeWidth={1.5} strokeOpacity={0.9} />}
+                                <circle cx={cx} cy={cy} r={6} fill={med.color} fillOpacity={0.45} />
+                                <circle cx={cx} cy={cy} r={3} fill="rgba(255,255,255,0.95)" stroke={med.color} strokeWidth={1} />
+                                <circle cx={cx} cy={cy} r={5} fill="none" stroke="#eab308" strokeWidth={1.5} strokeOpacity={0.9} />
                               </g>
                             );
                           }}
                           activeDot={(props) => {
                             const { cx, cy, payload, dataKey } = props;
-                            const isInjectionDay = payload?.injectionMeds && typeof payload.injectionMeds.has === 'function' && payload.injectionMeds.has(dataKey);
+                            const isInjectionDay = Array.isArray(payload?.injectionMedNames) && payload.injectionMedNames.includes(dataKey);
                             return (
                               <g>
                                 <circle cx={cx} cy={cy} r={7} fill={med.color} fillOpacity={0.4} />
@@ -5035,6 +5461,8 @@ const wipeAllData = () => {
                       ))}
                     </ComposedChart>
                   </ResponsiveContainer>
+                  </div>
+                  </div>
                 </div>
               );
             })()}
@@ -5055,7 +5483,7 @@ const wipeAllData = () => {
                 });
               };
               return (
-                <div className="ui-card p-4">
+                <div className="ui-card p-4 relative z-0">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <h3 className="text-white font-semibold text-sm flex items-center gap-2">
                       <Activity className="h-4 w-4 text-gold-400" />
@@ -5423,15 +5851,21 @@ const wipeAllData = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="ui-card p-4">
-                <div className="text-gray-400 text-sm mb-1">Current Weight</div>
-                <div className="text-2xl font-bold text-white">{stats.current} <span className="text-sm text-gray-400">lbs</span></div>
-              </div>
-              <div className="ui-card p-4">
-                <div className="text-gray-400 text-sm mb-1">BMI</div>
-                <div className={`text-2xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
-                <div className={`text-xs ${bmiCategory.color}`}>{bmiCategory.label}</div>
+            <div className="ui-hero-panel">
+              <div className="ui-hero-panel__wash" aria-hidden />
+              <div className="ui-hero-panel__top-bar" aria-hidden />
+              <div className="ui-hero-panel__body">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="ui-card p-4">
+                    <div className="text-gray-400 text-sm mb-1">Current Weight</div>
+                    <div className="text-2xl font-bold text-white">{stats.current} <span className="text-sm text-gray-400">lbs</span></div>
+                  </div>
+                  <div className="ui-card p-4">
+                    <div className="text-gray-400 text-sm mb-1">BMI</div>
+                    <div className={`text-2xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
+                    <div className={`text-xs ${bmiCategory.color}`}>{bmiCategory.label}</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -5743,7 +6177,10 @@ const wipeAllData = () => {
 
             {/* Your vials — remaining volume on Injections page */}
             {vials.length > 0 && (
-              <div className="ui-card p-4">
+              <div className="ui-hero-panel">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="ui-hero-panel__body">
                 <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
                 <div className="space-y-2">
                   {vials.map(v => {
@@ -5765,6 +6202,7 @@ const wipeAllData = () => {
                   })}
                 </div>
                 <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More → Tools → Vials</button>
+                </div>
               </div>
             )}
 
@@ -5807,7 +6245,10 @@ const wipeAllData = () => {
             </div>
 
             {showAddForm && (
-              <div className="ui-card p-4">
+              <div className="ui-hero-panel">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="ui-hero-panel__body">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-white font-medium">{editingInjection ? 'Edit Injection' : 'Log Injection'}</h3>
                   <button onClick={resetInjectionForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
@@ -6010,16 +6451,35 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-gray-400 text-sm block mb-2">Side Effects</label>
+                    <label className="text-gray-400 text-sm block mb-2">Side effects (tap to toggle, then set intensity 1–5)</label>
                     <div className="flex flex-wrap gap-2">
-                      {SIDE_EFFECTS.map(effect => <button key={effect} onClick={() => toggleSideEffect(effect)} className={`px-3 py-1 rounded-full text-xs transition-all ${selectedSideEffects.includes(effect) ? 'bg-orange-500 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{effect}</button>)}
+                      {SIDE_EFFECTS.map(effect => <button key={effect} type="button" onClick={() => toggleSideEffect(effect)} className={`px-3 py-1 rounded-full text-xs transition-all ${selectedSideEffects.includes(effect) ? 'bg-orange-500 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{effect}</button>)}
                     </div>
+                    {selectedSideEffects.length > 0 && (
+                      <div className="mt-3 space-y-2 rounded-lg bg-black/20 border border-white/[0.06] p-3">
+                        {selectedSideEffects.map((effect) => (
+                          <div key={effect} className="flex items-center gap-2 flex-wrap">
+                            <span className="text-gray-400 text-xs w-32 shrink-0">{effect}</span>
+                            <input
+                              type="range"
+                              min={1}
+                              max={5}
+                              value={sideEffectSeverity[effect] ?? 3}
+                              onChange={(e) => setSideEffectSeverity((s) => ({ ...s, [effect]: parseInt(e.target.value, 10) }))}
+                              className="flex-1 min-w-[100px] h-2 accent-orange-500"
+                            />
+                            <span className="text-gray-300 text-xs w-10">{sideEffectSeverity[effect] ?? 3}/5</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="text-gray-400 text-sm block mb-1">Notes</label>
                     <textarea value={injectionNotes} onChange={(e) => setInjectionNotes(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 resize-none" rows={2} placeholder="Optional notes..." />
                   </div>
                   <button onClick={addOrUpdateInjection} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingInjection ? 'Update' : 'Log Injection'}</button>
+                </div>
                 </div>
               </div>
             )}
@@ -6093,12 +6553,20 @@ const wipeAllData = () => {
                                     <span className="text-gray-400">{entry.dose} {entry.unit}</span>
                                   </div>
                                   <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">· {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
-                                  {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-1.5">{entry.sideEffects.map(effect => <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">{effect}</span>)}</div>}
+                                  {entry.sideEffects?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                      {entry.sideEffects.map((effect) => (
+                                        <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">
+                                          {effect}{entry.sideEffectSeverity?.[effect] != null ? ` (${entry.sideEffectSeverity[effect]}/5)` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                   {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
                                 </div>
                               </div>
                               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                                 <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                               </div>
                             </div>
@@ -6133,12 +6601,20 @@ const wipeAllData = () => {
                                       <div className="min-w-0 flex-1">
                                         <div className="text-xs text-gray-300">{entry.dose} {entry.unit}</div>
                                         <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">· {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
-                                        {entry.sideEffects?.length > 0 && <div className="flex flex-wrap gap-1 mt-1.5">{entry.sideEffects.map(effect => <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">{effect}</span>)}</div>}
+                                        {entry.sideEffects?.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {entry.sideEffects.map((effect) => (
+                                              <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">
+                                                {effect}{entry.sideEffectSeverity?.[effect] != null ? ` (${entry.sideEffectSeverity[effect]}/5)` : ''}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
                                         {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
                                       </div>
                                     </div>
                                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                                       <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                                     </div>
                                   </div>
@@ -6160,7 +6636,10 @@ const wipeAllData = () => {
         {activeTab === 'journal' && (
           <div key="journal" className="space-y-4 tab-enter">
             {showAddForm && (
-              <div className="ui-card p-4">
+              <div className="ui-hero-panel">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="ui-hero-panel__body">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-white font-medium">{editingJournal ? 'Edit Entry' : 'New Journal Entry'}</h3>
                   <button onClick={resetJournalForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
@@ -6204,6 +6683,7 @@ const wipeAllData = () => {
                   <button onClick={addOrUpdateJournal} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">
                     {editingJournal ? 'Update Entry' : 'Save Entry'}
                   </button>
+                </div>
                 </div>
               </div>
             )}
@@ -6265,6 +6745,430 @@ const wipeAllData = () => {
           </div>
         )}
 
+        {/* GOALS — goal-first peptide education (curated); not medical advice */}
+        {activeTab === 'goals' && (
+          <div key="goals" className="space-y-4 tab-enter">
+            <div className="text-center pb-1">
+              <h2 className="text-xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
+                <Sparkles className="h-6 w-6 text-accent" />
+                Goals &amp; peptides
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">Pick an outcome — see what people often discuss and what stacks come up together</p>
+            </div>
+            {!goalGuideCategoryId && (
+              <div className="ui-hero-panel ui-hero-panel--sticky z-20">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="ui-hero-panel__body">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h3 className="text-white font-bold text-sm sm:text-base tracking-tight flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 border border-accent/35 shadow-inner">
+                        <Layers className="h-4 w-4 text-gold-400" />
+                      </span>
+                      Your current stack
+                    </h3>
+                    {goalUserStack.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => persistGoalUserStack([])}
+                        className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/70 hover:text-red-400 transition-colors"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-amber-100/55 text-[11px] sm:text-xs mb-3 leading-relaxed border-l-2 border-accent/40 pl-3">
+                    Your personal combo list (not a prescription). Add from the guides below — <span className="text-amber-100/75">tap a medication name</span> to read what it does. This card stays pinned while you scroll.
+                  </p>
+                  {goalUserStack.length === 0 ? (
+                    <p className="text-gray-400 text-xs sm:text-sm rounded-xl bg-black/25 border border-white/[0.06] px-3 py-3">
+                      Nothing here yet. Open any goal below and tap <span className="text-gold-400 font-medium">Add to stack</span>.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {goalUserStack.map((name) => (
+                        <div
+                          key={name}
+                          className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1.5 rounded-xl bg-black/35 border border-accent/25 text-xs text-gray-100 max-w-full shadow-sm"
+                        >
+                          <span className="w-2 h-2 rounded-full shrink-0 ring-2 ring-accent/30" style={{ backgroundColor: goalStackMedColor(name) }} />
+                          <button
+                            type="button"
+                            onClick={() => setGoalStackInfoMed(name)}
+                            className="appearance-none truncate font-medium text-left min-w-0 flex-1 bg-transparent border-0 cursor-pointer text-gray-100 hover:text-gold-400 hover:underline decoration-gold-400/40 underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/45 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 rounded-md -my-0.5 py-0.5 -ml-0.5 pl-0.5 pr-1 transition-colors"
+                            title={`${name} — tap for guide info`}
+                            aria-label={`What ${name} does — open details`}
+                          >
+                            {name}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeFromGoalUserStack(name)}
+                            className="appearance-none p-1 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 shrink-0 border-0 bg-transparent cursor-pointer"
+                            title="Remove from stack"
+                            aria-label={`Remove ${name} from stack`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {goalUserStack.length > 0 && (() => {
+                    const timing = getStackTimingContent(goalUserStack);
+                    return (
+                      <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-950/20 px-3 py-3 space-y-2">
+                        <h4 className="text-amber-200/90 text-xs font-semibold flex items-center gap-2"><Clock className="h-3.5 w-3.5 shrink-0" />Stack timing &amp; spacing (educational only)</h4>
+                        {timing.pairWarnings.map((w, i) => (
+                          <p key={i} className="text-amber-200/85 text-[11px] leading-relaxed border-l-2 border-amber-500/50 pl-2">{w}</p>
+                        ))}
+                        <ul className="text-gray-400 text-[11px] space-y-1 list-disc list-inside">
+                          {[...timing.general, ...timing.perMed].slice(0, 10).map((t, i) => (
+                            <li key={i}>{t}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+            <div className="ui-card p-4 border-amber-500/25 bg-amber-500/5">
+              <p className="text-amber-200/90 text-xs leading-relaxed">{GOAL_GUIDE_DISCLAIMER}</p>
+            </div>
+            {!goalGuideCategoryId ? (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={goalGuideSearch}
+                    onChange={(e) => setGoalGuideSearch(e.target.value)}
+                    placeholder="Search goals or medications…"
+                    className="w-full bg-slate-800/80 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    autoComplete="off"
+                  />
+                </div>
+                {filteredGoalCategories.length === 0 ? (
+                  <p className="text-center text-gray-500 text-sm py-10">
+                    No goals match &quot;{goalGuideSearch.trim()}&quot;. Try another word or clear search.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {filteredGoalCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setGoalGuideCategoryId(cat.id)}
+                        className="ui-card p-4 text-left hover:border-accent/40 transition-colors group"
+                      >
+                        <h3 className="text-white font-semibold text-sm group-hover:text-gold-400 transition-colors">{cat.title}</h3>
+                        <p className="text-gray-500 text-xs mt-2 leading-relaxed">{cat.description}</p>
+                        <span className="inline-flex items-center gap-1 text-accent text-xs font-medium mt-3">
+                          View suggestions
+                          <ChevronDown className="h-3 w-3 -rotate-90" />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="ui-card p-4">
+                  <h3 className="text-white font-semibold text-sm flex items-center gap-2 mb-1">
+                    <Sparkles className="h-4 w-4 text-violet-400" />
+                    Suggested additions
+                  </h3>
+                  <p className="text-gray-500 text-xs mb-3 leading-relaxed">
+                    Peptides and meds our guides associate with your stack. Tap info for full context, or add to extend your stack plan.
+                  </p>
+                  {stackSuggestionList.length === 0 ? (
+                    <p className="text-gray-600 text-xs">
+                      {goalUserStack.length === 0
+                        ? 'Add at least one item to your stack to see pairing ideas from the guide.'
+                        : 'No extra pairings are listed in the guide for this exact combo — you can still explore other goal categories above.'}
+                    </p>
+                  ) : (
+                    <ul className="space-y-4">
+                      {stackSuggestionList.map((sug) => (
+                        <li key={sug.medicationName} className="pb-4 border-b border-white/[0.06] last:border-0 last:pb-0">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: goalStackMedColor(sug.medicationName) }} />
+                              <span className="text-white text-sm font-medium">{sug.medicationName}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setGoalStackInfoMed(sug.medicationName)}
+                                className="px-2 py-1 rounded-lg text-[11px] font-medium bg-white/[0.06] text-gray-300 border border-white/10 hover:border-accent/30 hover:text-gold-400"
+                              >
+                                What it does
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => addToGoalUserStack(sug.medicationName)}
+                                disabled={goalUserStack.includes(sug.medicationName)}
+                                className="px-2 py-1 rounded-lg text-[11px] font-medium bg-accent/20 text-gold-400 border border-accent/35 hover:bg-accent/30 disabled:opacity-40 disabled:pointer-events-none"
+                              >
+                                {goalUserStack.includes(sug.medicationName) ? 'In stack' : 'Add to stack'}
+                              </button>
+                            </div>
+                          </div>
+                          <ul className="mt-2 space-y-1 text-[11px] text-gray-500 leading-relaxed list-disc pl-4 marker:text-gray-600">
+                            {sug.reasons.slice(0, 4).map((r, ri) => (
+                              <li key={ri}>{r}</li>
+                            ))}
+                            {sug.reasons.length > 4 && (
+                              <li className="list-none text-gray-600 italic">+{sug.reasons.length - 4} more reasons in info…</li>
+                            )}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            ) : (() => {
+              const cat = GOAL_CATEGORIES.find((c) => c.id === goalGuideCategoryId);
+              const medColor = (name) => MEDICATIONS.find((m) => m.name === name)?.color || '#94a3b8';
+              if (!cat) {
+                return (
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setGoalGuideCategoryId(null)}
+                      className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      All goals
+                    </button>
+                    <p className="text-gray-500 text-sm">That goal isn&apos;t available.</p>
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => setGoalGuideCategoryId(null)}
+                    className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    All goals
+                  </button>
+                  <div className="ui-card p-4">
+                    <h3 className="text-white font-semibold text-lg">{cat.title}</h3>
+                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{cat.description}</p>
+                  </div>
+                  {(GOAL_TRACK_ACTIONS[cat.id] || []).length > 0 && (
+                    <div className="ui-card p-4">
+                      <p className="text-gray-500 text-[11px] font-semibold uppercase tracking-wide mb-2">Track in PepTalk</p>
+                      <div className="flex flex-wrap gap-2">
+                        {GOAL_TRACK_ACTIONS[cat.id].map((action) => (
+                          <button
+                            key={`${action.tab}-${action.label}`}
+                            type="button"
+                            onClick={() => handleGoalTrackAction(action)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.06] text-gray-200 border border-white/[0.08] hover:bg-accent/15 hover:text-gold-400 hover:border-accent/30 transition-colors"
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {cat.clinicianTips?.length > 0 && (
+                    <details className="ui-card p-4 group" open>
+                      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-white [&::-webkit-details-marker]:hidden">
+                        <Stethoscope className="h-4 w-4 text-cyan-400 shrink-0" />
+                        Questions for your clinician
+                        <ChevronDown className="h-4 w-4 text-gray-500 ml-auto shrink-0 transition-transform group-open:rotate-180" />
+                      </summary>
+                      <ul className="mt-3 space-y-2 text-xs text-gray-400 leading-relaxed list-disc pl-4 marker:text-cyan-500/80">
+                        {cat.clinicianTips.map((tip, ti) => (
+                          <li key={ti}>{tip}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  <div className="space-y-3">
+                    {cat.items.map((item) => (
+                      <div key={item.medicationName} className="ui-card p-4 border-white/[0.06]">
+                        <div className="flex flex-wrap items-start gap-3">
+                          <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: medColor(item.medicationName) }} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <h4 className="text-white font-medium text-sm">{item.medicationName}</h4>
+                              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                {goalUserStack.includes(item.medicationName) && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-300/90">
+                                    <Layers className="h-3 w-3" />
+                                    In your stack
+                                  </span>
+                                )}
+                                {userHasLoggedMedication(item.medicationName) && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400/90">
+                                    <CheckCircle className="h-3 w-3" />
+                                    In your logs
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setGoalStackInfoMed(item.medicationName)}
+                                    className="p-1.5 rounded-lg text-gray-400 border border-white/10 hover:text-gold-400 hover:border-accent/30"
+                                    title="What it does"
+                                  >
+                                    <Info className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => addToGoalUserStack(item.medicationName)}
+                                    disabled={goalUserStack.includes(item.medicationName)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-accent/15 text-gold-400 border border-accent/25 hover:bg-accent/25 transition-colors disabled:opacity-45 disabled:pointer-events-none"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    {goalUserStack.includes(item.medicationName) ? 'In stack' : 'Add to stack'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-gray-400 text-xs mt-2 leading-relaxed">{item.explain}</p>
+                            {item.stacksWellWith?.length > 0 && (
+                              <div className="mt-4 pt-3 border-t border-white/[0.06]">
+                                <p className="text-gold-400/90 text-[11px] font-semibold uppercase tracking-wide mb-2">Often discussed together</p>
+                                <ul className="space-y-2.5">
+                                  {item.stacksWellWith.map((s) => (
+                                    <li key={`${item.medicationName}-${s.medicationName}`} className="flex gap-2 text-xs">
+                                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: medColor(s.medicationName) }} />
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <span className="text-gray-200 font-medium">{s.medicationName}</span>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => setGoalStackInfoMed(s.medicationName)}
+                                              className="p-1 rounded text-gray-500 hover:text-gold-400"
+                                              title="What it does"
+                                            >
+                                              <Info className="h-3 w-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => addToGoalUserStack(s.medicationName)}
+                                              disabled={goalUserStack.includes(s.medicationName)}
+                                              className="text-[10px] font-medium text-accent hover:text-gold-400 disabled:opacity-40 disabled:pointer-events-none"
+                                            >
+                                              {goalUserStack.includes(s.medicationName) ? 'In stack' : 'Add to stack'}
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <p className="text-gray-500 mt-0.5 leading-relaxed">{s.why}</p>
+                                        {userHasLoggedMedication(s.medicationName) && (
+                                          <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400/80 mt-1">
+                                            <CheckCircle className="h-2.5 w-2.5" />
+                                            Logged before
+                                          </span>
+                                        )}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {goalStackInfoMed && (() => {
+              const hits = getMedicationEducation(goalStackInfoMed).sort((a, b) => {
+                if (a.role === b.role) return 0;
+                return a.role === 'primary' ? -1 : 1;
+              });
+              return (
+                <div
+                  className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4 bg-black/65 backdrop-blur-sm"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="goal-stack-info-title"
+                  onClick={() => setGoalStackInfoMed(null)}
+                >
+                  <div
+                    className="bg-[var(--bg-elevated)] rounded-2xl border border-white/10 max-w-lg w-full max-h-[min(88vh,640px)] overflow-hidden shadow-2xl flex flex-col"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-start justify-between gap-3 p-4 border-b border-white/[0.06]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: goalStackMedColor(goalStackInfoMed) }} />
+                        <h3 id="goal-stack-info-title" className="text-white font-semibold text-base truncate">
+                          {goalStackInfoMed}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setGoalStackInfoMed(null)}
+                        className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/10"
+                        aria-label="Close"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                      {hits.length === 0 ? (
+                        <p className="text-gray-500 text-sm leading-relaxed">
+                          No guide blurb for this exact name. You can still log it from the Injections tab if it&apos;s in your med list.
+                        </p>
+                      ) : (
+                        hits.map((h, hi) => (
+                          <div key={`${h.goalId}-${hi}-${h.role}`} className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-3">
+                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                {h.role === 'primary' ? 'Main entry' : 'Stack note'}
+                              </span>
+                              <span className="text-xs text-gray-400">{h.goalTitle}</span>
+                            </div>
+                            <p className="text-gray-300 text-xs leading-relaxed">{h.explain}</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGoalGuideCategoryId(h.goalId);
+                                setGoalStackInfoMed(null);
+                              }}
+                              className="mt-2 text-[11px] font-medium text-accent hover:text-gold-400"
+                            >
+                              Open &quot;{h.goalTitle}&quot; guide →
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-white/[0.06] flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addToGoalUserStack(goalStackInfoMed)}
+                        disabled={goalUserStack.includes(goalStackInfoMed)}
+                        className="flex-1 min-w-[8rem] py-2.5 rounded-xl text-sm font-medium bg-accent/20 text-gold-400 border border-accent/35 hover:bg-accent/30 disabled:opacity-40 disabled:pointer-events-none"
+                      >
+                        {goalUserStack.includes(goalStackInfoMed) ? 'Already in stack' : 'Add to stack'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGoalStackInfoMed(null)}
+                        className="px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/10"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* MORE TAB */}
         {activeTab === 'more' && (
           <div key="more" className="space-y-4 tab-enter">
@@ -6276,7 +7180,9 @@ const wipeAllData = () => {
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' },
                 { id: 'glucose', icon: Droplet, label: 'Glucose' },
-                { id: 'labs', icon: Activity, label: 'Labs' }
+                { id: 'labs', icon: Activity, label: 'Labs' },
+                { id: 'wellness', icon: Moon, label: 'Wellness' },
+                { id: 'help', icon: HelpCircle, label: 'Help' }
               ].map(section => (
                 <button
                   key={section.id}
@@ -6298,6 +7204,12 @@ const wipeAllData = () => {
                   {supabaseConfigured && user && (
                     <p className="text-gray-500 text-xs mb-3 -mt-2">
                       Backup runs in the background after you save. Offline? Everything stays on this device until you&apos;re online again.
+                      {lastCloudSyncAt && (
+                        <span className="block mt-1 text-gray-500">
+                          Last cloud sync:{' '}
+                          <span className="text-gray-300">{new Date(lastCloudSyncAt).toLocaleString()}</span>
+                        </span>
+                      )}
                     </p>
                   )}
                   {!supabaseConfigured && (
@@ -7224,7 +8136,7 @@ const wipeAllData = () => {
                       <>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-gold-400 font-medium text-sm">Edit vial</span>
-                          <button type="button" onClick={() => { setEditingVialId(null); setVialTotalMg(''); setVialRemainingMg(''); setVialConcentrationForMl(''); setVialBacWaterMl(''); setVialExpiry(''); setVialReconstituted(false); setVialReconstitutedDate(''); }} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                          <button type="button" onClick={() => { setEditingVialId(null); setVialTotalMg(''); setVialRemainingMg(''); setVialConcentrationForMl(''); setVialBacWaterMl(''); setVialExpiry(''); setVialReconstituted(false); setVialReconstitutedDate(''); setVialPhotoDataUrl(null); setVialPhotoRemoved(false); }} className="text-gray-400 hover:text-white text-sm">Cancel</button>
                         </div>
                         <div>
                           <label className="text-gray-400 text-sm block mb-1">Medication</label>
@@ -7256,6 +8168,37 @@ const wipeAllData = () => {
                           <label className="text-gray-400 text-sm block mb-1">Expiry / use-by (optional)</label>
                           <input type="date" value={vialExpiry} onChange={(e) => setVialExpiry(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
                         </div>
+                        <div>
+                          <label className="text-gray-400 text-sm block mb-1">Vial label photo (optional)</label>
+                          {vialPhotoDataUrl && !vialPhotoRemoved && (
+                            <img src={vialPhotoDataUrl} alt="" className="h-16 w-16 object-cover rounded-lg mb-2 border border-white/10" />
+                          )}
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <label className="px-3 py-2 rounded-lg bg-slate-600 text-white text-xs cursor-pointer">
+                              Choose image
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  if (!f) return;
+                                  const url = await compressImageFileToDataUrl(f);
+                                  if (url) {
+                                    setVialPhotoDataUrl(url);
+                                    setVialPhotoRemoved(false);
+                                  }
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                            {vialPhotoDataUrl && !vialPhotoRemoved && (
+                              <button type="button" onClick={() => { setVialPhotoRemoved(true); setVialPhotoDataUrl(null); }} className="text-xs text-red-400 hover:text-red-300 px-2">
+                                Remove photo
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <div className="flex items-center gap-2">
                           <input type="checkbox" id="vial-recon-edit" checked={vialReconstituted} onChange={(e) => setVialReconstituted(e.target.checked)} className="rounded bg-slate-700" />
                           <label htmlFor="vial-recon-edit" className="text-gray-400 text-sm">Reconstituted</label>
@@ -7283,7 +8226,8 @@ const wipeAllData = () => {
                               concentration: concentration && concentration > 0 ? concentration : v.concentration,
                               bacWaterMl: !isNaN(bacMl) && bacMl > 0 ? bacMl : v.bacWaterMl,
                               expiry: vialExpiry || null,
-                              reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null
+                              reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null,
+                              photoDataUrl: vialPhotoRemoved ? undefined : (vialPhotoDataUrl || v.photoDataUrl),
                             } : v);
                             updated = pruneEmptyVials(updated);
                             setVials(updated);
@@ -7296,6 +8240,8 @@ const wipeAllData = () => {
                             setVialExpiry('');
                             setVialReconstituted(false);
                             setVialReconstitutedDate('');
+                            setVialPhotoDataUrl(null);
+                            setVialPhotoRemoved(false);
                           }}
                           className="w-full ui-btn-primary py-2.5"
                         >
@@ -7358,6 +8304,32 @@ const wipeAllData = () => {
                         <p className="text-gray-500 text-xs mt-1">Many peptides are stable 28–56 days after reconstitution.</p>
                       </div>
                     )}
+                    <div>
+                      <label className="text-gray-400 text-sm block mb-1">Vial label photo (optional)</label>
+                      {vialPhotoDataUrl && (
+                        <img src={vialPhotoDataUrl} alt="" className="h-16 w-16 object-cover rounded-lg mb-2 border border-white/10" />
+                      )}
+                      <label className="inline-block px-3 py-2 rounded-lg bg-slate-600 text-white text-xs cursor-pointer">
+                        Choose image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const url = await compressImageFileToDataUrl(f);
+                            if (url) setVialPhotoDataUrl(url);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      {vialPhotoDataUrl && (
+                        <button type="button" onClick={() => setVialPhotoDataUrl(null)} className="ml-2 text-xs text-red-400 hover:text-red-300 px-2">
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     <button
                       onClick={() => {
                         const concentrationForMl = vialUnit === 'ml' ? (vialConcentrationForMl || '1') : null;
@@ -7374,7 +8346,8 @@ const wipeAllData = () => {
                           concentration: concentration && concentration > 0 ? concentration : undefined,
                           bacWaterMl: bacMl > 0 && !isNaN(bacMl) ? bacMl : undefined,
                           expiry: vialExpiry || null,
-                          reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null
+                          reconstitutedDate: vialReconstituted && vialReconstitutedDate ? vialReconstitutedDate : null,
+                          photoDataUrl: vialPhotoDataUrl || undefined,
                         };
                         const updated = [...vials, newVial];
                         setVials(updated);
@@ -7385,6 +8358,8 @@ const wipeAllData = () => {
                         setVialExpiry('');
                         setVialReconstituted(false);
                         setVialReconstitutedDate('');
+                        setVialPhotoDataUrl(null);
+                        setVialPhotoRemoved(false);
                       }}
                       className="w-full ui-btn-primary py-2.5"
                     >
@@ -7411,16 +8386,21 @@ const wipeAllData = () => {
                         const remMl = conc > 0 ? remMg / conc : null;
                         const totalMl = conc > 0 ? totalMg / conc : null;
                         return (
-                          <div key={v.id} className={`flex items-center justify-between rounded-lg p-3 ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/50'}`}>
-                            <div>
+                          <div key={v.id} className={`flex items-center justify-between rounded-lg p-3 gap-3 ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/50'}`}>
+                            <div className="flex items-center gap-3 min-w-0">
+                              {v.photoDataUrl && (
+                                <img src={v.photoDataUrl} alt="" className="h-10 w-10 rounded-md object-cover border border-white/10 shrink-0" />
+                              )}
+                              <div className="min-w-0">
                               <span className="text-white font-medium">{v.medication}</span>
                               <span className="text-gray-400 text-sm ml-2">{remMg.toFixed(1)} / {totalMg.toFixed(1)} mg</span>
                               {conc > 0 && <span className="text-gray-500 text-xs ml-2">· {conc.toFixed(1)} mg/ml{remMl != null && totalMl != null ? ` · ${remMl.toFixed(1)} / ${totalMl.toFixed(1)} ml` : ''}</span>}
                               {v.expiry && <span className="text-gray-500 text-xs ml-2">· Exp {v.expiry}</span>}
                               {v.reconstitutedDate && <span className="text-gray-500 text-xs ml-2 block">Recon {v.reconstitutedDate}{useBy ? ` · use by ${useBy}` : ''}</span>}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => { setEditingVialId(v.id); setVialMedication(v.medication); setVialTotalMg(String(v.totalMg)); setVialRemainingMg(String(v.remainingMg ?? v.totalMg)); setVialConcentrationForMl(v.concentration ? String(v.concentration) : ''); setVialBacWaterMl(v.bacWaterMl != null ? String(v.bacWaterMl) : ''); setVialExpiry(v.expiry || ''); setVialReconstituted(!!v.reconstitutedDate); setVialReconstitutedDate(v.reconstitutedDate || ''); }} className="p-2 text-gray-400 hover:text-gold-400 rounded-lg" title="Edit vial"><Edit2 className="h-4 w-4" /></button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button onClick={() => { setEditingVialId(v.id); setVialMedication(v.medication); setVialTotalMg(String(v.totalMg)); setVialRemainingMg(String(v.remainingMg ?? v.totalMg)); setVialConcentrationForMl(v.concentration ? String(v.concentration) : ''); setVialBacWaterMl(v.bacWaterMl != null ? String(v.bacWaterMl) : ''); setVialExpiry(v.expiry || ''); setVialReconstituted(!!v.reconstitutedDate); setVialReconstitutedDate(v.reconstitutedDate || ''); setVialPhotoDataUrl(v.photoDataUrl || null); setVialPhotoRemoved(false); }} className="p-2 text-gray-400 hover:text-gold-400 rounded-lg" title="Edit vial"><Edit2 className="h-4 w-4" /></button>
                               <button onClick={() => { const updated = vials.filter(x => x.id !== v.id); setVials(updated); saveData('health-vials', updated); if (editingVialId === v.id) setEditingVialId(null); }} className="p-2 text-gray-400 hover:text-red-400 rounded-lg"><Trash2 className="h-4 w-4" /></button>
                             </div>
                           </div>
@@ -7472,6 +8452,25 @@ const wipeAllData = () => {
                         <FileDown className="h-5 w-5" />
                         {exportFormat === 'json' ? 'Export backup (JSON)' : `Download CSV${csvType !== 'full' ? ` (${csvType})` : ''}`}
                       </button>
+                      <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                        <button type="button" onClick={exportClinicianPdfFile} className="flex-1 py-2.5 rounded-lg font-medium text-sm bg-white/10 text-gray-100 hover:bg-white/15 flex items-center justify-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          Download PDF summary
+                        </button>
+                        <button type="button" onClick={printDoctorSummary} className="flex-1 py-2.5 rounded-lg font-medium text-sm bg-white/10 text-gray-100 hover:bg-white/15 flex items-center justify-center gap-2">
+                          <FileDown className="h-4 w-4" />
+                          Print / Save as PDF
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowGraphicalSummary(true)}
+                        className="w-full mt-2 py-2.5 rounded-lg font-medium text-sm bg-white/10 text-gray-100 hover:bg-white/15 flex items-center justify-center gap-2 border border-white/[0.06]"
+                      >
+                        <BarChart3 className="h-4 w-4 text-gold-400" />
+                        Open protocol-style summary
+                      </button>
+                      <p className="text-gray-500 text-[11px] mt-2">PDF packs recent weight, injections (with side-effect intensity), labs, glucose, sleep, and journal snippets for visits. Protocol-style summary uses a worksheet layout (stack table, optional weekly grid, vials, charts) you can save as a multi-page PDF.</p>
                     </div>
 
                     {/* Import Section */}
@@ -7539,6 +8538,111 @@ const wipeAllData = () => {
                 </div>
               </div>
             )}
+          </div>
+            )}
+            {activeMoreSection === 'wellness' && (
+          <div className="space-y-4 tab-enter">
+            <div className="ui-card p-4">
+              <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Moon className="h-6 w-6 text-indigo-400" />Sleep</h2>
+              <p className="text-gray-400 text-sm mb-4">Log bed / wake times and a simple quality score. Shown in Summary &quot;This week&quot;.</p>
+              {!showSleepForm ? (
+                <button type="button" onClick={() => { setEditingSleep(null); setSleepBedDate(getTodayLocal()); setShowSleepForm(true); }} className="w-full py-3 rounded-xl border-2 border-dashed border-gray-500 text-gray-400 hover:text-white hover:border-indigo-500/50 text-sm font-medium flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Log sleep</button>
+              ) : (
+                <div className="rounded-xl p-4 bg-slate-700/50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gold-400 text-sm font-medium">{editingSleep ? 'Edit sleep' : 'Add sleep'}</span>
+                    <button type="button" onClick={resetSleepForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Night (bed date)</label>
+                    <input type="date" value={sleepBedDate} onChange={(e) => setSleepBedDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Bed time</label>
+                      <input type="time" value={sleepBedTime} onChange={(e) => setSleepBedTime(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Wake time</label>
+                      <input type="time" value={sleepWakeTime} onChange={(e) => setSleepWakeTime(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Sleep quality: {sleepQuality}/5</label>
+                    <input type="range" min={1} max={5} value={sleepQuality} onChange={(e) => setSleepQuality(parseInt(e.target.value, 10))} className="w-full accent-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Notes (optional)</label>
+                    <input type="text" value={sleepNotes} onChange={(e) => setSleepNotes(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. restless, caffeine late" />
+                  </div>
+                  <button type="button" onClick={addOrUpdateSleep} className="w-full ui-btn-primary py-2.5">{editingSleep ? 'Update' : 'Save'}</button>
+                </div>
+              )}
+              {sleepEntries.length > 0 && (
+                <div className="mt-4 space-y-2 max-h-56 overflow-y-auto">
+                  {[...sleepEntries].sort((a, b) => String(b.date).localeCompare(String(a.date))).map((e) => (
+                    <div key={e.id} className="flex items-center justify-between gap-2 py-2 border-b border-white/5 text-sm">
+                      <div>
+                        <span className="text-white">{e.date}</span>
+                        <span className="text-gray-400 ml-2">{e.bedTime} → {e.wakeTime}</span>
+                        <span className="text-indigo-300 ml-2">~{e.hours}h · Q{e.quality}/5</span>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button type="button" onClick={() => { setEditingSleep(e); setSleepBedDate(e.date); setSleepBedTime(e.bedTime); setSleepWakeTime(e.wakeTime); setSleepQuality(e.quality); setSleepNotes(e.notes || ''); setShowSleepForm(true); }} className="p-1.5 text-gray-400 hover:text-white rounded-md"><Edit2 className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => deleteSleep(e.id)} className="p-1.5 text-gray-400 hover:text-red-400 rounded-md"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {sleepEntries.length > 1 && (
+                <div className="mt-4 h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={[...sleepEntries].sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(-14).map((e) => ({ label: e.date.slice(5), hours: e.hours, quality: e.quality }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="label" stroke="#94a3b8" fontSize={10} />
+                      <YAxis stroke="#94a3b8" fontSize={10} domain={[0, 14]} />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(30,41,59,0.95)', border: '1px solid rgba(255,255,255,0.08)' }} />
+                      <Line type="monotone" dataKey="hours" stroke="#818cf8" strokeWidth={2} dot={{ r: 3 }} name="Hours" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+            <div className="ui-card p-4">
+              <h3 className="text-white font-medium mb-2 flex items-center gap-2"><Activity className="h-5 w-5 text-sky-400" />Activity / steps</h3>
+              <p className="text-gray-400 text-xs mb-3">
+                Log today&apos;s step count for your weekly Summary. Automatic sync from Google Health Connect is not enabled in this build — manual entry only for now.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <input type="number" min={0} max={200000} value={todayStepsInput} onChange={(e) => setTodayStepsInput(e.target.value)} placeholder="Steps today" className="flex-1 min-w-[8rem] bg-slate-700 text-white rounded-lg px-4 py-2" />
+                <button type="button" onClick={saveTodaySteps} className="ui-btn-primary px-4 py-2">Save</button>
+              </div>
+              {(() => {
+                const t = getTodayLocal();
+                const row = dailyTrackEntries.find((e) => e.date === t);
+                return row?.steps != null ? <p className="text-gray-500 text-xs mt-2">Today logged: <span className="text-white font-medium">{row.steps}</span> steps</p> : null;
+              })()}
+            </div>
+          </div>
+            )}
+            {activeMoreSection === 'help' && (
+          <div className="space-y-4 tab-enter">
+            <div className="ui-card p-4">
+              <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><HelpCircle className="h-6 w-6 text-gold-400" />FAQ</h2>
+              <p className="text-gray-400 text-sm mb-4">Quick answers about PepTalk. Not medical advice.</p>
+              <div className="space-y-2">
+                {PEP_TALK_FAQ.map((item, idx) => (
+                  <div key={idx} className="rounded-xl border border-white/[0.06] bg-slate-800/40 overflow-hidden">
+                    <button type="button" onClick={() => setFaqOpenId(faqOpenId === idx ? null : idx)} className="w-full text-left px-4 py-3 flex justify-between items-center gap-2 text-white text-sm font-medium hover:bg-white/5">
+                      {item.q}
+                      <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${faqOpenId === idx ? 'rotate-180' : ''}`} />
+                    </button>
+                    {faqOpenId === idx && <p className="px-4 pb-3 text-gray-400 text-sm leading-relaxed">{item.a}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
             )}
             {activeMoreSection === 'glucose' && (
@@ -7761,6 +8865,33 @@ const wipeAllData = () => {
           </div>
         )}
       </div>
+      {toastUndo && (
+        <div className="fixed bottom-20 left-3 right-3 z-[100] max-w-lg mx-auto flex items-center gap-2 rounded-xl border border-accent/40 bg-slate-900/95 backdrop-blur-md px-3 py-3 shadow-lg shadow-black/40">
+          <span className="flex-1 text-sm text-gray-200">{toastUndo.message}</span>
+          <button
+            type="button"
+            className="shrink-0 ui-btn-primary px-3 py-1.5 text-sm"
+            onClick={() => {
+              toastUndo.onUndo?.();
+              setToastUndo(null);
+              if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+            }}
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="text-gray-400 p-1 rounded-lg hover:bg-white/10"
+            onClick={() => {
+              setToastUndo(null);
+              if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+            }}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <footer className="py-3 text-center text-gray-500 text-xs border-t border-white/[0.04]">
         PepTalk v{APP_VERSION}
       </footer>

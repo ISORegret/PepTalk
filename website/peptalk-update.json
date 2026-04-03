@@ -1,5 +1,5 @@
 {
-  "latestVersion": "1.3.8",
+  "latestVersion": "1.4.0",
   "androidDownloadUrl": "https://isoregret.github.io/PepTalk/PepTalk.apk",
-  "releaseNotes": "v1.3.8 — Empty vials removed from Your vials when depleted; cloud backup, offline sync messaging, update prompts, restore fixes."
+  "releaseNotes": "v1.4.0 — Protocol-style summary (worksheet layout, stack table, weekly schedule grid, vial inventory, charts) with PDF export in More → Tools → Data; clinician text PDF unchanged."
 }
