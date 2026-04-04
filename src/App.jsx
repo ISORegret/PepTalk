@@ -7213,9 +7213,24 @@ const wipeAllData = () => {
                     </p>
                   )}
                   {!supabaseConfigured && (
-                    <p className="text-amber-400/90 text-xs mb-3">
-                      Add <code className="text-gray-300">VITE_SUPABASE_URL</code> and <code className="text-gray-300">VITE_SUPABASE_ANON_KEY</code> to your <code className="text-gray-300">.env</code> file and rebuild.
-                    </p>
+                    <div className="text-amber-400/90 text-xs mb-3 space-y-2">
+                      <p>
+                        Cloud sign-in is not configured for this deployment. Use one of the following:
+                      </p>
+                      <ul className="list-disc pl-4 text-gray-400 space-y-1">
+                        <li>
+                          <strong className="text-amber-200/90">Web (GitHub Pages, static host):</strong> copy{' '}
+                          <code className="text-gray-300">public/supabase-config.example.json</code> to{' '}
+                          <code className="text-gray-300">public/supabase-config.json</code>, fill in{' '}
+                          <code className="text-gray-300">url</code> and <code className="text-gray-300">anonKey</code> from your Supabase project settings, then rebuild and redeploy. The file is served next to the app (anon key is public by design; use RLS in Supabase).
+                        </li>
+                        <li>
+                          <strong className="text-amber-200/90">Local dev or CI build:</strong> set{' '}
+                          <code className="text-gray-300">VITE_SUPABASE_URL</code> and{' '}
+                          <code className="text-gray-300">VITE_SUPABASE_ANON_KEY</code> in <code className="text-gray-300">.env</code> and run <code className="text-gray-300">npm run build</code>.
+                        </li>
+                      </ul>
+                    </div>
                   )}
                   {supabaseConfigured && supabaseAuthLoading && (
                     <p className="text-gray-500 text-xs mb-2">Checking session…</p>
