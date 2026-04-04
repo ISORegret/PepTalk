@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { getSupabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   applyPayloadToLocalStorage,
   clearPeptalkHealthStorage,
@@ -19,6 +19,7 @@ export function SupabaseAuthProvider({ children }) {
   const cloudFetchGeneration = useRef(0);
 
   useEffect(() => {
+    const supabase = getSupabase();
     if (!isSupabaseConfigured() || !supabase) {
       setAuthLoading(false);
       return undefined;
@@ -87,22 +88,25 @@ export function SupabaseAuthProvider({ children }) {
   }, []);
 
   const signIn = useCallback(async (email, password) => {
-    if (!supabase) return { error: new Error('Supabase not configured') };
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const client = getSupabase();
+    if (!client) return { error: new Error('Supabase not configured') };
+    const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
     return { error };
   }, []);
 
   const signUp = useCallback(async (email, password) => {
-    if (!supabase) return { error: new Error('Supabase not configured') };
-    const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+    const client = getSupabase();
+    if (!client) return { error: new Error('Supabase not configured') };
+    const { error } = await client.auth.signUp({ email: email.trim(), password });
     return { error };
   }, []);
 
   const signOut = useCallback(async () => {
-    if (!supabase) return;
+    const client = getSupabase();
+    if (!client) return;
     cloudFetchGeneration.current += 1;
     setPendingCloudRestore(null);
-    await supabase.auth.signOut();
+    await client.auth.signOut();
   }, []);
 
   const resolveCloudRestore = useCallback(async (choice) => {

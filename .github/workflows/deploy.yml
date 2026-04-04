@@ -31,6 +31,20 @@ jobs:
       
       - name: Install dependencies
         run: npm ci
+
+      # Optional: add repo secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY so the Pages build
+      # includes public/supabase-config.json and Profile → cloud sign-in works on the web app.
+      - name: Write Supabase config for web (optional)
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            node -e "require('fs').writeFileSync('public/supabase-config.json', JSON.stringify({url:process.env.SUPABASE_URL, anonKey:process.env.SUPABASE_ANON_KEY}));"
+            echo "Wrote public/supabase-config.json from repository secrets."
+          else
+            echo "No VITE_SUPABASE_* secrets — web app stays local-only unless you commit public/supabase-config.json."
+          fi
       
       - name: Build
         run: npm run build -- --mode pages

@@ -100,6 +100,11 @@ Or use Netlify Drop (easiest):
 - Data is stored in browser localStorage
 - Try a different browser or clear cache and reload
 
+### Profile → cloud sign-in missing on the website?
+- The hosted build needs Supabase credentials. Either:
+  1. In GitHub: **Settings → Secrets and variables → Actions** add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (from Supabase **Project Settings → API**). The deploy workflow writes `public/supabase-config.json` before build when both are set.
+  2. Or copy `public/supabase-config.example.json` to `public/supabase-config.json`, fill in `url` and `anonKey`, commit, and push (the anon key is a public client key; protect data with **Row Level Security** in Supabase).
+
 ## Need Help?
 
 Open an issue on GitHub or check the README.md for more details.

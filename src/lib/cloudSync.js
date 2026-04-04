@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import { PEPTALK_HEALTH_STORAGE_KEYS, PEPTALK_OPTIONAL_STORAGE_KEYS } from './pepTalkStorageKeys';
 
 const TABLE = 'peptalk_app_state';
@@ -135,6 +135,7 @@ export function isLocalHealthDataEmpty() {
  * @returns {{ ok: true } | { ok: false, code: 'not_configured' | 'no_session' | 'supabase' | 'network', message?: string }}
  */
 export async function pushCloudBackup() {
+  const supabase = getSupabase();
   if (!isSupabaseConfigured() || !supabase) return { ok: false, code: 'not_configured' };
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -162,6 +163,7 @@ export async function pushCloudBackup() {
 
 /** Fetch cloud row for current user. */
 export async function fetchCloudBackup() {
+  const supabase = getSupabase();
   if (!isSupabaseConfigured() || !supabase) return { row: null, error: 'not_configured' };
   try {
     const { data: { session } } = await supabase.auth.getSession();

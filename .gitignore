@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# Optional Supabase client config for static hosting (create from supabase-config.example.json).
+# GitHub Actions can generate this from secrets before build; commit with -f if you prefer it in-repo.
+public/supabase-config.json
+
 # Logs
 logs
 *.log
