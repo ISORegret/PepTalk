@@ -5626,7 +5626,7 @@ const wipeAllData = () => {
                       )}
                     </div>
                   )}
-                  <div className="max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06]">
+                  <div className="peptalk-scroll-panel max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06] bg-slate-950/25">
                     <table className="min-w-full text-xs">
                       <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur-sm border-b border-white/10 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
                         <tr className="text-gray-400">
@@ -5637,7 +5637,7 @@ const wipeAllData = () => {
                               <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / week</span>
                             </th>
                           ))}
-                          <th className="py-2 pl-4 text-right font-medium">Weight change (lb)</th>
+                          <th className="py-2 pl-4 pr-5 text-right font-medium">Weight change (lb)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5662,7 +5662,7 @@ const wipeAllData = () => {
                                 </td>
                               );
                             })}
-                            <td className={`py-2 pl-4 text-right ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
+                            <td className={`py-2 pl-4 pr-5 text-right ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
                               {row.weightChange == null ? '—' : row.weightChange.toFixed(1)}
                             </td>
                           </tr>
