@@ -26,6 +26,8 @@ import {
   buildJournalMoodPie,
   buildMeasurementSeries,
   buildProtocolKpis,
+  buildProtocolWeightStats,
+  buildProtocolActivityStats,
   buildStackSummaryRows,
   buildWeeklyScheduleMatrix,
   buildVialInventoryRows,
@@ -99,6 +101,8 @@ const GraphicalSummaryModal = forwardRef(function GraphicalSummaryModal(
   const moodPie = useMemo(() => buildJournalMoodPie(journalEntries), [journalEntries]);
   const waistData = useMemo(() => buildMeasurementSeries(measurementEntries, 'Waist'), [measurementEntries]);
   const kpis = useMemo(() => buildProtocolKpis(weightEntries, userProfile), [weightEntries, userProfile]);
+  const weightStats = useMemo(() => buildProtocolWeightStats(weightEntries, userProfile), [weightEntries, userProfile]);
+  const activityStats = useMemo(() => buildProtocolActivityStats(injectionEntries), [injectionEntries]);
   const stackRows = useMemo(
     () => buildStackSummaryRows(schedules, vials, injectionEntries),
     [schedules, vials, injectionEntries]
@@ -208,6 +212,71 @@ const GraphicalSummaryModal = forwardRef(function GraphicalSummaryModal(
             </div>
 
             <div className="mt-4 border border-[#cccccc]">
+              <SectionBanner>Current weight &amp; statistics</SectionBanner>
+              {weightStats ? (
+                <div className="border-t border-[#cccccc]">
+                  <div className="grid grid-cols-2 sm:grid-cols-4">
+                    <div className={thKpi}>Current weight</div>
+                    <div className={thKpi}>BMI</div>
+                    <div className={thKpi}>Lbs to goal</div>
+                    <div className={thKpi}>Last weigh-in</div>
+                    <div className={tdKpi}>{weightStats.current} lbs</div>
+                    <div className={tdKpi}>
+                      {weightStats.bmi != null ? (
+                        <>
+                          {weightStats.bmi}
+                          {weightStats.bmiCategory ? (
+                            <span className="block text-[10px] font-normal text-gray-600 mt-0.5">{weightStats.bmiCategory}</span>
+                          ) : null}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </div>
+                    <div className={tdKpi}>{weightStats.toGoal != null ? `${weightStats.toGoal > 0 ? '+' : ''}${weightStats.toGoal} lb` : '—'}</div>
+                    <div className={tdKpi}>{weightStats.lastWeighIn}</div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 border-t border-[#cccccc]">
+                    <div className={thKpi}>Total change</div>
+                    <div className={thKpi}>% change</div>
+                    <div className={thKpi}>Avg lb / week</div>
+                    <div className={thKpi}>Est. goal date</div>
+                    <div className={tdKpi}>
+                      {Number(weightStats.change) > 0 ? '+' : ''}
+                      {weightStats.change} lb
+                    </div>
+                    <div className={tdKpi}>
+                      {Number(weightStats.percentChange) > 0 ? '+' : ''}
+                      {weightStats.percentChange}%
+                    </div>
+                    <div className={tdKpi}>
+                      {Number(weightStats.weeklyAvg) > 0 ? '+' : ''}
+                      {weightStats.weeklyAvg} lb
+                    </div>
+                    <div className={tdKpi}>{weightStats.estimatedGoalDate ?? '—'}</div>
+                  </div>
+                  <p className="text-[9px] text-gray-600 bg-[#F8FAFC] px-2 py-1.5 border-t border-[#cccccc]">
+                    Based on all logged weights ({weightStats.weightEntryCount} entries). Avg/week uses span from first to last log.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-600 bg-[#FEF9E7] px-3 py-3 border-t border-[#cccccc]">
+                  No weight entries yet — current stats appear after you log weight.
+                </p>
+              )}
+              {activityStats.injectionCount > 0 && (
+                <div className="grid grid-cols-3 border-t border-[#cccccc]">
+                  <div className={thKpi}>Injections logged</div>
+                  <div className={thKpi}>Medications</div>
+                  <div className={thKpi}>Last injection</div>
+                  <div className={tdKpi}>{activityStats.injectionCount}</div>
+                  <div className={tdKpi}>{activityStats.medicationCount}</div>
+                  <div className={tdKpi}>{activityStats.lastInjection ?? '—'}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 border border-[#cccccc]">
               <SectionBanner>Stack summary at a glance</SectionBanner>
               {stackRows.length === 0 ? (
                 <div className="bg-[#FEF9E7] text-[#0F3460] text-[10px] sm:text-xs px-3 py-4 text-center border-t border-[#cccccc]">
@@ -289,8 +358,10 @@ const GraphicalSummaryModal = forwardRef(function GraphicalSummaryModal(
                   </table>
                 </div>
                 <p className="text-[9px] text-[#0F3460] bg-[#FEF9E7] px-3 py-2 border-t border-[#cccccc] leading-relaxed">
-                  ✓ = day included in your saved schedule (specific days or preferred day for recurring). Update schedules under{' '}
-                  <strong>More → Calendar</strong> to match your protocol.
+                  <strong>What this grid is based on:</strong> One row per medication you have in <strong>More → Calendar</strong> and/or your
+                  injection log. If a med has a calendar schedule, ✓ follow that plan (all days in “specific days,” or a single ✓ on the{' '}
+                  <strong>preferred weekday</strong> for “every N days” — that mode does not draw multiple pins per week). Meds{' '}
+                  <strong>without</strong> a schedule use ✓ on weekdays where you logged an injection in the <strong>last ~8 weeks</strong>.
                 </p>
               </div>
             )}
@@ -322,31 +393,6 @@ const GraphicalSummaryModal = forwardRef(function GraphicalSummaryModal(
                 </div>
               </div>
             )}
-
-            <div className="mt-4 border border-[#cccccc]">
-              <SectionBanner>Reconstitution reminders</SectionBanner>
-              <div className="bg-white text-[9px] sm:text-[10px] text-gray-800 px-3 sm:px-4 py-3 border-t border-[#cccccc] space-y-1.5 leading-relaxed">
-                <p className="font-bold text-[#0F3460] text-[10px] uppercase tracking-wide">General steps (all peptides)</p>
-                <p>
-                  <strong>1.</strong> Wipe the peptide vial stopper and BAC water vial with alcohol and let dry.
-                </p>
-                <p>
-                  <strong>2.</strong> Draw the required BAC water with a sterile syringe.
-                </p>
-                <p>
-                  <strong>3.</strong> Inject BAC slowly down the inside wall of the peptide vial (do not spray forcefully onto powder).
-                </p>
-                <p>
-                  <strong>4.</strong> Gently swirl until dissolved — <strong>never shake</strong>.
-                </p>
-                <p>
-                  <strong>5.</strong> Store reconstituted vials refrigerated per product guidance; label with date.
-                </p>
-                <p>
-                  <strong>6.</strong> Allow the vial to warm toward room temperature before injecting if your protocol calls for it.
-                </p>
-              </div>
-            </div>
 
             <div className="mt-5 border border-[#cccccc]">
               <SectionBanner>Tracking charts</SectionBanner>

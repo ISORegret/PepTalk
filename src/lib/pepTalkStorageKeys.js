@@ -26,4 +26,6 @@ export const PEPTALK_HEALTH_STORAGE_KEYS = [
 export const PEPTALK_OPTIONAL_STORAGE_KEYS = [
   'peptalk-welcome-version',
   'peptalk-welcome-hide-forever',
+  'health-weekly-dose-week-starts-on',
+  'peptalk-cloud-opt-out',
 ];

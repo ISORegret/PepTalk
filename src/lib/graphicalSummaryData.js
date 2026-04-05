@@ -39,6 +39,87 @@ export function buildProtocolKpis(weightEntries, userProfile) {
   return { startWeight: start, currentWeight: current, goalWeight: g, toLose, lost };
 }
 
+function calendarDateFromEntry(ds) {
+  const p = String(ds).slice(0, 10).split('-').map(Number);
+  if (p.length < 3) return null;
+  return new Date(p[0], p[1] - 1, p[2]);
+}
+
+/** BMI category label (same bands as Summary). */
+export function getBmiCategoryLabel(bmiStr) {
+  const b = Number(bmiStr);
+  if (bmiStr == null || bmiStr === '' || isNaN(b)) return null;
+  if (b < 18.5) return 'Underweight';
+  if (b < 25) return 'Normal';
+  if (b < 30) return 'Overweight';
+  return 'Obese';
+}
+
+/**
+ * Full weight statistics for protocol summary (all logged weights; mirrors Summary-style stats).
+ */
+export function buildProtocolWeightStats(weightEntries, userProfile) {
+  const sorted = [...(weightEntries || [])]
+    .filter((e) => e?.date && e.weight != null && !isNaN(Number(e.weight)))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || (Number(a.id) || 0) - (Number(b.id) || 0));
+  if (sorted.length === 0) return null;
+
+  const oldest = sorted[0];
+  const latest = sorted[sorted.length - 1];
+  const current = Number(latest.weight);
+  const first = Number(oldest.weight);
+  const change = current - first;
+  const percentChange = first !== 0 ? (change / first) * 100 : 0;
+
+  const height = userProfile?.height != null && !isNaN(Number(userProfile.height)) ? Number(userProfile.height) : null;
+  const bmi = height ? ((current / (height * height)) * 703).toFixed(1) : null;
+
+  const goal = userProfile?.goalWeight != null && !isNaN(Number(userProfile.goalWeight)) ? Number(userProfile.goalWeight) : null;
+  const toGoal = goal != null ? current - goal : null;
+
+  const firstD = calendarDateFromEntry(oldest.date);
+  const lastD = calendarDateFromEntry(latest.date);
+  const msWeek = 7 * 24 * 60 * 60 * 1000;
+  const weeks = firstD && lastD ? Math.max(1, (lastD.getTime() - firstD.getTime()) / msWeek) : 1;
+  const weeklyAvg = change / weeks;
+
+  let estimatedGoalDate = null;
+  if (weeklyAvg < 0 && toGoal != null && toGoal > 0) {
+    const weeksToGoal = toGoal / Math.abs(weeklyAvg);
+    const d = new Date();
+    d.setDate(d.getDate() + weeksToGoal * 7);
+    estimatedGoalDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  const lastWeighIn = String(latest.date).slice(0, 10);
+
+  return {
+    current: current.toFixed(1),
+    change: change.toFixed(1),
+    percentChange: percentChange.toFixed(1),
+    weeklyAvg: weeklyAvg.toFixed(1),
+    toGoal: toGoal != null ? toGoal.toFixed(1) : null,
+    bmi,
+    bmiCategory: bmi != null ? getBmiCategoryLabel(bmi) : null,
+    estimatedGoalDate,
+    lastWeighIn,
+    weightEntryCount: sorted.length,
+  };
+}
+
+/** Injection activity lines for protocol summary. */
+export function buildProtocolActivityStats(injectionEntries) {
+  const valid = (injectionEntries || []).filter((e) => e?.date);
+  const meds = new Set(valid.map((e) => e.type).filter(Boolean));
+  const byDate = [...valid].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const last = byDate[0];
+  return {
+    injectionCount: valid.length,
+    medicationCount: meds.size,
+    lastInjection: last?.date ? String(last.date).slice(0, 10) : null,
+  };
+}
+
 export function buildStackSummaryRows(schedules, vials, injectionEntries, limit = 16) {
   const meds = [];
   const seen = new Set();
@@ -95,14 +176,56 @@ export function buildStackSummaryRows(schedules, vials, injectionEntries, limit 
   });
 }
 
-export function buildWeeklyScheduleMatrix(schedules, injectionEntries) {
+/**
+ * Weekly grid for protocol summary.
+ *
+ * **Rows:** Every medication that has either a Calendar schedule OR at least one injection log.
+ *
+ * **Checkmarks:**
+ * - If you saved a schedule (More → Calendar): ✓ = that plan — either every day in `specificDays`,
+ *   or for “recurring / every N days” only the **preferred weekday** (one ✓), not every actual pin.
+ * - If there is **no** schedule for a med but you have injections: ✓ = weekdays you **actually logged**
+ *   an injection in the last `lookbackDays` (default 56), so ad-hoc logging still shows up.
+ */
+export function buildWeeklyScheduleMatrix(schedules, injectionEntries, options = {}) {
+  const lookbackDays = typeof options.lookbackDays === 'number' ? options.lookbackDays : 56;
   const rows = [];
+
   const byMed = {};
+  const scheduleOrder = [];
   for (const s of schedules || []) {
     if (!s?.medication) continue;
-    if (!byMed[s.medication]) byMed[s.medication] = s;
+    if (!byMed[s.medication]) {
+      byMed[s.medication] = s;
+      scheduleOrder.push(s.medication);
+    }
   }
-  for (const med of Object.keys(byMed)) {
+
+  const injMeds = [...new Set((injectionEntries || []).map((e) => e.type).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+
+  const orderedMeds = [];
+  const seen = new Set();
+  for (const m of scheduleOrder) {
+    if (!seen.has(m)) {
+      seen.add(m);
+      orderedMeds.push(m);
+    }
+  }
+  for (const m of injMeds) {
+    if (!seen.has(m)) {
+      seen.add(m);
+      orderedMeds.push(m);
+    }
+  }
+
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+  const cutoffMs = cutoff.getTime();
+
+  for (const med of orderedMeds) {
     const schedule = byMed[med];
     const lasts = (injectionEntries || [])
       .filter((e) => e.type === med)
@@ -111,19 +234,38 @@ export function buildWeeklyScheduleMatrix(schedules, injectionEntries) {
     const dosePart = last != null && last.dose != null ? `${last.dose}${last.unit ? ` ${last.unit}` : ''}` : '';
     const routePart = last?.route || '';
     const label = [med, dosePart, routePart].filter(Boolean).join(' · ') || med;
+
     const cells = Array(7).fill('—');
-    if (schedule.scheduleType === 'specific_days' && schedule.specificDays?.length) {
-      for (const d of schedule.specificDays) {
-        const idx = jsWeekdayToMonIndex(d);
+
+    if (schedule) {
+      if (schedule.scheduleType === 'specific_days' && schedule.specificDays?.length) {
+        for (const d of schedule.specificDays) {
+          const idx = jsWeekdayToMonIndex(d);
+          if (idx >= 0 && idx < 7) cells[idx] = '✓';
+        }
+      } else {
+        const pd = schedule.preferredDay != null ? Number(schedule.preferredDay) : 0;
+        const idx = jsWeekdayToMonIndex(pd);
         if (idx >= 0 && idx < 7) cells[idx] = '✓';
       }
     } else {
-      const pd = schedule.preferredDay != null ? Number(schedule.preferredDay) : 0;
-      const idx = jsWeekdayToMonIndex(pd);
-      if (idx >= 0 && idx < 7) cells[idx] = '✓';
+      const weekdaysHit = new Set();
+      const recentInWindow = lasts.filter((e) => parseLocalDate(e.date) >= cutoffMs);
+      for (const e of recentInWindow) {
+        const p = String(e.date).slice(0, 10).split('-').map(Number);
+        if (p.length < 3) continue;
+        const dt = new Date(p[0], p[1] - 1, p[2]);
+        weekdaysHit.add(dt.getDay());
+      }
+      weekdaysHit.forEach((dayJs) => {
+        const idx = jsWeekdayToMonIndex(dayJs);
+        if (idx >= 0 && idx < 7) cells[idx] = '✓';
+      });
     }
+
     rows.push({ label, cells });
   }
+
   return rows;
 }
 
