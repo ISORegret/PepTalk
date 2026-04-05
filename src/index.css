@@ -267,6 +267,34 @@ body {
   }
 }
 
+/*
+ * Scroll panels — match dark UI; reserve gutter so the thumb doesn’t cover the last column (e.g. weekly dose table).
+ */
+.peptalk-scroll-panel {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) rgba(15, 23, 42, 0.65);
+}
+
+.peptalk-scroll-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.peptalk-scroll-panel::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 999px;
+}
+
+.peptalk-scroll-panel::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.55);
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.4);
+}
+
+.peptalk-scroll-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.42);
+}
+
 /* More / legacy menu */
 .menu-3d {
   box-shadow: 0 0 16px rgba(245, 158, 11, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.04);
