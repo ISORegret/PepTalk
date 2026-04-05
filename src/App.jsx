@@ -1151,6 +1151,13 @@ const PepTalk = () => {
   const [cloudPassword, setCloudPassword] = useState('');
   const [cloudAuthMessage, setCloudAuthMessage] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudOptOut, setCloudOptOut] = useState(() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem('peptalk-cloud-opt-out') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [backgroundSyncError, setBackgroundSyncError] = useState('');
 
@@ -1208,6 +1215,8 @@ const PepTalk = () => {
   const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
   const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
   const [weeklyDoseWeightExcludedMeds, setWeeklyDoseWeightExcludedMeds] = useState([]); // med names hidden from Weekly dose & weight change table
+  /** 0 Sun … 6 Sat — start of each 7-day bucket for Weekly dose & weight (default 1 = Monday) */
+  const [weeklyDoseWeekStartsOn, setWeeklyDoseWeekStartsOn] = useState(1);
   const [goalGuideCategoryId, setGoalGuideCategoryId] = useState(null); // null = pick a goal; id = detail view
   const [goalGuideSearch, setGoalGuideSearch] = useState('');
   const [goalUserStack, setGoalUserStack] = useState([]); // medication names — conceptual stack from Goals guide
@@ -1359,25 +1368,25 @@ const PepTalk = () => {
 
   useEffect(() => { loadData(); }, []);
 
-  // Welcome/tutorial: after local data loads, when Supabase is off — version-based only. When Supabase is on — only after sign-in (version change or first signed-in tutorial).
+  // Welcome/tutorial: after local data loads, when Supabase is off — version-based only. When Supabase is on — only after sign-in (version change or first signed-in tutorial). Cloud opt-out treats the app like local-only for welcome.
   useEffect(() => {
     if (isLoading) return;
-    if (supabaseConfigured && (!user || supabaseAuthLoading)) return;
+    if (supabaseConfigured && !cloudOptOut && (!user || supabaseAuthLoading)) return;
     try {
       const hideForever = localStorage.getItem('peptalk-welcome-hide-forever') === 'true';
       if (hideForever) return;
       const lastSeenVersion = localStorage.getItem('peptalk-welcome-version');
       const seenSignedIn = localStorage.getItem('peptalk-welcome-seen-signed-in') === 'true';
       const needVersionWelcome = lastSeenVersion !== APP_VERSION;
-      const needPostAuthWelcome = supabaseConfigured && user && !seenSignedIn;
-      if (!supabaseConfigured && needVersionWelcome) setShowWelcomeModal(true);
-      else if (supabaseConfigured && user && (needVersionWelcome || needPostAuthWelcome)) setShowWelcomeModal(true);
+      const needPostAuthWelcome = supabaseConfigured && !cloudOptOut && user && !seenSignedIn;
+      if (needVersionWelcome && (!supabaseConfigured || cloudOptOut)) setShowWelcomeModal(true);
+      else if (supabaseConfigured && !cloudOptOut && user && (needVersionWelcome || needPostAuthWelcome)) setShowWelcomeModal(true);
     } catch (_) {}
-  }, [isLoading, supabaseConfigured, user, supabaseAuthLoading]);
+  }, [isLoading, supabaseConfigured, cloudOptOut, user, supabaseAuthLoading]);
 
   useEffect(() => {
-    if (supabaseConfigured && !user && !supabaseAuthLoading) setShowWelcomeModal(false);
-  }, [supabaseConfigured, user, supabaseAuthLoading]);
+    if (supabaseConfigured && !cloudOptOut && !user && !supabaseAuthLoading) setShowWelcomeModal(false);
+  }, [supabaseConfigured, cloudOptOut, user, supabaseAuthLoading]);
 
   useEffect(() => {
     const on = () => setIsOnline(true);
@@ -1413,7 +1422,7 @@ const PepTalk = () => {
 
   useEffect(() => {
     if (!updateManifestUrl || isLoading) return;
-    if (supabaseConfigured && !user) return;
+    if (supabaseConfigured && !user && !cloudOptOut) return;
     if (showWelcomeModal) return;
     let cancelled = false;
     const run = async () => {
@@ -1426,11 +1435,11 @@ const PepTalk = () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [isLoading, supabaseConfigured, user, showWelcomeModal, updateManifestUrl]);
+  }, [isLoading, supabaseConfigured, cloudOptOut, user, showWelcomeModal, updateManifestUrl]);
 
   useEffect(() => {
     if (!updateManifestUrl || isLoading) return;
-    if (supabaseConfigured && !user) return;
+    if (supabaseConfigured && !user && !cloudOptOut) return;
     if (showWelcomeModal) return;
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
@@ -1440,7 +1449,7 @@ const PepTalk = () => {
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [isLoading, supabaseConfigured, user, showWelcomeModal, updateManifestUrl]);
+  }, [isLoading, supabaseConfigured, cloudOptOut, user, showWelcomeModal, updateManifestUrl]);
 
   // Hide splash screen after data loads
   useEffect(() => {
@@ -1528,6 +1537,13 @@ const PepTalk = () => {
         try {
           const parsed = JSON.parse(weeklyDoseExcluded);
           if (Array.isArray(parsed)) setWeeklyDoseWeightExcludedMeds(parsed);
+        } catch (_) { /* ignore */ }
+      }
+      const weeklyDoseWeekStart = localStorage.getItem('health-weekly-dose-week-starts-on');
+      if (weeklyDoseWeekStart != null && weeklyDoseWeekStart !== '') {
+        try {
+          const parsed = JSON.parse(weeklyDoseWeekStart);
+          if (typeof parsed === 'number' && parsed >= 0 && parsed <= 6) setWeeklyDoseWeekStartsOn(parsed);
         } catch (_) { /* ignore */ }
       }
       const goalsStackData = localStorage.getItem('health-goals-user-stack');
@@ -2424,9 +2440,12 @@ const wipeAllData = () => {
     'health-weekly-dose-weight-excluded-meds',
     'health-goals-user-stack',
     'health-sleep-entries',
+    'peptalk-cloud-opt-out',
   ];
 
   keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+  setCloudOptOut(false);
 
   setWeightEntries([]);
   setInjectionEntries([]);
@@ -3591,12 +3610,13 @@ const wipeAllData = () => {
     const msPerDay = 24 * 60 * 60 * 1000;
     const msPerWeek = 7 * msPerDay;
 
-    // Helper: start-of-week (Mon) for a given Date
+    // Start of each 7-day bucket (anchor = weeklyDoseWeekStartsOn: 0 Sun … 6 Sat)
     const startOfWeek = (d) => {
       const date = new Date(d);
-      const day = date.getDay(); // 0=Sun
-      const diff = day === 0 ? -6 : 1 - day;
-      date.setDate(date.getDate() + diff);
+      const day = date.getDay();
+      const anchor = weeklyDoseWeekStartsOn;
+      const diff = (day - anchor + 7) % 7;
+      date.setDate(date.getDate() - diff);
       date.setHours(0, 0, 0, 0);
       return date;
     };
@@ -3630,8 +3650,12 @@ const wipeAllData = () => {
 
     const rows = [];
     for (let i = 0; i < weekCount; i++) {
-      const ws = new Date(firstWeekStart.getTime() + i * msPerWeek);
-      const we = new Date(ws.getTime() + msPerWeek - 1);
+      const ws = new Date(firstWeekStart);
+      ws.setDate(ws.getDate() + i * 7);
+      ws.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(ws);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
       const wsKey = formatDateLocal(ws);
 
       // Weight change in this week:
@@ -3639,7 +3663,7 @@ const wipeAllData = () => {
       // - End   = last weight recorded in this week
       const weekWeights = sortedWeights.filter(w => {
         const d = parseLocalDate(toCalendarDay(w.date));
-        return d && d >= ws && d <= we;
+        return d && d >= ws && d <= weekEnd;
       });
       const hasDoses = !!injectionsByWeek[wsKey];
       if (weekWeights.length === 0 && !hasDoses) continue;
@@ -3661,8 +3685,8 @@ const wipeAllData = () => {
 
       const doseBucket = injectionsByWeek[wsKey] || { totalMg: 0, perMed: {} };
       rows.push({
-        weekIndex: i + 1,
-        weekLabel: `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        weekIndex: rows.length + 1,
+        weekLabel: `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
         totalDoseMg: doseBucket.totalMg,
         perMed: doseBucket.perMed,
         weightChange: change
@@ -3839,6 +3863,28 @@ const wipeAllData = () => {
     } catch (_) {}
   };
 
+  const onCloudSignInSuccess = () => {
+    try {
+      localStorage.removeItem('peptalk-cloud-opt-out');
+    } catch (_) {}
+    setCloudOptOut(false);
+  };
+
+  const continueOfflineOnly = async () => {
+    try {
+      localStorage.setItem('peptalk-cloud-opt-out', 'true');
+    } catch (_) {}
+    setCloudOptOut(true);
+    await supabaseSignOut();
+  };
+
+  const clearCloudOptOut = () => {
+    try {
+      localStorage.removeItem('peptalk-cloud-opt-out');
+    } catch (_) {}
+    setCloudOptOut(false);
+  };
+
   const showBlockingSplash = isLoading || showSplash || (supabaseConfigured && supabaseAuthLoading);
   const splashSubtitle = isLoading ? 'Loading your data...' : supabaseAuthLoading ? 'Checking session…' : 'Loading your data...';
   const showOfflineBanner = supabaseConfigured && !isOnline;
@@ -3928,7 +3974,7 @@ const wipeAllData = () => {
     );
   }
 
-  if (supabaseConfigured && !user) {
+  if (supabaseConfigured && !user && !cloudOptOut) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[var(--bg-base)] gap-3">
         {showOfflineBanner && (
@@ -3945,7 +3991,7 @@ const wipeAllData = () => {
               <Activity className="h-8 w-8 text-gold-400" strokeWidth={1.5} />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">PepTalk</h1>
-            <p className="text-gray-400 text-sm mt-2">Sign in or create an account to use the app and sync your data.</p>
+            <p className="text-gray-400 text-sm mt-2">Sign in to sync across devices, or use the app on this device only without an account.</p>
           </div>
           <form
             className="space-y-3"
@@ -3957,6 +4003,7 @@ const wipeAllData = () => {
               setCloudBusy(false);
               if (error) setCloudAuthMessage(formatCloudError(error));
               else {
+                onCloudSignInSuccess();
                 setCloudPassword('');
                 setCloudAuthMessage('');
               }
@@ -3990,6 +4037,17 @@ const wipeAllData = () => {
             </div>
             {cloudAuthMessage && <p className="text-gray-400 text-xs pt-1">{cloudAuthMessage}</p>}
           </form>
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <button
+              type="button"
+              disabled={cloudBusy}
+              onClick={continueOfflineOnly}
+              className="w-full py-2.5 rounded-lg text-sm font-medium bg-white/5 text-gray-300 border border-white/15 hover:bg-white/10 disabled:opacity-50"
+            >
+              Continue without account (offline only)
+            </button>
+            <p className="text-gray-500 text-xs mt-2 text-center">Data stays on this device until you sign in later from Profile.</p>
+          </div>
         </div>
       </div>
     );
@@ -5505,6 +5563,34 @@ const wipeAllData = () => {
                   <p className="text-gray-400 text-xs mb-2">
                     Weekly <strong className="text-gray-300">total mg</strong> per medication (from vial concentration when you log units or ml with a vial). Uncheck meds you don&apos;t want here—weight change still reflects your scale.
                   </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 text-xs text-gray-400">
+                    <label htmlFor="weekly-dose-week-start" className="text-gray-500 shrink-0">
+                      Week starts on
+                    </label>
+                    <select
+                      id="weekly-dose-week-start"
+                      value={weeklyDoseWeekStartsOn}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (v >= 0 && v <= 6) {
+                          setWeeklyDoseWeekStartsOn(v);
+                          saveData('health-weekly-dose-week-starts-on', v);
+                        }
+                      }}
+                      className="bg-slate-700 text-white rounded-lg px-3 py-1.5 border border-white/[0.08] text-xs max-w-[14rem]"
+                    >
+                      <option value={1}>Monday (default)</option>
+                      <option value={3}>Wednesday (mid-week titration)</option>
+                      <option value={0}>Sunday</option>
+                      <option value={2}>Tuesday</option>
+                      <option value={4}>Thursday</option>
+                      <option value={5}>Friday</option>
+                      <option value={6}>Saturday</option>
+                    </select>
+                    <span className="text-gray-500 text-[11px] leading-snug">
+                      Each row is seven days from that day; doses are grouped into that window.
+                    </span>
+                  </div>
                   {meds.length > 0 && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 pb-3 border-b border-white/10">
                       <span className="text-gray-500 text-[11px] uppercase tracking-wide w-full sm:w-auto">Dose columns</span>
@@ -5540,10 +5626,10 @@ const wipeAllData = () => {
                       )}
                     </div>
                   )}
-                  <div className="overflow-x-auto">
+                  <div className="max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06]">
                     <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="text-gray-400 border-b border-white/10">
+                      <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur-sm border-b border-white/10 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
+                        <tr className="text-gray-400">
                           <th className="py-2 pr-4 text-left font-medium">Week</th>
                           {visibleMeds.map((medName) => (
                             <th key={medName} className="py-2 px-4 text-right font-medium">
@@ -5555,8 +5641,8 @@ const wipeAllData = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.slice(-12).map((row, idx) => (
-                          <tr key={idx} className="border-b border-white/[0.04] last:border-b-0">
+                        {rows.map((row, idx) => (
+                          <tr key={`${row.weekLabel}-${idx}`} className="border-b border-white/[0.04] last:border-b-0">
                             <td className="py-2 pr-4 text-gray-200">
                               <span className="text-gray-500 mr-1 text-[11px]">W{row.weekIndex}</span>
                               <span>{row.weekLabel}</span>
@@ -7235,6 +7321,11 @@ const wipeAllData = () => {
                   {supabaseConfigured && supabaseAuthLoading && (
                     <p className="text-gray-500 text-xs mb-2">Checking session…</p>
                   )}
+                  {supabaseConfigured && !user && !supabaseAuthLoading && cloudOptOut && (
+                    <p className="text-cyan-200/85 text-xs mb-3">
+                      You&apos;re using PepTalk on this device only. Sign in below to enable cloud backup, or use &quot;Show full-screen sign-in&quot; if you prefer the dedicated sign-in page.
+                    </p>
+                  )}
                   {supabaseConfigured && !user && !supabaseAuthLoading && (
                     <form
                       className="space-y-3"
@@ -7246,6 +7337,7 @@ const wipeAllData = () => {
                         setCloudBusy(false);
                         if (error) setCloudAuthMessage(formatCloudError(error));
                         else {
+                          onCloudSignInSuccess();
                           setCloudPassword('');
                           setCloudAuthMessage('Signed in. Syncing…');
                         }
@@ -7279,6 +7371,15 @@ const wipeAllData = () => {
                       </div>
                       {cloudAuthMessage && <p className="text-gray-400 text-xs">{cloudAuthMessage}</p>}
                     </form>
+                  )}
+                  {supabaseConfigured && !user && !supabaseAuthLoading && cloudOptOut && (
+                    <button
+                      type="button"
+                      onClick={clearCloudOptOut}
+                      className="mt-3 w-full py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                    >
+                      Show full-screen sign-in
+                    </button>
                   )}
                   {supabaseConfigured && user && (
                     <div className="space-y-3">
@@ -7725,8 +7826,20 @@ const wipeAllData = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="text-gray-400 text-sm block mb-1">Medication</label>
-                      <select value={scheduleMed} onChange={(e) => { setScheduleMed(e.target.value); const med = MEDICATIONS.find(m => m.name === e.target.value); if (med) setScheduleFrequency(med.defaultSchedule); }}
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
+                      <select
+                        value={scheduleMed}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setScheduleMed(v);
+                          const med = MEDICATIONS.find((m) => m.name === v);
+                          if (med) setScheduleFrequency(med.defaultSchedule);
+                          if (v === 'KLOW' || v === 'Tesa/Ipa Blend (5mg/5mg)') {
+                            setScheduleType('specific_days');
+                            setSelectedDays([1, 2, 3, 4, 5]);
+                          }
+                        }}
+                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3"
+                      >
                         {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
                       </select>
                       {MEDICATION_EFFECT_PROFILES[scheduleMed]?.splitDoseTip && (
@@ -7738,6 +7851,18 @@ const wipeAllData = () => {
                             className="text-xs font-medium text-gold-400 hover:text-gold-400"
                           >
                             Use twice weekly (split dose) → Mon & Thu
+                          </button>
+                        </div>
+                      )}
+                      {(scheduleMed === 'KLOW' || scheduleMed === 'Tesa/Ipa Blend (5mg/5mg)') && (
+                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
+                          <p className="text-gray-300 text-xs mb-2">Many protocols use weekdays on, weekend off (5 days on / 2 off).</p>
+                          <button
+                            type="button"
+                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 2, 3, 4, 5]); }}
+                            className="text-xs font-medium text-gold-400 hover:text-gold-400"
+                          >
+                            Set Mon–Fri (off Sat–Sun)
                           </button>
                         </div>
                       )}
