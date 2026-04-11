@@ -98,7 +98,7 @@ export const MEDICATION_EFFECT_PROFILES = {
   'Tesamorelin': {
     effects: ['GH release', 'Visceral fat reduction', 'Lipid support'],
     sideEffects: ['Injection site reactions', 'Joint pain', 'Fluid retention'],
-    peakEffects: 'Rapid peak (~15–30 min); short half-life; once-daily injection',
+    peakEffects: 'Rapid peak (~15–30 min); short half-life; once-daily injection. Example: 10 mg vial + 2 mL BAC → 5 mg/mL; 18 U‑100 units ≈ 0.9 mg drawn (protocols often round to ~1 mg).',
     steadyState: 'Daily dosing; full body composition effects over months'
   },
   'Sermorelin': {
@@ -160,6 +160,24 @@ export const MEDICATION_EFFECT_PROFILES = {
     sideEffects: ['Injection site reactions', 'Flushing', 'Hunger possible'],
     peakEffects: 'Fast Tesa peak ~15–30 min; Ipa peak ~1 h; combined GH pulse; daily typical',
     steadyState: 'Per-dose pulse; daily use; body composition over time'
+  },
+  'CJC/Ipa Blend (10mg/10mg)': {
+    effects: ['GH release', 'CJC-1295 (no DAC) + Ipamorelin in one vial', 'Recovery', 'Sleep stack'],
+    sideEffects: ['Injection site reactions', 'Flushing', 'Hunger possible', 'Water retention in some'],
+    peakEffects: 'Ipamorelin peak ~1 h; Mod GRF–style CJC (no DAC) synergizes with Ipa. Example: 10+10 mg + 2 mL BAC → 10 mg/mL; 4 U‑100 units ≈ 0.4 mg total (~200 mcg each in a 1:1 blend).',
+    steadyState: 'Per-dose pulse; vial total mg = both peptides combined for concentration math'
+  },
+  'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)': {
+    effects: ['GH release', 'Tesamorelin + Ipamorelin + CJC (no DAC) premix', 'Recovery', 'Body composition'],
+    sideEffects: ['Injection site reactions', 'Flushing', 'Hunger', 'Fluid retention possible'],
+    peakEffects: 'Tesa rapid peak; Ipa ~1 h; triple GH-axis blend; follow prescriber protocol',
+    steadyState: 'Per-dose pulse; total mg = sum of all three peptides for reconstitution'
+  },
+  'BPC/TB Blend (5mg/5mg)': {
+    effects: ['Tissue repair', 'BPC-157 + TB-500 premix', 'Recovery', 'Angiogenesis support'],
+    sideEffects: ['Injection site reactions', 'Generally well tolerated'],
+    peakEffects: 'BPC peaks ~1–2 h; TB-500 longer half-life; often daily or EOD in protocols',
+    steadyState: 'Healing builds over weeks; total mg = both peptides for vial concentration'
   },
   'Gonadorelin': {
     effects: ['GnRH analog', 'LH/FSH release', 'Testosterone stimulation'],
@@ -316,7 +334,7 @@ export const MEDICATION_PHASE_TIMELINES = {
   },
   'Tesamorelin': {
     phases: [
-      { name: 'Rapid peak', hours: [0, 1], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'Tesamorelin GH release', whatsHappening: ['Very short half-life', 'Peak GH ~15–30 min', 'Once daily injection'], whatToExpect: ['Quick peak', 'Daily dosing', 'Visceral fat focus over time'], tips: ['Same time daily', 'Typically AM', 'Rotate sites'] },
+      { name: 'Rapid peak', hours: [0, 1], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'Tesamorelin GH release', whatsHappening: ['Very short half-life', 'Peak GH ~15–30 min', 'Once daily injection'], whatToExpect: ['Quick peak', 'Daily dosing', 'Visceral fat focus over time'], tips: ['Same time daily', 'Before bed or AM per Rx', 'Rotate sites'] },
       { name: 'Active', hours: [1, 4], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'GH effect active', whatsHappening: ['GH elevated', 'Effects on fat/metabolism', 'Clearing'], whatToExpect: ['Effect from dose', 'Body composition over months', 'Daily consistency'], tips: ['Daily injection', 'Track waist/visceral fat', 'Patience'] },
       { name: 'Next dose', hours: [4, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next daily Tesamorelin', whatsHappening: ['Cleared', 'Next dose tomorrow', 'Daily rhythm'], whatToExpect: ['Inject tomorrow same time', 'Daily use', 'Rotate site'], tips: ['Daily dose', 'Same time', 'Rotate injection site'] }
     ]
@@ -334,6 +352,29 @@ export const MEDICATION_PHASE_TIMELINES = {
       { name: 'Peak', hours: [0.5, 2], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'Peak GH from blend', whatsHappening: ['Ipamorelin peak ~1 h', 'Combined GH elevation', 'Fat loss and recovery support'], whatToExpect: ['Maximum GH from dose', 'Short-lived', 'Next dose tomorrow'], tips: ['Avoid carbs around dose', 'Rotate sites', 'Track sleep/recovery'] },
       { name: 'Clearance', hours: [2, 6], icon: '📉', color: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', description: 'Blend clearing', whatsHappening: ['Levels declining', 'Effect from pulse complete', 'Next dose next day'], whatToExpect: ['Back toward baseline', 'Daily dosing typical', 'Consistency matters'], tips: ['Same time tomorrow', 'Rotate sites', 'Daily injection'] },
       { name: 'Next dose', hours: [6, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next Tesa/Ipa dose', whatsHappening: ['Ready for next pulse', 'Daily injection', '5/5 mg blend'], whatToExpect: ['Inject tomorrow', 'Fasted, before bed', 'Rotate injection site'], tips: ['Daily dose', '5mg/5mg', 'Rotate injection site'] }
+    ]
+  },
+  'CJC/Ipa Blend (10mg/10mg)': {
+    phases: [
+      { name: 'Rise', hours: [0, 1], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'CJC (no DAC) + Ipa GH pulse', whatsHappening: ['Ipamorelin selective GH secretagogue', 'Mod GRF 1–29 (no DAC) synergizes with Ipa', 'Combined GH release'], whatToExpect: ['Ipa peak ~1 h', 'Often fasted, before bed', 'Daily or 5 days on / 2 off'], tips: ['Fasted state', 'Before bed common', 'Rotate sites'] },
+      { name: 'Peak', hours: [1, 3], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'Peak GH from blend', whatsHappening: ['Maximum GH from this dose', 'Fat loss and recovery support', 'Short-lived pulse'], whatToExpect: ['Strongest effect window', 'May feel flush/hunger', 'Next dose per schedule'], tips: ['Avoid high carbs around dose', 'Hydrate', 'Track sleep'] },
+      { name: 'Clearance', hours: [3, 8], icon: '📉', color: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', description: 'Blend clearing', whatsHappening: ['GH returning toward baseline', 'Effect from pulse tapering', 'Ready for next dose'], whatToExpect: ['Per-dose effect', 'Consistency matters', 'Rotate injection site'], tips: ['Same time next dose', '20 mg total in vial ÷ 2 mL BAC → 10 mg/mL; many protocols use 4 U for ~200 mcg each', 'U-100: units÷100 × mg/mL = mg drawn'] },
+      { name: 'Next dose', hours: [8, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next CJC/Ipa dose', whatsHappening: ['Ready for next injection', 'Daily or 5/2 typical', 'Premixed convenience'], whatToExpect: ['Inject per protocol', 'Fasted timing if used', 'Rotate site'], tips: ['Daily or Mon–Fri', '10mg/10mg label', 'Follow prescriber'] }
+    ]
+  },
+  'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)': {
+    phases: [
+      { name: 'Rapid rise', hours: [0, 0.5], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'Triple GH-axis blend', whatsHappening: ['Tesamorelin rapid peak', 'Ipamorelin rising', 'CJC no DAC + Ipa synergy'], whatToExpect: ['Fast Tesa contribution', 'Combined secretagogue stack', 'Follow medical protocol'], tips: ['Strong GH-axis effect', 'Monitoring matters', 'Rotate sites'] },
+      { name: 'Peak', hours: [0.5, 2], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'Peak GH window', whatsHappening: ['Ipamorelin peak ~1 h', 'Sustained GH elevation from blend', 'Recovery and composition support'], whatToExpect: ['Maximum effect from dose', 'Short-lived pulse', 'Daily or scheduled'], tips: ['Avoid stacking redundant secretagogues elsewhere', 'Track sides', 'Consistency'] },
+      { name: 'Clearance', hours: [2, 8], icon: '📉', color: 'text-cyan-400', bgColor: 'bg-cyan-500/10', borderColor: 'border-cyan-500/30', description: 'Blend clearing', whatsHappening: ['Levels declining', 'Pulse completing', 'Next dose per plan'], whatToExpect: ['Back toward baseline', 'Per-dose effect', 'Rotate site'], tips: ['Total vial mg = 6+3+3 = 12', 'Recon concentration from total ÷ BAC', 'U-100 units supported'] },
+      { name: 'Next dose', hours: [8, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next triple blend dose', whatsHappening: ['Ready for next injection', 'Protocol-dependent timing', 'Premix convenience'], whatToExpect: ['Inject per schedule', 'Medical oversight', 'Rotate injection site'], tips: ['6/3/3 mg totals', 'Do not duplicate with separate GH peptides blindly', 'Follow prescriber'] }
+    ]
+  },
+  'BPC/TB Blend (5mg/5mg)': {
+    phases: [
+      { name: 'Absorption', hours: [0, 2], icon: '⚡', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', description: 'BPC + TB entering system', whatsHappening: ['BPC-157 and TB-500 absorbing', 'Repair and angiogenesis pathways', 'Peak BPC ~1–2 h'], whatToExpect: ['Healing blend active', 'Often daily or EOD', 'Well tolerated'], tips: ['Rotate sites', 'Total mg = 10 for recon', 'Consistent schedule'] },
+      { name: 'Peak activity', hours: [2, 12], icon: '🎯', color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30', description: 'Repair window', whatsHappening: ['BPC at peak; TB longer half-life building', 'Tissue repair cumulative'], whatToExpect: ['Strongest acute window', 'Benefits over weeks', 'Injection site usually mild'], tips: ['Nutrition and rest', 'Patience for tendons/ligaments', 'Track injury recovery'] },
+      { name: 'Next dose', hours: [12, 999], icon: '💉', color: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', description: 'Next BPC/TB dose', whatsHappening: ['TB-500 persists longer than BPC', 'Next dose per protocol'], whatToExpect: ['Daily or EOD typical', 'Loading vs maintenance per plan', 'Rotate injection site'], tips: ['5mg/5mg premix', 'Total 10 mg vial for math', 'Follow protocol'] }
     ]
   },
   'Sermorelin': {
@@ -501,13 +542,25 @@ export const TYPICAL_SIDE_EFFECTS_BY_DAY = {
     { day: 'Day 0 (injection)', effects: ['Flushing possible', 'Hunger increase in some'] },
     { day: 'Within hours', effects: ['GH pulse', 'Best fasted, before bed', 'Daily typical'] }
   ],
+  'CJC/Ipa Blend (10mg/10mg)': [
+    { day: 'Day 0 (injection)', effects: ['Flushing', 'Hunger increase', 'Injection site reaction possible'] },
+    { day: 'Within 1–2h', effects: ['GH pulse', 'Example protocol: 4 U from 2 mL recon → ~200 mcg each', 'Often before bed per plan'] }
+  ],
+  'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)': [
+    { day: 'Day 0 (injection)', effects: ['Flushing', 'Hunger', 'Injection site reactions', 'Fluid retention possible'] },
+    { day: 'Within hours', effects: ['Strong GH-axis blend—follow prescriber', 'Do not duplicate secretagogues blindly'] }
+  ],
+  'BPC/TB Blend (5mg/5mg)': [
+    { day: 'Day 0 (injection)', effects: ['Injection site mild', 'Generally well tolerated'] },
+    { day: 'Ongoing', effects: ['Repair builds over weeks', 'Daily or EOD common', 'Total vial mg = both peptides'] }
+  ],
   'Ipamorelin': [
     { day: 'Day 0 (each dose)', effects: ['Flushing', 'Hunger increase', 'Generally well tolerated'] },
     { day: 'Within 1–2h', effects: ['GH pulse', 'Short-lived', 'Daily or BID typical'] }
   ],
   'Tesamorelin': [
     { day: 'Day 0 (injection)', effects: ['Injection site reactions', 'Joint pain in some', 'Fluid retention'] },
-    { day: 'Ongoing', effects: ['Visceral fat focus over time', 'Daily dosing'] }
+    { day: 'Ongoing', effects: ['Example: separate 10 mg vial + 2 mL BAC; 18 U ≈ ~1 mg in many quick refs', 'Daily dosing; timing per Rx (e.g. before bed)'] }
   ],
   'CJC-1295': [
     { day: 'Day 0 (injection)', effects: ['Flushing', 'Hunger', 'Numbness/tingling in some'] },

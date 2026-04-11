@@ -45,6 +45,10 @@ const MEDICATIONS = [
   { name: 'Kisspeptin', category: 'Peptide', color: '#a855f7', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Gonadorelin', category: 'Peptide', color: '#9333ea', defaultSchedule: 2, halfLife: 0.3, peakHours: 0.5, effectDuration: 4 },
   { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6 },
+  // Premixed CJC-1295 without DAC + Ipamorelin (vial total mg = sum of both; e.g. 10+10 mg + 2 mL BAC → 4 U ≈ ~200 mcg each — Tesamorelin 18 U is a separate vial)
+  { name: 'CJC/Ipa Blend (10mg/10mg)', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
+  { name: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', category: 'Peptide', color: '#b45309', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 8 },
+  { name: 'BPC/TB Blend (5mg/5mg)', category: 'Peptide', color: '#ca8a04', defaultSchedule: 3, halfLife: 3, peakHours: 2, effectDuration: 48 },
   { name: 'Fragment 176-191', category: 'Peptide', color: '#06b6d4', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 12 },
   { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 1, peakHours: 0.5, effectDuration: 24 },
   { name: 'Semax', category: 'Peptide', color: '#6366f1', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 4 },
@@ -56,6 +60,14 @@ const MEDICATIONS = [
 
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
 const RETATRUTIDE_UNITS_PER_MG = 10;
+
+/** Schedule picker: offer Mon–Fri / weekend-off shortcut (common GH-secretagogue & some daily peptide protocols). */
+const MON_FRI_SCHEDULE_HINT_MEDS = new Set([
+  'KLOW',
+  'Tesa/Ipa Blend (5mg/5mg)',
+  'CJC/Ipa Blend (10mg/10mg)',
+  'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)',
+]);
 
 // Effect profiles for different medication categories
 const EFFECT_PROFILES = {
@@ -7833,7 +7845,7 @@ const wipeAllData = () => {
                           setScheduleMed(v);
                           const med = MEDICATIONS.find((m) => m.name === v);
                           if (med) setScheduleFrequency(med.defaultSchedule);
-                          if (v === 'KLOW' || v === 'Tesa/Ipa Blend (5mg/5mg)') {
+                          if (MON_FRI_SCHEDULE_HINT_MEDS.has(v)) {
                             setScheduleType('specific_days');
                             setSelectedDays([1, 2, 3, 4, 5]);
                           }
@@ -7854,7 +7866,7 @@ const wipeAllData = () => {
                           </button>
                         </div>
                       )}
-                      {(scheduleMed === 'KLOW' || scheduleMed === 'Tesa/Ipa Blend (5mg/5mg)') && (
+                      {MON_FRI_SCHEDULE_HINT_MEDS.has(scheduleMed) && (
                         <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
                           <p className="text-gray-300 text-xs mb-2">Many protocols use weekdays on, weekend off (5 days on / 2 off).</p>
                           <button
