@@ -93,6 +93,7 @@ export const GOAL_CATEGORIES = [
           'Body protection compound studied in animals for tendons, gut, and angiogenesis; human data are limited—common in recovery-focused protocols.',
         stacksWellWith: [
           { medicationName: 'TB-500', why: 'Classic “repair stack” in peptide communities (thymosin beta-4–related).' },
+          { medicationName: 'BPC/TB Blend (5mg/5mg)', why: 'Premixed BPC + TB in one vial when offered—same pairing, one concentration for the log.' },
           { medicationName: 'GHK-Cu', why: 'Tissue remodeling/collagen support angle; overlaps with skin and wound-healing interest.' },
         ],
       },
@@ -102,6 +103,7 @@ export const GOAL_CATEGORIES = [
           'Promotes cell migration and repair in research models; used in athletic recovery discussion alongside BPC-157.',
         stacksWellWith: [
           { medicationName: 'BPC-157', why: 'Most common pairing for soft-tissue recovery talk.' },
+          { medicationName: 'BPC/TB Blend (5mg/5mg)', why: 'Premixed repair blend; total mg = both peptides for reconstitution math.' },
           { medicationName: 'GHK-Cu', why: 'Extracellular matrix / remodeling theme.' },
         ],
       },
@@ -185,6 +187,7 @@ export const GOAL_CATEGORIES = [
           'Selective GH secretagogue with relatively mild ghrelin mimicry; often used for sleep and recovery in peptide protocols.',
         stacksWellWith: [
           { medicationName: 'CJC-1295', why: 'Classic “CJC + Ipamorelin” pairing to extend GH pulse (DAC vs no-DAC is a separate discussion).' },
+          { medicationName: 'CJC/Ipa Blend (10mg/10mg)', why: 'Premixed CJC (no DAC) + ipamorelin—one vial, one total mg for BAC math.' },
           { medicationName: 'Tesa/Ipa Blend (5mg/5mg)', why: 'Premixed tesamorelin/ipamorelin–style convenience where legally prescribed.' },
         ],
       },
@@ -194,6 +197,7 @@ export const GOAL_CATEGORIES = [
           'GHRH analog that amplifies natural GH bursts, especially when timed with a secretagogue.',
         stacksWellWith: [
           { medicationName: 'Ipamorelin', why: 'Most referenced stack in GH-secretagogue communities.' },
+          { medicationName: 'CJC/Ipa Blend (10mg/10mg)', why: 'Same pairing in a single vial when labeled as no-DAC CJC + ipamorelin.' },
         ],
       },
       {
@@ -210,6 +214,24 @@ export const GOAL_CATEGORIES = [
           'Combines tesamorelin-like GHRH activity with ipamorelin secretagogue in one vial where offered.',
         stacksWellWith: [
           { medicationName: 'Ipamorelin', why: 'Understand overlap so you are not unknowingly doubling secretagogues.' },
+          { medicationName: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', why: 'Some vendors sell a triple premix—stronger GH-axis overlap; prescriber oversight essential.' },
+        ],
+      },
+      {
+        medicationName: 'CJC/Ipa Blend (10mg/10mg)',
+        explain:
+          'Classic CJC (no DAC / Mod GRF 1–29 style) + ipamorelin in one vial; concentration uses combined total mg ÷ BAC water.',
+        stacksWellWith: [
+          { medicationName: 'Ipamorelin', why: 'Avoid duplicate secretagogue if also using standalone ipamorelin.' },
+          { medicationName: 'CJC-1295', why: 'If you use standalone CJC, ensure you are not unknowingly stacking with this blend.' },
+        ],
+      },
+      {
+        medicationName: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)',
+        explain:
+          'Triple premix (tesamorelin + ipamorelin + CJC no DAC) in some catalogs; total peptide mass is the sum of all three for reconstitution.',
+        stacksWellWith: [
+          { medicationName: 'Tesamorelin', why: 'Overlap risk—triple blends are not “additive goals”; medical supervision.' },
         ],
       },
       {

@@ -22,7 +22,10 @@ export const MEDICATION_TIMING_HINTS = {
   'BPC-157': 'Often discussed as daily or EOD SubQ; verify with your prescriber.',
   'TB-500': 'Community protocols vary; medical oversight is important.',
   Ipamorelin: 'GH secretagogue — timing vs. meals and sleep is often discussed with prescribers.',
-  Tesamorelin: 'GHRH analog — typically prescribed with specific timing and monitoring.',
+  Tesamorelin: 'GHRH analog — timing per Rx (many plans use before bed). Example: 10 mg + 2 mL BAC, 18 U‑100 units ≈ ~1 mg.',
+  'CJC/Ipa Blend (10mg/10mg)': 'Premixed CJC (no DAC) + ipamorelin — total mg = both peptides. Example: 10+10 mg + 2 mL, 4 U ≈ ~200 mcg each; before bed common in some protocols.',
+  'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)': 'Triple premix — follow prescriber; avoid unknowingly stacking other GH secretagogues.',
+  'BPC/TB Blend (5mg/5mg)': 'Repair premix — total mg = BPC + TB for reconstitution; daily or EOD protocols vary.',
 };
 
 /** Pairs to flag (educational caution, not interaction claims). */
