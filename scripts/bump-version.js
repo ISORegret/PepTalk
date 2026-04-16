@@ -3,6 +3,7 @@
  * Bump app version before APK build.
  * 1.0.2 → 1.0.3 → ... → 1.0.10 → 1.2.0 (patch 10 → minor+2, patch reset)
  */
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -56,4 +57,11 @@ let gradleUpdated = gradleContent.replace(/versionCode \d+/, `versionCode ${vers
 gradleUpdated = gradleUpdated.replace(/versionName "[^"]+"/, `versionName "${next}"`);
 fs.writeFileSync(gradlePath, gradleUpdated);
 
-console.log('Updated: package.json, src/App.jsx, android/app/build.gradle');
+try {
+  execSync('npm install --package-lock-only', { cwd: root, stdio: 'inherit' });
+} catch {
+  console.error('Run manually: npm install --package-lock-only');
+  process.exit(1);
+}
+
+console.log('Updated: package.json, package-lock.json, src/App.jsx, android/app/build.gradle');

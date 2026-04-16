@@ -12,8 +12,14 @@ const root = path.join(__dirname, '..');
 const isWin = process.platform === 'win32';
 const gradleCmd = isWin ? 'gradlew.bat' : './gradlew';
 
-// 1. Bump version
-execSync('node scripts/bump-version.js', { cwd: root, stdio: 'inherit' });
+const noBump = process.argv.includes('--no-bump');
+
+// 1. Bump version (skip in CI — use committed package.json / App.jsx / build.gradle)
+if (!noBump) {
+  execSync('node scripts/bump-version.js', { cwd: root, stdio: 'inherit' });
+} else {
+  console.log('Skipping version bump (--no-bump). Using versions already in the repo.\n');
+}
 
 // 2. Build web + sync to Android
 execSync('npm run build:android', { cwd: root, stdio: 'inherit' });

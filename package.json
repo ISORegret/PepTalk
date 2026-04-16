@@ -9,6 +9,7 @@
     "postinstall": "patch-package",
     "build:android": "vite build --mode android && npx cap sync android",
     "build:apk": "node scripts/build-apk.js",
+    "build:apk:ci": "node scripts/build-apk.js --no-bump",
     "build:ios": "vite build && npx cap sync ios",
     "preview": "vite preview"
   },
