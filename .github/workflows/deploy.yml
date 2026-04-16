@@ -34,7 +34,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: '18'
+          # Capacitor CLI 8+ requires Node >= 22 (see cap sync / build:android)
+          node-version: '22'
           cache: 'npm'
       
       - name: Install dependencies
