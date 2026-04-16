@@ -5554,28 +5554,28 @@ const wipeAllData = () => {
               };
               return (
                 <div className="ui-card p-4 relative z-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-gold-400" />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
+                    <h3 className="text-white font-semibold text-sm flex items-center gap-2 shrink-0">
+                      <Activity className="h-4 w-4 text-gold-400 shrink-0" />
                       Weekly dose &amp; weight change
                     </h3>
-                    <div className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    <div className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border self-start sm:self-auto ${
                       totalWeightChange < 0
                         ? 'border-green-400 text-green-300 bg-green-500/10'
                         : totalWeightChange > 0
                           ? 'border-red-400 text-red-300 bg-red-500/10'
                           : 'border-gray-500 text-gray-300 bg-white/5'
                     }`}>
-                      Total weight change:{' '}
+                      Total weight:{' '}
                       {totalWeightChange === 0
                         ? '0.0 lb'
                         : `${totalWeightChange.toFixed(1)} lb`}
                     </div>
                   </div>
-                  <p className="text-gray-400 text-xs mb-2">
-                    Weekly <strong className="text-gray-300">total mg</strong> per medication (from vial concentration when you log units or ml with a vial). Uncheck meds you don&apos;t want here—weight change still reflects your scale.
+                  <p className="text-gray-400 text-xs mb-3 leading-relaxed">
+                    <span className="hidden sm:inline">Weekly </span><strong className="text-gray-300">Total mg</strong> per med (from vial concentration when you log units or ml with a vial). Hide meds below to declutter—weight change still uses your scale.
                   </p>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 text-xs text-gray-400">
+                  <div className="flex flex-col gap-2 mb-3 text-xs text-gray-400 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
                     <label htmlFor="weekly-dose-week-start" className="text-gray-500 shrink-0">
                       Week starts on
                     </label>
@@ -5589,7 +5589,7 @@ const wipeAllData = () => {
                           saveData('health-weekly-dose-week-starts-on', v);
                         }
                       }}
-                      className="bg-slate-700 text-white rounded-lg px-3 py-1.5 border border-white/[0.08] text-xs max-w-[14rem]"
+                      className="bg-slate-700 text-white rounded-lg px-3 py-2 sm:py-1.5 border border-white/[0.08] text-xs w-full sm:w-auto sm:max-w-[14rem]"
                     >
                       <option value={1}>Monday (default)</option>
                       <option value={3}>Wednesday (mid-week titration)</option>
@@ -5599,82 +5599,141 @@ const wipeAllData = () => {
                       <option value={5}>Friday</option>
                       <option value={6}>Saturday</option>
                     </select>
-                    <span className="text-gray-500 text-[11px] leading-snug">
-                      Each row is seven days from that day; doses are grouped into that window.
+                    <span className="text-gray-500 text-[11px] leading-snug sm:max-w-md">
+                      Each block is 7 days from that start; doses are summed in that window.
                     </span>
                   </div>
                   {meds.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 pb-3 border-b border-white/10">
-                      <span className="text-gray-500 text-[11px] uppercase tracking-wide w-full sm:w-auto">Dose columns</span>
-                      {meds.map((medName) => {
-                        const show = !weeklyDoseWeightExcludedMeds.includes(medName);
-                        const dot = MEDICATIONS.find((m) => m.name === medName)?.color || '#9ca3af';
-                        return (
-                          <label key={medName} className="inline-flex items-center gap-2 cursor-pointer text-xs text-gray-200">
-                            <input
-                              type="checkbox"
-                              className="rounded border-white/20 bg-slate-700 text-accent focus:ring-accent"
-                              checked={show}
-                              onChange={() => toggleWeeklyDoseMedExcluded(medName)}
-                            />
-                            <span className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
-                              {medName}
-                            </span>
-                          </label>
-                        );
-                      })}
-                      {meds.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWeeklyDoseWeightExcludedMeds([]);
-                            saveData('health-weekly-dose-weight-excluded-meds', []);
-                          }}
-                          className="text-xs font-medium text-accent hover:text-gold-400 ml-auto"
-                        >
-                          Show all
-                        </button>
-                      )}
+                    <div className="mb-3 pb-3 border-b border-white/10">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                        <span className="text-gray-500 text-[11px] uppercase tracking-wide">Show meds</span>
+                        {meds.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWeeklyDoseWeightExcludedMeds([]);
+                              saveData('health-weekly-dose-weight-excluded-meds', []);
+                            }}
+                            className="text-[11px] font-medium text-accent hover:text-gold-400 ml-auto sm:ml-0"
+                          >
+                            Show all
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
+                        {meds.map((medName) => {
+                          const show = !weeklyDoseWeightExcludedMeds.includes(medName);
+                          const dot = MEDICATIONS.find((m) => m.name === medName)?.color || '#9ca3af';
+                          return (
+                            <label
+                              key={medName}
+                              className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-200 shrink-0 rounded-lg border border-white/[0.08] bg-slate-800/60 px-2 py-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded border-white/20 bg-slate-700 text-accent focus:ring-accent shrink-0"
+                                checked={show}
+                                onChange={() => toggleWeeklyDoseMedExcluded(medName)}
+                              />
+                              <span className="flex items-center gap-1.5 min-w-0 max-w-[11rem] sm:max-w-none">
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+                                <span className="truncate" title={medName}>{medName}</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
-                  <div className="peptalk-scroll-panel max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06] bg-slate-950/25">
+                  {/* Mobile: one card per week — no horizontal table scroll */}
+                  <div className="md:hidden space-y-2 max-h-[min(32rem,75vh)] overflow-y-auto pr-0.5">
+                    {rows.map((row, idx) => {
+                      const doseLines = visibleMeds.map((medName) => {
+                        const mg = row.perMed?.[medName]?.doseMg;
+                        return { medName, mg: mg != null && mg > 0 ? mg : null };
+                      }).filter((x) => x.mg != null);
+                      return (
+                        <div
+                          key={`mobile-${row.weekLabel}-${idx}`}
+                          className="rounded-xl border border-white/[0.08] bg-slate-950/40 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="min-w-0">
+                              <span className="text-gray-500 text-[11px]">W{row.weekIndex}</span>
+                              <div className="text-sm text-gray-100 font-medium leading-snug">{row.weekLabel}</div>
+                            </div>
+                            <div
+                              className={`text-sm font-semibold tabular-nums shrink-0 ${
+                                row.weightChange == null
+                                  ? 'text-gray-500'
+                                  : row.weightChange < 0
+                                    ? 'text-green-400'
+                                    : row.weightChange > 0
+                                      ? 'text-red-400'
+                                      : 'text-gray-200'
+                              }`}
+                            >
+                              {row.weightChange == null ? '—' : `${row.weightChange > 0 ? '+' : ''}${row.weightChange.toFixed(1)} lb`}
+                            </div>
+                          </div>
+                          {doseLines.length === 0 ? (
+                            <p className="text-[11px] text-gray-500">
+                              {visibleMeds.length === 0
+                                ? 'Turn on at least one med under Show meds to list weekly mg.'
+                                : 'No dose logged for visible meds this week.'}
+                            </p>
+                          ) : (
+                            <ul className="space-y-1.5 text-xs">
+                              {doseLines.map(({ medName, mg }) => (
+                                <li key={medName} className="flex justify-between gap-2 text-gray-300">
+                                  <span className="text-gray-400 min-w-0 truncate" title={medName}>{medName}</span>
+                                  <span className="tabular-nums shrink-0">{mg.toFixed(2)} mg/wk</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Tablet/desktop: wide table */}
+                  <div className="hidden md:block peptalk-scroll-panel max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06] bg-slate-950/25">
                     <table className="min-w-full text-xs">
                       <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur-sm border-b border-white/10 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
                         <tr className="text-gray-400">
-                          <th className="py-2 pr-4 text-left font-medium">Week</th>
+                          <th className="py-2 pr-3 pl-2 text-left font-medium w-[1%] whitespace-nowrap">Week</th>
                           {visibleMeds.map((medName) => (
-                            <th key={medName} className="py-2 px-4 text-right font-medium">
-                              <span className="block">{medName}</span>
-                              <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / week</span>
+                            <th key={medName} className="py-2 px-2 text-right font-medium min-w-[5rem] max-w-[9rem]">
+                              <span className="block leading-tight line-clamp-2" title={medName}>{medName}</span>
+                              <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / wk</span>
                             </th>
                           ))}
-                          <th className="py-2 pl-4 pr-5 text-right font-medium">Weight change (lb)</th>
+                          <th className="py-2 pl-2 pr-3 text-right font-medium whitespace-nowrap">Δ lb</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.map((row, idx) => (
                           <tr key={`${row.weekLabel}-${idx}`} className="border-b border-white/[0.04] last:border-b-0">
-                            <td className="py-2 pr-4 text-gray-200">
+                            <td className="py-2 pr-3 pl-2 text-gray-200 align-top">
                               <span className="text-gray-500 mr-1 text-[11px]">W{row.weekIndex}</span>
-                              <span>{row.weekLabel}</span>
+                              <span className="whitespace-nowrap">{row.weekLabel}</span>
                             </td>
                             {visibleMeds.map((medName) => {
                               const mg = row.perMed?.[medName]?.doseMg;
                               if (mg == null || mg <= 0) {
                                 return (
-                                  <td key={medName} className="py-2 px-4 text-right text-gray-500">
+                                  <td key={medName} className="py-2 px-2 text-right text-gray-500 align-top">
                                     —
                                   </td>
                                 );
                               }
                               return (
-                                <td key={medName} className="py-2 px-4 text-right text-gray-200">
-                                  {mg.toFixed(2)} mg
+                                <td key={medName} className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
+                                  {mg.toFixed(2)}
                                 </td>
                               );
                             })}
-                            <td className={`py-2 pl-4 pr-5 text-right ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
+                            <td className={`py-2 pl-2 pr-3 text-right tabular-nums align-top ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
                               {row.weightChange == null ? '—' : row.weightChange.toFixed(1)}
                             </td>
                           </tr>
@@ -8296,6 +8355,9 @@ const wipeAllData = () => {
                             {MEDICATIONS.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                           </select>
                         </div>
+                        <p className="text-gray-500 text-xs leading-relaxed">
+                          If you fix <strong className="text-gray-400">total mg</strong> and <strong className="text-gray-400">BAC</strong>, Insights and weekly mg already use the new concentration for past injections linked to this vial—no need to re-log them. Only <strong className="text-gray-400">remaining mg</strong> may still reflect old math; use the button below after updating total/BAC.
+                        </p>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="text-gray-400 text-sm block mb-1">Total (mg)</label>
@@ -8306,6 +8368,57 @@ const wipeAllData = () => {
                             <input type="number" step="0.01" min="0" value={vialRemainingMg} onChange={(e) => setVialRemainingMg(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" />
                           </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const totalMg = parseFloat(vialTotalMg);
+                            if (isNaN(totalMg) || totalMg <= 0) return;
+                            const bacMl = parseFloat(vialBacWaterMl);
+                            const concManual = vialConcentrationForMl ? parseFloat(vialConcentrationForMl) : NaN;
+                            const concFromBac = !isNaN(bacMl) && bacMl > 0 ? totalMg / bacMl : undefined;
+                            const concentration = (!isNaN(concManual) && concManual > 0)
+                              ? concManual
+                              : (concFromBac && concFromBac > 0)
+                                ? concFromBac
+                                : undefined;
+                            const tempVial = {
+                              concentration: concentration && concentration > 0 ? concentration : undefined,
+                              bacWaterMl: !isNaN(bacMl) && bacMl > 0 ? bacMl : undefined,
+                              totalMg,
+                            };
+                            const conc = getVialConcentrationMgPerMl(tempVial);
+                            let usedMg = 0;
+                            injectionEntries.forEach((inj) => {
+                              if (inj.vialId !== editingVialId) return;
+                              const d = parseFloat(inj.dose);
+                              if (isNaN(d)) return;
+                              const u = (inj.unit || 'mg').toLowerCase();
+                              const med = inj.type;
+                              if (u === 'units' && med === 'Retatrutide') {
+                                usedMg += d / RETATRUTIDE_UNITS_PER_MG;
+                                return;
+                              }
+                              if (u === 'ml' && conc > 0) {
+                                usedMg += d * conc;
+                                return;
+                              }
+                              if (u === 'units' && conc > 0) {
+                                usedMg += (d / 100) * conc;
+                                return;
+                              }
+                              if (u === 'mcg') usedMg += d / 1000;
+                              else if (u === 'ml') usedMg += d;
+                              else if (u === 'units') usedMg += d / 100;
+                              else if (u === 'iu') usedMg += d / 1000;
+                              else usedMg += d;
+                            });
+                            const rem = Math.max(0, totalMg - usedMg);
+                            setVialRemainingMg(String(Math.round(rem * 1000) / 1000));
+                          }}
+                          className="w-full text-xs font-medium py-2 rounded-lg border border-accent/40 text-accent hover:bg-accent/10"
+                        >
+                          Set remaining from injection history (uses Total, BAC &amp; concentration above)
+                        </button>
                         <div>
                           <label className="text-gray-400 text-sm block mb-1">Bac water (mL)</label>
                           <input type="number" step="0.1" min="0" value={vialBacWaterMl} onChange={(e) => setVialBacWaterMl(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g. 2.5" />
