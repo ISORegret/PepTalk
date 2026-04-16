@@ -21,6 +21,11 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+# Run JavaScript-based actions on Node 24 (GitHub deprecation of Node 20 on runners).
+# See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
