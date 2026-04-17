@@ -11,12 +11,13 @@ import { getStackTimingContent } from './lib/stackTimingGuide.js';
 import { PEP_TALK_FAQ } from './lib/pepTalkFaq.js';
 import { downloadClinicianSummaryPdf } from './lib/clinicianPdf.js';
 import { downloadGraphicalSummaryPdf } from './lib/graphicalSummaryPdf.js';
-import { downloadWeeklyDoseWeightPdf, getWeekStartsOnLabel } from './lib/weeklyDoseWeightPdf.js';
+import { buildWeeklyDoseWeightPdf, getWeekStartsOnLabel } from './lib/weeklyDoseWeightPdf.js';
+import { savePdfBlob } from './lib/savePdfBlob.js';
 import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '1.4.5';
+const APP_VERSION = '1.4.6';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -5568,14 +5569,27 @@ const wipeAllData = () => {
                       </h3>
                       <button
                         type="button"
-                        onClick={() => {
-                          downloadWeeklyDoseWeightPdf({
+                        onClick={async () => {
+                          const built = buildWeeklyDoseWeightPdf({
                             rows,
                             visibleMeds,
                             weekStartsOnLabel: getWeekStartsOnLabel(weeklyDoseWeekStartsOn),
                             totalWeightChange,
                             appVersion: APP_VERSION,
                           });
+                          if (!built) {
+                            alert('Nothing to export yet — you need at least two weight entries and some injections.');
+                            return;
+                          }
+                          try {
+                            await savePdfBlob(built.blob, built.filename, {
+                              title: 'Weekly dose & weight',
+                              dialogTitle: 'Save weekly dose PDF',
+                            });
+                          } catch (e) {
+                            console.error(e);
+                            alert(`Could not save PDF: ${e?.message || String(e)}`);
+                          }
                         }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-gray-200 hover:bg-slate-700/90 hover:border-gold-500/30 transition-colors"
                       >

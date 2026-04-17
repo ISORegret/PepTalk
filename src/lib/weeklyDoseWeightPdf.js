@@ -16,16 +16,17 @@ export function getWeekStartsOnLabel(dayIndex) {
 }
 
 /**
- * Vector PDF of the Insights "Weekly dose & weight change" table (matches on-screen visible meds).
+ * Build PDF bytes for the Insights "Weekly dose & weight change" table.
+ * @returns {{ blob: Blob, filename: string } | null}
  */
-export function downloadWeeklyDoseWeightPdf({
+export function buildWeeklyDoseWeightPdf({
   rows,
   visibleMeds,
   weekStartsOnLabel,
   totalWeightChange,
   appVersion,
 }) {
-  if (!rows?.length) return false;
+  if (!rows?.length) return null;
 
   const landscape = visibleMeds.length > 4;
   const doc = new jsPDF({
@@ -127,6 +128,7 @@ export function downloadWeeklyDoseWeightPdf({
     y += rowHeight;
   });
 
-  doc.save(`PepTalk-weekly-dose-weight-${new Date().toISOString().slice(0, 10)}.pdf`);
-  return true;
+  const filename = `PepTalk-weekly-dose-weight-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const blob = doc.output('blob');
+  return { blob, filename };
 }
