@@ -15,7 +15,7 @@ import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '1.4.3';
+const APP_VERSION = '1.4.4';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [

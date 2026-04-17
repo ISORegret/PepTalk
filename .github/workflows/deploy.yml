@@ -1,10 +1,8 @@
 # If "job was not acquired by Runner" or "Internal server error" appears, re-run the workflow
 # (Actions → Deploy to GitHub Pages → Re-run all jobs). Both are usually transient GitHub issues.
 #
-# On each push to main: bumps app version (same rules as scripts/bump-version.js), builds APK + web,
-# deploys to GitHub Pages, then commits the new version back to main (pushes from GITHUB_TOKEN do not
-# re-trigger this workflow). Pull after deploy to sync your clone. If main is branch-protected, allow
-# GitHub Actions to bypass or use a PAT — otherwise the commit step may fail.
+# Web app: built here (Vite, pages mode). APK: NOT built in CI — build locally with `npm run build:apk`,
+# commit `website/PepTalk.apk` + version files, then push. The site serves whatever APK is in the repo.
 name: Deploy to GitHub Pages
 
 on:
@@ -13,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -24,17 +22,14 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          # Capacitor CLI 8+ requires Node >= 22 (see cap sync / build:android)
           node-version: '22'
           cache: 'npm'
       
@@ -54,44 +49,11 @@ jobs:
           else
             echo "No VITE_SUPABASE_* secrets — web app stays local-only unless you commit public/supabase-config.json."
           fi
-
-      # Capacitor sets Java 21 in android/app/capacitor.build.gradle — JDK 17 fails the Gradle compile.
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Cache Gradle
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            android/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          # Default tools + API 36 platform (matches android/variables.gradle compileSdkVersion)
-          packages: 'tools platform-tools platforms;android-36'
-
-      - name: Grant execute permission for Gradle wrapper
-        run: chmod +x android/gradlew
-
-      - name: Bump version (release)
-        run: node scripts/bump-version.js
-
-      - name: Build APK for download page (website/PepTalk.apk)
-        run: npm run build:apk:ci
       
-      - name: Build
+      - name: Build web (GitHub Pages)
         run: npm run build -- --mode pages
       
-      - name: Prepare deploy (landing + app + APK)
+      - name: Prepare deploy (landing + app + committed APK)
         run: |
           mkdir -p dist/PepTalk
           find dist -maxdepth 1 -mindepth 1 ! -name PepTalk -exec mv {} dist/PepTalk/ \;
@@ -102,24 +64,9 @@ jobs:
             cp website/PepTalk.apk dist/
             ls -la dist/PepTalk.apk
           else
-            echo "::warning::website/PepTalk.apk missing — APK build step may have failed silently."
+            echo "::warning::No website/PepTalk.apk in the repo. Build locally: npm run build:apk — then commit website/PepTalk.apk (and version files) before pushing."
           fi
           [ -d website/screenshots ] && cp -r website/screenshots dist/ || true
-
-      - name: Commit and push release version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json src/App.jsx android/app/build.gradle website/index.html
-          if git diff --staged --quiet; then
-            echo "No version file changes to commit."
-            exit 0
-          fi
-          VERSION=$(node -p "require('./package.json').version")
-          git commit -m "chore: release v${VERSION} [skip ci]"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:${GITHUB_REF_NAME}
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
