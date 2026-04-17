@@ -11,11 +11,12 @@ import { getStackTimingContent } from './lib/stackTimingGuide.js';
 import { PEP_TALK_FAQ } from './lib/pepTalkFaq.js';
 import { downloadClinicianSummaryPdf } from './lib/clinicianPdf.js';
 import { downloadGraphicalSummaryPdf } from './lib/graphicalSummaryPdf.js';
+import { downloadWeeklyDoseWeightPdf, getWeekStartsOnLabel } from './lib/weeklyDoseWeightPdf.js';
 import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '1.4.4';
+const APP_VERSION = '1.4.5';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -5373,7 +5374,7 @@ const wipeAllData = () => {
                       ))}
                     </div>
                   </div>
-                  <p className="text-gray-500 text-xs mb-4">Half-life model from logged doses. Hover for dose & phase · click legend to toggle.</p>
+                  <p className="text-gray-500 text-xs mb-2">Half-life model from logged doses. Hover for dose & phase · tap a medication below to show/hide.</p>
                   <div className="insights-level-chart overflow-visible relative">
                   <ResponsiveContainer width="100%" height={280} className="!overflow-visible">
                     <ComposedChart data={unifiedData} margin={{ top: 20, right: 12, left: 4, bottom: 24 }}>
@@ -5456,26 +5457,31 @@ const wipeAllData = () => {
                       />
                       <Legend
                         content={() => (
-                          <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
-                            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-                              {unifiedMeds.map((med) => {
-                                const isHidden = insightsChartHiddenMeds.has(med.name);
-                                return (
-                                  <button
-                                    key={med.name}
-                                    type="button"
-                                    onClick={() => toggleMedVisibility(med.name)}
-                                    className="flex items-center gap-1.5 text-[11px] rounded px-2 py-1 hover:bg-white/[0.06] transition-colors"
-                                  >
-                                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isHidden ? '#475569' : med.color }} />
-                                    <span className={isHidden ? 'text-gray-500 line-through' : 'text-gray-400'}>{med.name}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-500">
-                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-amber-400/90" />
-                              <span>Injection day</span>
+                          <div className="mt-2 pt-2 border-t border-white/[0.06]">
+                            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                              <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-1 -mx-0.5 px-0.5 [scrollbar-width:thin]">
+                                <div className="inline-flex flex-nowrap gap-1 min-w-min">
+                                  {unifiedMeds.map((med) => {
+                                    const isHidden = insightsChartHiddenMeds.has(med.name);
+                                    return (
+                                      <button
+                                        key={med.name}
+                                        type="button"
+                                        onClick={() => toggleMedVisibility(med.name)}
+                                        title={med.name}
+                                        className="inline-flex items-center gap-1 max-w-[9.5rem] shrink-0 rounded-md border border-white/[0.06] bg-slate-900/50 px-1.5 py-0.5 text-[10px] leading-tight hover:bg-white/[0.06] transition-colors"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: isHidden ? '#475569' : med.color }} />
+                                        <span className={`truncate ${isHidden ? 'text-gray-500 line-through' : 'text-gray-300'}`}>{med.name}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1 self-center text-[10px] text-gray-500 sm:self-auto">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400/90" />
+                                <span className="whitespace-nowrap">Injection day</span>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -5554,11 +5560,29 @@ const wipeAllData = () => {
               };
               return (
                 <div className="ui-card p-4 relative z-0">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
-                    <h3 className="text-white font-semibold text-sm flex items-center gap-2 shrink-0">
-                      <Activity className="h-4 w-4 text-gold-400 shrink-0" />
-                      Weekly dose &amp; weight change
-                    </h3>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between mb-2">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <h3 className="text-white font-semibold text-sm flex items-center gap-2 shrink-0">
+                        <Activity className="h-4 w-4 text-gold-400 shrink-0" />
+                        Weekly dose &amp; weight change
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          downloadWeeklyDoseWeightPdf({
+                            rows,
+                            visibleMeds,
+                            weekStartsOnLabel: getWeekStartsOnLabel(weeklyDoseWeekStartsOn),
+                            totalWeightChange,
+                            appVersion: APP_VERSION,
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-gray-200 hover:bg-slate-700/90 hover:border-gold-500/30 transition-colors"
+                      >
+                        <FileDown className="h-3.5 w-3.5 text-gold-400/90" />
+                        Download PDF
+                      </button>
+                    </div>
                     <div className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border self-start sm:self-auto ${
                       totalWeightChange < 0
                         ? 'border-green-400 text-green-300 bg-green-500/10'
