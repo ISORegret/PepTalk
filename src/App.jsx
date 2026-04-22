@@ -17,7 +17,7 @@ import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '1.4.6';
+const APP_VERSION = '1.4.7';
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -1078,11 +1078,22 @@ const BODY_LOCATIONS = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)'
 const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
 const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
 
-// Helper function to parse dates in local timezone (fixes off-by-one day bug). Accepts Date or YYYY-MM-DD string.
-// Also handles ISO datetimes (2024-01-15T12:00:00.000Z) — use calendar day only, same as toCalendarDay.
+// Helper: parse to a Date. For plain YYYY-MM-DD (pickers), local midnight that day.
+// For ISO datetimes (…T…Z / offset), use the **local** calendar day at local midnight — not UTC YYYY-MM-DD slice
+// (that shifted injections & chart dots one day in US/evening–zone cases).
 const parseLocalDate = (dateString) => {
   if (dateString instanceof Date) return new Date(dateString.getTime());
   const s = typeof dateString === 'string' ? dateString.trim() : String(dateString).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    if (!y || !m || !d) return new Date(NaN);
+    return new Date(y, m - 1, d);
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s) || s.endsWith('Z')) {
+    const inst = new Date(s);
+    if (isNaN(inst.getTime())) return new Date(NaN);
+    return new Date(inst.getFullYear(), inst.getMonth(), inst.getDate());
+  }
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     const [y, m, d] = s.slice(0, 10).split('-').map(Number);
     if (!y || !m || !d) return new Date(NaN);
@@ -1106,13 +1117,17 @@ const formatDateLocal = (d) => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
-// Normalize any date string to YYYY-MM-DD for calendar-day comparison (handles ISO with time)
+// Normalize any date string to YYYY-MM-DD for calendar-day comparison (ISO → **local** calendar day)
 const toCalendarDay = (dateString) => {
-  if (!dateString) return '';
+  if (!dateString && dateString !== 0) return '';
+  if (dateString instanceof Date) {
+    const d = dateString;
+    if (isNaN(d.getTime())) return '';
+    return formatDateLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+  }
   const s = String(dateString).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const d = parseLocalDate(s);
+  const d = parseLocalDate(dateString);
   return isNaN(d.getTime()) ? '' : formatDateLocal(d);
 };
 
@@ -3683,6 +3698,8 @@ const wipeAllData = () => {
       if (weekWeights.length === 0 && !hasDoses) continue;
 
       let change = null;
+      let weekStartWeight = null;
+      let weekEndWeight = null;
       if (weekWeights.length > 0) {
         const weightsBeforeWeek = sortedWeights.filter(w => {
           const d = parseLocalDate(toCalendarDay(w.date));
@@ -3692,8 +3709,12 @@ const wipeAllData = () => {
           ? weightsBeforeWeek[weightsBeforeWeek.length - 1].weight
           : weekWeights[0].weight;
         const endW = weekWeights[weekWeights.length - 1].weight;
-        if (startW != null && endW != null) {
-          change = endW - startW;
+        const sw = parseFloat(startW);
+        const ew = parseFloat(endW);
+        if (!Number.isNaN(sw)) weekStartWeight = sw;
+        if (!Number.isNaN(ew)) weekEndWeight = ew;
+        if (startW != null && endW != null && !Number.isNaN(sw) && !Number.isNaN(ew)) {
+          change = ew - sw;
         }
       }
 
@@ -3703,7 +3724,9 @@ const wipeAllData = () => {
         weekLabel: `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
         totalDoseMg: doseBucket.totalMg,
         perMed: doseBucket.perMed,
-        weightChange: change
+        weightChange: change,
+        weekStartWeight,
+        weekEndWeight
       });
     }
 
@@ -3761,7 +3784,11 @@ const wipeAllData = () => {
     while (date.getTime() <= endTime) {
       const dateStr = formatDateLocal(date);
       const isToday = dateStr === todayStr;
-      const timeForRow = isToday ? nowReal.getTime() : date.getTime();
+      // Use **local midnight** for past/future days so injection dots align with that calendar day on the
+      // X-axis (end-of-day timestamps sat near the next tick and looked “off by one”). Today uses real time.
+      const startOfThisDay = new Date(date);
+      startOfThisDay.setHours(0, 0, 0, 0);
+      const timeForRow = isToday ? nowReal.getTime() : startOfThisDay.getTime();
       const injectionMeds = new Set();
       const injectionDoses = {}; // { medName: { dose, unit } } for tooltip
       const phaseByMed = {};
@@ -5410,7 +5437,9 @@ const wipeAllData = () => {
                           if (!active || !payload?.length) return null;
                           const row = payload[0]?.payload;
                           if (!row) return null;
-                          const dateLabel = row.fullDate ? new Date(row.fullDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : row.date;
+                          const dateLabel = row.fullDate
+                            ? parseLocalDate(row.fullDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                            : row.date;
                           const injectionDoses = row.injectionDoses || {};
                           const phaseByMed = row.phaseByMed || {};
                           return (
@@ -5460,8 +5489,8 @@ const wipeAllData = () => {
                         content={() => (
                           <div className="mt-2 pt-2 border-t border-white/[0.06]">
                             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                              <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-1 -mx-0.5 px-0.5 [scrollbar-width:thin]">
-                                <div className="inline-flex flex-nowrap gap-1 min-w-min">
+                              <div className="min-w-0 flex-1 pb-1">
+                                <div className="flex flex-wrap gap-1">
                                   {unifiedMeds.map((med) => {
                                     const isHidden = insightsChartHiddenMeds.has(med.name);
                                     return (
@@ -5611,7 +5640,7 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <p className="text-gray-400 text-xs mb-3 leading-relaxed">
-                    <span className="hidden sm:inline">Weekly </span><strong className="text-gray-300">Total mg</strong> per med (from vial concentration when you log units or ml with a vial). Hide meds below to declutter—weight change still uses your scale.
+                    <span className="hidden sm:inline">Weekly </span><strong className="text-gray-300">Total mg</strong> per med (from vial concentration when you log units or ml with a vial). Each week shows <strong className="text-gray-400">start weight</strong> (last weigh-in before that week, or first in the week) and <strong className="text-gray-400">end weight</strong> (last weigh-in in that week). Hide meds below to declutter.
                   </p>
                   <div className="flex flex-col gap-2 mb-3 text-xs text-gray-400 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
                     <label htmlFor="weekly-dose-week-start" className="text-gray-500 shrink-0">
@@ -5658,7 +5687,7 @@ const wipeAllData = () => {
                           </button>
                         )}
                       </div>
-                      <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
+                      <div className="flex flex-wrap gap-2 pb-1">
                         {meds.map((medName) => {
                           const show = !weeklyDoseWeightExcludedMeds.includes(medName);
                           const dot = MEDICATIONS.find((m) => m.name === medName)?.color || '#9ca3af';
@@ -5683,8 +5712,8 @@ const wipeAllData = () => {
                       </div>
                     </div>
                   )}
-                  {/* Mobile: one card per week — no horizontal table scroll */}
-                  <div className="md:hidden space-y-2 max-h-[min(32rem,75vh)] overflow-y-auto pr-0.5">
+                  {/* Cards — phones & tablets (wide table only at xl to avoid horizontal scroll) */}
+                  <div className="xl:hidden space-y-2 max-h-[min(40rem,80vh)] overflow-y-auto pr-0.5">
                     {rows.map((row, idx) => {
                       const doseLines = visibleMeds.map((medName) => {
                         const mg = row.perMed?.[medName]?.doseMg;
@@ -5701,7 +5730,7 @@ const wipeAllData = () => {
                               <div className="text-sm text-gray-100 font-medium leading-snug">{row.weekLabel}</div>
                             </div>
                             <div
-                              className={`text-sm font-semibold tabular-nums shrink-0 ${
+                              className={`text-sm font-semibold tabular-nums shrink-0 text-right ${
                                 row.weightChange == null
                                   ? 'text-gray-500'
                                   : row.weightChange < 0
@@ -5711,9 +5740,23 @@ const wipeAllData = () => {
                                       : 'text-gray-200'
                               }`}
                             >
+                              <div className="text-[10px] font-normal text-gray-500 mb-0.5">Week Δ</div>
                               {row.weightChange == null ? '—' : `${row.weightChange > 0 ? '+' : ''}${row.weightChange.toFixed(1)} lb`}
                             </div>
                           </div>
+                          {row.weekStartWeight != null && row.weekEndWeight != null ? (
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-gray-400 mb-2 pb-2 border-b border-white/[0.06]">
+                              <span>
+                                Start <span className="text-gray-200 tabular-nums font-medium">{row.weekStartWeight.toFixed(1)}</span> lb
+                              </span>
+                              <span className="text-gray-600">→</span>
+                              <span>
+                                End <span className="text-gray-200 tabular-nums font-medium">{row.weekEndWeight.toFixed(1)}</span> lb
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-gray-500 mb-2 pb-2 border-b border-white/[0.06]">Log weight during this week to see start → end.</p>
+                          )}
                           {doseLines.length === 0 ? (
                             <p className="text-[11px] text-gray-500">
                               {visibleMeds.length === 0
@@ -5734,8 +5777,8 @@ const wipeAllData = () => {
                       );
                     })}
                   </div>
-                  {/* Tablet/desktop: wide table */}
-                  <div className="hidden md:block peptalk-scroll-panel max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06] bg-slate-950/25">
+                  {/* xl+: wide table */}
+                  <div className="hidden xl:block peptalk-scroll-panel max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06] bg-slate-950/25">
                     <table className="min-w-full text-xs">
                       <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur-sm border-b border-white/10 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
                         <tr className="text-gray-400">
@@ -5746,6 +5789,8 @@ const wipeAllData = () => {
                               <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / wk</span>
                             </th>
                           ))}
+                          <th className="py-2 px-2 text-right font-medium whitespace-nowrap tabular-nums">Start lb</th>
+                          <th className="py-2 px-2 text-right font-medium whitespace-nowrap tabular-nums">End lb</th>
                           <th className="py-2 pl-2 pr-3 text-right font-medium whitespace-nowrap">Δ lb</th>
                         </tr>
                       </thead>
@@ -5771,6 +5816,12 @@ const wipeAllData = () => {
                                 </td>
                               );
                             })}
+                            <td className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
+                              {row.weekStartWeight != null ? row.weekStartWeight.toFixed(1) : '—'}
+                            </td>
+                            <td className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
+                              {row.weekEndWeight != null ? row.weekEndWeight.toFixed(1) : '—'}
+                            </td>
                             <td className={`py-2 pl-2 pr-3 text-right tabular-nums align-top ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
                               {row.weightChange == null ? '—' : row.weightChange.toFixed(1)}
                             </td>
