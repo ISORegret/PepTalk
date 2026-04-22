@@ -28,21 +28,24 @@ export function buildWeeklyDoseWeightPdf({
 }) {
   if (!rows?.length) return null;
 
-  const landscape = visibleMeds.length > 4;
   const doc = new jsPDF({
     unit: 'pt',
     format: 'letter',
-    orientation: landscape ? 'landscape' : 'portrait',
+    orientation: 'landscape',
   });
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const margin = 40;
+  const margin = 36;
   const tableW = pageW - margin * 2;
-  const deltaColW = 44;
+  const startColW = 40;
+  const endColW = 40;
+  const deltaColW = 36;
   const hasMeds = visibleMeds.length > 0;
-  const weekColW = hasMeds ? Math.min(118, tableW * 0.2) : tableW - deltaColW - 16;
-  const medColW = hasMeds ? (tableW - weekColW - deltaColW) / visibleMeds.length : 0;
+  const weekColW = hasMeds ? Math.min(108, tableW * 0.16) : tableW - startColW - endColW - deltaColW - 16;
+  const medColW = hasMeds
+    ? Math.max(48, (tableW - weekColW - startColW - endColW - deltaColW) / visibleMeds.length)
+    : 0;
   const headerMedChars = !hasMeds ? 0 : medColW < 52 ? 10 : medColW < 72 ? 16 : 24;
 
   const truncate = (str, maxLen) => {
@@ -50,27 +53,27 @@ export function buildWeeklyDoseWeightPdf({
     return `${str.slice(0, Math.max(0, maxLen - 1))}…`;
   };
 
-  let y = 44;
+  let y = 40;
 
   const titleAndMeta = () => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(28, 28, 32);
     doc.text('PepTalk — Weekly dose & weight change', margin, y);
-    y += 18;
+    y += 16;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(70, 70, 78);
-    doc.text(`Week starts on: ${weekStartsOnLabel}`, margin, y);
-    y += 13;
+    doc.text(`Week starts on: ${weekStartsOnLabel} · Start / End = scale anchor for that week window`, margin, y);
+    y += 12;
     const tw = totalWeightChange;
     const twStr = tw === 0 ? '0.0 lb' : `${tw > 0 ? '+' : ''}${tw.toFixed(1)} lb`;
     doc.text(`Total weight change (rows shown): ${twStr}`, margin, y);
-    y += 13;
+    y += 11;
     doc.setFontSize(8);
     doc.setTextColor(120, 120, 128);
     doc.text(`Generated ${new Date().toLocaleString()} · PepTalk v${appVersion || ''}`, margin, y);
-    y += 22;
+    y += 20;
   };
 
   const tableHeader = () => {
@@ -86,29 +89,33 @@ export function buildWeeklyDoseWeightPdf({
         x += medColW;
       });
     }
-    doc.text('Δ lb', x, y);
-    y += 8;
+    doc.text('Start', x, y);
+    x += startColW;
+    doc.text('End', x, y);
+    x += endColW;
+    doc.text('Δ', x, y);
+    y += 7;
     doc.setDrawColor(200, 200, 210);
     doc.line(margin, y, margin + tableW, y);
-    y += 12;
+    y += 11;
     doc.setFont('helvetica', 'normal');
   };
 
   titleAndMeta();
   tableHeader();
 
-  const rowHeight = 14;
+  const rowHeight = 13;
   rows.forEach((row) => {
     if (y > pageH - 36) {
       doc.addPage();
-      y = 44;
+      y = 36;
       tableHeader();
     }
 
     doc.setFontSize(8);
     doc.setTextColor(35, 35, 42);
     let x = margin;
-    const weekText = truncate(`W${row.weekIndex}  ${row.weekLabel}`, 48);
+    const weekText = truncate(`W${row.weekIndex}  ${row.weekLabel}`, 42);
     doc.text(weekText, x, y, { maxWidth: weekColW - 2 });
     x += weekColW;
 
@@ -120,6 +127,11 @@ export function buildWeeklyDoseWeightPdf({
         x += medColW;
       });
     }
+
+    doc.text(row.weekStartWeight != null ? row.weekStartWeight.toFixed(1) : '—', x, y);
+    x += startColW;
+    doc.text(row.weekEndWeight != null ? row.weekEndWeight.toFixed(1) : '—', x, y);
+    x += endColW;
 
     const wc = row.weightChange;
     const deltaStr = wc == null ? '—' : `${wc > 0 ? '+' : ''}${wc.toFixed(1)}`;
