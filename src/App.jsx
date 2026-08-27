@@ -33,6 +33,7 @@ const MEDICATIONS = [
   { name: 'Tirzepatide', category: 'GLP-1/GIP', color: '#14b8a6', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
+  { name: '5-Amino-1MQ', category: 'Other', color: '#e99173', defaultSchedule: 1, halfLife: 7, peakHours: 2, effectDuration: 24 },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
@@ -66,6 +67,43 @@ const MEDICATIONS = [
   { name: 'Anamorelin', category: 'Peptide', color: '#ca8a04', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
   { name: 'Other', category: 'Other', color: '#6b7280', defaultSchedule: 7, halfLife: 168, peakHours: 24, effectDuration: 168 }
 ];
+
+// User-confirmed Regimen history from the Aug 27, 2026 screenshots. This is merged once and
+// deduplicated so an existing PepTalk entry is never replaced or counted twice.
+const REGIMEN_5_AMINO_1MQ_IMPORT = [
+  ['2026-08-27', '06:00', 5, 'Love Handles (L)'],
+  ['2026-08-26', '05:58', 5, null],
+  ['2026-08-25', '06:00', 2.5, null],
+  ['2026-08-24', '06:19', 2.5, null],
+  ['2026-08-23', '09:11', 3, null],
+  ['2026-08-14', '06:10', 3.55, 'Belly (Right)'],
+  ['2026-08-13', '09:03', 3.55, 'Belly (Right)'],
+  ['2026-08-12', '06:06', 3.55, 'Belly (Right)'],
+  ['2026-08-11', '22:09', 4.4, 'Belly (Left)'],
+  ['2026-08-10', '06:23', 2.5, 'Belly (Left)'],
+  ['2026-08-09', '09:14', 3.6, 'Belly (Right)'],
+  ['2026-08-08', '07:05', 2.5, 'Belly (Right)'],
+  ['2026-08-07', '05:58', 2.5, 'Belly (Left)'],
+  ['2026-08-06', '06:16', 2.5, 'Belly (Right)'],
+  ['2026-08-05', '06:14', 2.5, 'Belly (Right)'],
+  ['2026-08-04', '06:26', 2.5, 'Belly (Left)'],
+  ['2026-08-03', '06:03', 2.5, 'Belly (Right)'],
+  ['2026-08-02', '09:07', 2.5, 'Love Handles (R)'],
+  ['2026-08-01', '06:00', 2.5, null],
+  ['2026-07-31', '06:00', 2.5, null],
+].map(([date, time, dose, site], index) => ({
+  id: `regimen-5-amino-1mq-${date}-${time.replace(':', '')}`,
+  type: '5-Amino-1MQ',
+  dose,
+  unit: 'mg',
+  date,
+  time,
+  route: 'SubQ',
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
+  importOrder: index,
+}));
 
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
 const RETATRUTIDE_UNITS_PER_MG = 10;
@@ -1110,6 +1148,17 @@ const parseLocalDate = (dateString) => {
   return new Date(year, month - 1, day);
 };
 
+// Preserve the logged clock time for short-half-life level curves; fall back to local midnight.
+const getEntryDateTime = (entry) => {
+  const day = toCalendarDay(entry?.date);
+  if (!day) return new Date(NaN);
+  const [year, month, date] = day.split('-').map(Number);
+  const timeMatch = typeof entry?.time === 'string' ? entry.time.match(/^(\d{1,2}):(\d{2})/) : null;
+  const hour = timeMatch ? Number(timeMatch[1]) : 0;
+  const minute = timeMatch ? Number(timeMatch[2]) : 0;
+  return new Date(year, month - 1, date, hour, minute, 0, 0);
+};
+
 // Today as YYYY-MM-DD in local timezone (fixes date picker showing "next day" in some timezones)
 const getTodayLocal = () => {
   const d = new Date();
@@ -1249,6 +1298,7 @@ const PepTalk = () => {
   const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
   const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
   const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
+  const [insightsMedRanges, setInsightsMedRanges] = useState({}); // per-compound detail graph range
   const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
   const [weeklyDoseWeightExcludedMeds, setWeeklyDoseWeightExcludedMeds] = useState([]); // med names hidden from Weekly dose & weight change table
   /** 0 Sun … 6 Sat — start of each 7-day bucket for Weekly dose & weight (default 1 = Monday) */
@@ -1537,14 +1587,52 @@ const PepTalk = () => {
         const parsed = JSON.parse(weightData);
         setWeightEntries(sortWeightByDateAsc(parsed));
       }
-      if (injectionData) setInjectionEntries(JSON.parse(injectionData));
+      {
+        const parsed = injectionData ? JSON.parse(injectionData) : [];
+        const existing = Array.isArray(parsed) ? parsed : [];
+        const importKey = 'peptalk-regimen-5-amino-import-v1';
+        if (localStorage.getItem(importKey) !== 'done') {
+          const doseKey = (entry) => `${entry.type}|${toCalendarDay(entry.date)}|${Number(entry.dose)}|${String(entry.unit || 'mg').toLowerCase()}`;
+          const existingKeys = new Set(existing.map(doseKey));
+          const additions = REGIMEN_5_AMINO_1MQ_IMPORT.filter((entry) => !existingKeys.has(doseKey(entry)));
+          const merged = [...existing, ...additions].sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
+          setInjectionEntries(merged);
+          if (additions.length > 0) saveData('health-injection-entries', merged);
+          localStorage.setItem(importKey, 'done');
+        } else {
+          setInjectionEntries(existing);
+        }
+      }
       if (profileData) {
         const parsed = JSON.parse(profileData);
         setUserProfile({ height: 70, goalWeight: 200, ...parsed, hydrationGoalOz: parsed.hydrationGoalOz ?? 64 });
       }
       if (measurementData) setMeasurementEntries(JSON.parse(measurementData));
       if (photoData) setProgressPhotos(JSON.parse(photoData));
-      if (scheduleData) setSchedules(JSON.parse(scheduleData));
+      {
+        const parsed = scheduleData ? JSON.parse(scheduleData) : [];
+        const existing = Array.isArray(parsed) ? parsed : [];
+        const scheduleImportKey = 'peptalk-regimen-5-amino-schedule-v1';
+        if (localStorage.getItem(scheduleImportKey) !== 'done' && !existing.some((schedule) => schedule.medication === '5-Amino-1MQ')) {
+          const importedSchedule = {
+            id: 'regimen-5-amino-1mq-daily',
+            medication: '5-Amino-1MQ',
+            frequencyDays: 1,
+            preferredDay: 0,
+            startDate: '2026-07-31',
+            scheduleType: 'specific_days',
+            specificDays: [0, 1, 2, 3, 4, 5, 6],
+            preferredTime: '06:00',
+          };
+          const merged = [...existing, importedSchedule];
+          setSchedules(merged);
+          saveData('health-schedules', merged);
+          localStorage.setItem(scheduleImportKey, 'done');
+        } else {
+          setSchedules(existing);
+          if (existing.some((schedule) => schedule.medication === '5-Amino-1MQ')) localStorage.setItem(scheduleImportKey, 'done');
+        }
+      }
       if (titrationData) setTitrationPlans(JSON.parse(titrationData));
       if (journalData) setJournalEntries(JSON.parse(journalData));
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
@@ -3502,15 +3590,15 @@ const wipeAllData = () => {
       if (!medication) return;
       
       // Sort by date, most recent first (use toCalendarDay so bad date formats don't break)
-      const sorted = injections.sort((a, b) => parseLocalDate(toCalendarDay(b.date)) - parseLocalDate(toCalendarDay(a.date)));
+      const sorted = injections.sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
       const lastInjection = sorted[0];
-      const lastDate = parseLocalDate(toCalendarDay(lastInjection.date));
+      const lastDate = getEntryDateTime(lastInjection);
       const hoursAgo = lastDate && Number.isFinite(lastDate.getTime()) ? (now - lastDate) / (1000 * 60 * 60) : 0;
       
       // Calculate TOTAL current level from ALL recent injections, weighted by user's actual dose
       let totalRemainingMg = 0;
       injections.forEach(inj => {
-        const injDate = parseLocalDate(toCalendarDay(inj.date));
+        const injDate = getEntryDateTime(inj);
         if (!injDate || !Number.isFinite(injDate.getTime())) return;
         const hoursElapsed = (now - injDate) / (1000 * 60 * 60);
         if (hoursElapsed >= 0) {
@@ -3551,6 +3639,7 @@ const wipeAllData = () => {
         color: medication.color,
         category: medication.category,
         currentLevel: Math.round(currentLevel), // Round to whole number
+        currentRemainingMg: totalRemainingMg,
         phase,
         phaseColor,
         currentPhase, // Full phase object with details
@@ -3615,6 +3704,82 @@ const wipeAllData = () => {
     }
 
     return data;
+  };
+
+  // Regimen-style detail data: one time-aware level curve and summary for each compound.
+  const getCompoundDetailData = (medName, range = '1m') => {
+    const medication = MEDICATIONS.find((med) => med.name === medName);
+    const entries = injectionEntries
+      .filter((entry) => entry.type === medName && isValidEntryDate(entry.date))
+      .sort((a, b) => getEntryDateTime(a) - getEntryDateTime(b));
+    if (!medication || entries.length === 0) return null;
+
+    const now = new Date();
+    const firstDoseAt = getEntryDateTime(entries[0]);
+    const lastDoseAt = getEntryDateTime(entries[entries.length - 1]);
+    const daysByRange = { '1w': 7, '1m': 30, '3m': 90, '6m': 180 };
+    const requestedDays = daysByRange[range];
+    const rangeStart = range === 'all'
+      ? new Date(firstDoseAt)
+      : new Date(now.getTime() - (requestedDays || 30) * 24 * 60 * 60 * 1000);
+    const chartStart = rangeStart < firstDoseAt ? new Date(firstDoseAt) : rangeStart;
+    const futureHours = Math.max(24, Math.min(72, (medication.defaultSchedule || 1) * 24));
+    const chartEnd = new Date(now.getTime() + futureHours * 60 * 60 * 1000);
+    const spanDays = Math.max(1, (chartEnd - chartStart) / (24 * 60 * 60 * 1000));
+    const stepHours = spanDays <= 10 ? 2 : spanDays <= 40 ? 6 : spanDays <= 100 ? 18 : 36;
+    const timestamps = new Set([chartStart.getTime(), now.getTime(), chartEnd.getTime()]);
+    for (let ts = chartStart.getTime(); ts <= chartEnd.getTime(); ts += stepHours * 60 * 60 * 1000) timestamps.add(ts);
+    entries.forEach((entry) => {
+      const ts = getEntryDateTime(entry).getTime();
+      if (ts >= chartStart.getTime() && ts <= chartEnd.getTime()) {
+        timestamps.add(ts);
+        timestamps.add(Math.max(chartStart.getTime(), ts - 60 * 1000));
+      }
+    });
+
+    const points = [...timestamps].sort((a, b) => a - b).map((timestamp) => {
+      let remainingMg = 0;
+      entries.forEach((entry) => {
+        const doseAt = getEntryDateTime(entry).getTime();
+        if (doseAt > timestamp) return;
+        const hoursElapsed = (timestamp - doseAt) / (60 * 60 * 1000);
+        const effectiveHours = getEffectiveHoursForDecay(entry, medication, hoursElapsed);
+        const remaining = toDoseMgForLevel(entry) * Math.pow(0.5, effectiveHours / medication.halfLife);
+        if (Number.isFinite(remaining) && remaining > 0.0001) remainingMg += remaining;
+      });
+      const isFuture = timestamp > now.getTime();
+      const isNow = timestamp === now.getTime();
+      const doseEntry = entries.find((entry) => Math.abs(getEntryDateTime(entry).getTime() - timestamp) < 60 * 1000);
+      return {
+        timestamp,
+        actualMg: !isFuture || isNow ? Number(remainingMg.toFixed(3)) : null,
+        projectedMg: isFuture || isNow ? Number(remainingMg.toFixed(3)) : null,
+        dose: doseEntry ? `${doseEntry.dose} ${doseEntry.unit || 'mg'}` : null,
+      };
+    });
+
+    const schedule = schedules.find((item) => item.medication === medName);
+    const frequencyDays = Math.max(1, Number(schedule?.frequencyDays || medication.defaultSchedule || 1));
+    const adherenceStart = new Date(Math.max(firstDoseAt.getTime(), now.getTime() - 30 * 24 * 60 * 60 * 1000));
+    const expectedDoses = Math.max(1, Math.floor((now - adherenceStart) / (frequencyDays * 24 * 60 * 60 * 1000)) + 1);
+    const actualDoseDays = new Set(entries.filter((entry) => getEntryDateTime(entry) >= adherenceStart && getEntryDateTime(entry) <= now).map((entry) => toCalendarDay(entry.date))).size;
+    const adherence = Math.min(100, Math.round((actualDoseDays / expectedDoses) * 100));
+    const nextDoseAt = new Date(lastDoseAt);
+    nextDoseAt.setDate(nextDoseAt.getDate() + frequencyDays);
+    if (schedule?.preferredTime && /^\d{2}:\d{2}$/.test(schedule.preferredTime)) {
+      const [hour, minute] = schedule.preferredTime.split(':').map(Number);
+      nextDoseAt.setHours(hour, minute, 0, 0);
+    }
+
+    return {
+      medication,
+      entries: [...entries].reverse(),
+      points,
+      timeOnDays: Math.max(1, Math.floor((now - firstDoseAt) / (24 * 60 * 60 * 1000)) + 1),
+      adherence,
+      nextDoseAt,
+      frequencyDays,
+    };
   };
 
   // Weekly breakdown: total dose per week (per medication) + weight change per week
@@ -5868,6 +6033,116 @@ const wipeAllData = () => {
                       )}
                     </div>
 
+                    {/* Per-compound level surface — inspired by the user's Regimen reference. */}
+                    {(() => {
+                      const range = insightsMedRanges[insight.medication] || '1m';
+                      const detail = getCompoundDetailData(insight.medication, range);
+                      if (!detail) return null;
+                      const remaining = Number(insight.currentRemainingMg || 0);
+                      const remainingLabel = remaining >= 10 ? remaining.toFixed(1) : remaining.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+                      const now = new Date();
+                      const next = detail.nextDoseAt;
+                      const dayDiff = Math.round((new Date(next.getFullYear(), next.getMonth(), next.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / (24 * 60 * 60 * 1000));
+                      const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Tomorrow' : next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                      const nextLabel = `${dayLabel}, ${next.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                      return (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {[['1w', '1W'], ['1m', '1M'], ['3m', '3M'], ['6m', '6M'], ['all', 'All']].map(([id, label]) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => setInsightsMedRanges((previous) => ({ ...previous, [insight.medication]: id }))}
+                                className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors ${range === id ? 'border-white/20 bg-white/12 text-white' : 'border-white/[0.08] text-gray-500 hover:text-gray-300'}`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div
+                            className="rounded-2xl border border-white/[0.08] overflow-hidden"
+                            style={{
+                              backgroundColor: 'rgba(15, 23, 42, 0.72)',
+                              backgroundImage: `radial-gradient(${insight.color}20 0.8px, transparent 0.8px)`,
+                              backgroundSize: '16px 16px',
+                            }}
+                          >
+                            <div className="px-4 pt-4 flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2 text-sm font-medium text-gray-200">
+                                  <Activity className="h-4 w-4" style={{ color: insight.color }} />
+                                  Medication level
+                                </div>
+                                <div className="mt-2 text-4xl font-semibold tracking-tight text-white">~{remainingLabel} <span className="text-base font-normal text-gray-400">mg</span></div>
+                                <div className="mt-1 text-xs text-gray-500">Estimated t½ ~{detail.medication.halfLife}h</div>
+                              </div>
+                              <span className="text-xs text-gray-400">{statusLabel}</span>
+                            </div>
+                            <div className="px-1 pt-2">
+                              <ResponsiveContainer width="100%" height={230}>
+                                <ComposedChart data={detail.points} margin={{ top: 12, right: 10, left: 0, bottom: 4 }}>
+                                  <defs>
+                                    <linearGradient id={`compound-fill-${insight.medication.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="0%" stopColor={insight.color} stopOpacity={0.28} />
+                                      <stop offset="100%" stopColor={insight.color} stopOpacity={0.02} />
+                                    </linearGradient>
+                                  </defs>
+                                  <XAxis
+                                    dataKey="timestamp"
+                                    type="number"
+                                    domain={['dataMin', 'dataMax']}
+                                    tickLine={false}
+                                    axisLine={{ stroke: '#334155', strokeOpacity: 0.5 }}
+                                    minTickGap={42}
+                                    fontSize={10}
+                                    stroke="#64748b"
+                                    tickFormatter={(timestamp) => new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  />
+                                  <YAxis hide domain={[0, 'auto']} />
+                                  <Tooltip
+                                    cursor={{ stroke: '#64748b', strokeOpacity: 0.35 }}
+                                    contentStyle={{ backgroundColor: 'rgba(15,23,42,.96)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, fontSize: 11 }}
+                                    labelFormatter={(timestamp) => new Date(timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                    formatter={(value, name, item) => [`${Number(value).toFixed(2)} mg${item?.payload?.dose ? ` · dose ${item.payload.dose}` : ''}`, name === 'projectedMg' ? 'Projected' : 'Estimated']}
+                                  />
+                                  <Area type="linear" dataKey="actualMg" stroke="none" fill={`url(#compound-fill-${insight.medication.replace(/[^a-z0-9]/gi, '')})`} connectNulls={false} />
+                                  <Line
+                                    type="linear"
+                                    dataKey="actualMg"
+                                    stroke={insight.color}
+                                    strokeWidth={2.5}
+                                    connectNulls={false}
+                                    dot={({ cx, cy, payload }) => payload?.dose ? <circle cx={cx} cy={cy} r={2.5} fill="#111827" stroke={insight.color} strokeWidth={1.5} /> : null}
+                                    activeDot={{ r: 4, fill: insight.color, stroke: '#111827', strokeWidth: 2 }}
+                                  />
+                                  <Line type="linear" dataKey="projectedMg" stroke={insight.color} strokeOpacity={0.65} strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls={false} />
+                                </ComposedChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 border-t border-white/[0.07] bg-black/10 px-4 py-3">
+                              <div><div className="text-[10px] uppercase tracking-wider text-gray-500">Time on</div><div className="mt-1 text-sm font-semibold text-white">{detail.timeOnDays}d</div></div>
+                              <div><div className="text-[10px] uppercase tracking-wider text-gray-500">Adherence</div><div className="mt-1 text-sm font-semibold text-white">{detail.adherence}%</div></div>
+                              <div><div className="text-[10px] uppercase tracking-wider text-gray-500">Next</div><div className="mt-1 text-sm font-semibold text-white leading-tight">{nextLabel}</div></div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] overflow-hidden">
+                            <div className="px-4 py-3 flex items-center justify-between border-b border-white/[0.06]">
+                              <div><h5 className="text-sm font-semibold text-white">Recent doses</h5><p className="text-[11px] text-gray-500">Latest history for this compound</p></div>
+                              <button type="button" onClick={() => setActiveTab('injections')} className="text-[11px] font-medium text-gold-400">All doses</button>
+                            </div>
+                            {detail.entries.slice(0, 5).map((entry) => (
+                              <div key={entry.id} className="px-4 py-2.5 flex items-start justify-between gap-3 border-b border-white/[0.05] last:border-0">
+                                <div><div className="text-sm font-semibold text-white">{entry.dose} {entry.unit || 'mg'}</div>{(entry.site || entry.route) && <div className="mt-0.5 text-[11px] text-gray-500">{[entry.site, entry.route].filter(Boolean).join(' · ')}</div>}</div>
+                                <div className="text-right text-[11px] text-gray-500">{getEntryDateTime(entry).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br />{getEntryDateTime(entry).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {insight.effectProfile?.splitDoseTip && (
                       <p className="text-gold-400 text-xs bg-accent/10 border border-accent/20 rounded-lg p-2.5">💡 {insight.effectProfile.splitDoseTip}</p>
                     )}
@@ -6660,7 +6935,7 @@ const wipeAllData = () => {
                                         {entry.notes && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{entry.notes}</p>}
                                       </div>
                                       <div className="flex gap-1 shrink-0">
-                                        <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="h-8 w-8 rounded-lg bg-white/[0.05] text-gray-400 flex items-center justify-center" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                        <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionTime(entry.time || '09:00'); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="h-8 w-8 rounded-lg bg-white/[0.05] text-gray-400 flex items-center justify-center" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                                         <button onClick={() => deleteInjection(entry.id)} className="h-8 w-8 rounded-lg bg-white/[0.05] text-gray-500 hover:text-red-400 flex items-center justify-center" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                                       </div>
                                     </div>
