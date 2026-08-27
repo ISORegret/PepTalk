@@ -159,6 +159,31 @@ const REGIMEN_TESAMORELIN_IPAMORELIN_IMPORT = [
   sideEffects: [],
 }));
 
+const REGIMEN_TESTOSTERONE_CYPIONATE_IMPORT = [
+  ['2026-08-26', '23:25', 125, 'Glute (Left)', 'IM'],
+  ['2026-08-22', '23:46', 125, 'Outer Thigh (Right)', 'IM'],
+  ['2026-08-19', '22:00', 125, 'Ventrogluteal (Right)', 'IM'],
+  ['2026-08-15', '22:00', 125, 'Ventrogluteal (Left)', 'IM'],
+  ['2026-08-12', '22:00', 125, 'Outer Thigh (Right)', 'IM'],
+  ['2026-08-08', '22:00', 125, 'Love Handles (R)', 'SubQ'],
+  ['2026-08-05', '23:34', 125, 'Outer Thigh (Right)', 'IM'],
+  ['2026-08-01', '22:00', 150, null, null],
+  ['2026-07-29', '22:00', 125, null, null],
+  ['2026-07-25', '22:00', 125, null, null],
+  ['2026-07-22', '22:00', 125, null, null],
+].map(([date, time, dose, site, route]) => ({
+  id: `regimen-testosterone-cypionate-${date}-${time.replace(':', '')}`,
+  type: 'Testosterone Cypionate',
+  dose,
+  unit: 'mg',
+  date,
+  time,
+  ...(route ? { route } : {}),
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
+}));
+
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
 const RETATRUTIDE_UNITS_PER_MG = 10;
 
@@ -1653,6 +1678,7 @@ const PepTalk = () => {
           { key: 'peptalk-regimen-5-amino-import-v1', entries: REGIMEN_5_AMINO_1MQ_IMPORT },
           { key: 'peptalk-regimen-cagrilintide-import-v1', entries: REGIMEN_CAGRILINTIDE_IMPORT },
           { key: 'peptalk-regimen-tesamorelin-ipamorelin-import-v1', entries: REGIMEN_TESAMORELIN_IPAMORELIN_IMPORT },
+          { key: 'peptalk-regimen-testosterone-cypionate-import-v1', entries: REGIMEN_TESTOSTERONE_CYPIONATE_IMPORT },
         ];
         let merged = [...existing];
         let changed = false;
@@ -1691,6 +1717,10 @@ const PepTalk = () => {
           {
             key: 'peptalk-regimen-tesamorelin-ipamorelin-schedule-v1',
             schedule: { id: 'regimen-tesamorelin-ipamorelin-weekdays', medication: 'Tesamorelin / Ipamorelin', frequencyDays: 1, preferredDay: 1, startDate: '2026-08-22', scheduleType: 'specific_days', specificDays: [1, 2, 3, 4, 5], preferredTime: '06:00' },
+          },
+          {
+            key: 'peptalk-regimen-testosterone-cypionate-schedule-v1',
+            schedule: { id: 'regimen-testosterone-cypionate-wed-sat', medication: 'Testosterone Cypionate', frequencyDays: 3, preferredDay: 3, startDate: '2026-07-22', scheduleType: 'specific_days', specificDays: [3, 6], preferredTime: '22:00' },
           },
         ];
         let merged = [...existing];
