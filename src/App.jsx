@@ -2740,6 +2740,25 @@ const wipeAllData = () => {
     return points.length > 1 ? points : [];
   };
 
+  // Progress targets used only by the compact "At this pace" forecast.
+  const getPaceTargets = () => {
+    const sorted = sortWeightByDateAsc(weightEntries);
+    if (sorted.length === 0) return [];
+    const startWeight = parseFloat(sorted[0].weight);
+    const currentWeight = parseFloat(stats.current);
+    if (stats.current === '-' || isNaN(currentWeight)) return [];
+    const goalWeight = userProfile?.goalWeight ? parseFloat(userProfile.goalWeight) : startWeight - 30;
+    const totalToLose = startWeight - goalWeight;
+    if (totalToLose <= 0) return [];
+    const list = [];
+    for (let lb = 5; lb <= Math.ceil(totalToLose / 5) * 5; lb += 5) {
+      const achieved = (startWeight - currentWeight) >= lb;
+      const toGo = achieved ? 0 : lb - (startWeight - currentWeight);
+      list.push({ label: `${lb} lb down`, achieved, toGo });
+    }
+    return list;
+  };
+
   const getNextInjections = () => {
     const upcoming = [];
     const today = new Date();
@@ -4944,6 +4963,7 @@ const wipeAllData = () => {
                     const info = getOnTrackInfo();
                     const statusMsg = info.status === 'ahead' ? "You're ahead of typical loss — great progress." : info.status === 'slower' ? "You're losing slower than average. Normal early on or at lower doses." : "Your loss is in line with typical results for your medication.";
                     const statusColor = info.status === 'ahead' ? 'text-green-500' : info.status === 'slower' ? 'text-gold-400' : 'text-green-500';
+                    const paceTargets = getPaceTargets();
                     return (
                       <div className="space-y-2">
                         <p className="text-gray-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
@@ -4952,6 +4972,38 @@ const wipeAllData = () => {
                           <p className="text-gray-400 text-xs">
                             On this medication for <span className="text-gray-200 font-medium">{info.daysOnMed} day{info.daysOnMed !== 1 ? 's' : ''}</span>.
                           </p>
+                        )}
+                        {paceTargets.length > 0 && info.userLoss > 0 && (
+                          <div className="pt-1 border-t border-white/[0.06] mt-2">
+                            <p className="text-gray-400 text-[11px] mb-1 font-medium">At this pace:</p>
+                            <ul className="space-y-0.5 text-[11px]">
+                              {paceTargets.map((target, idx) => {
+                                const weeksTo = target.achieved || target.toGo <= 0 ? 0 : target.toGo / info.userLoss;
+                                const isAchieved = target.achieved || target.toGo <= 0;
+                                const daysTo = Math.max(1, Math.round(weeksTo * 7));
+                                const etaText = isAchieved
+                                  ? 'reached'
+                                  : weeksTo < 1
+                                    ? `${daysTo} day${daysTo !== 1 ? 's' : ''}`
+                                    : `${weeksTo.toFixed(1)} week${weeksTo >= 2 ? 's' : ''}`;
+                                return (
+                                  <li key={idx} className="flex items-center gap-2">
+                                    {isAchieved ? (
+                                      <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
+                                    ) : (
+                                      <span className="w-3 h-3 rounded-full border border-gray-500 flex-shrink-0" />
+                                    )}
+                                    <span className={`flex-1 ${isAchieved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                                      {target.label}
+                                    </span>
+                                    <span className={`text-right ${isAchieved ? 'text-green-500' : 'text-gray-400'}`}>
+                                      {isAchieved ? 'reached' : `~${etaText}`}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
                         )}
                       </div>
                     );
