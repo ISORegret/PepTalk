@@ -6322,7 +6322,15 @@ const wipeAllData = () => {
                       </div>
                       <ChevronDown className={`h-5 w-5 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
-                    <button type="button" onClick={() => setInsightMedicationInactive(insight.medication, true)} className="mr-3 h-9 w-9 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03] text-gray-500 hover:text-gray-200" title={`Mark ${insight.medication} inactive`} aria-label={`Mark ${insight.medication} inactive`}><X className="h-4 w-4 mx-auto" /></button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Mark ${insight.medication} inactive? Its dose history will stay saved.`)) setInsightMedicationInactive(insight.medication, true);
+                      }}
+                      className="mr-2 h-7 w-7 shrink-0 rounded-lg text-gray-600 hover:bg-white/[0.04] hover:text-gray-300"
+                      title={`Mark ${insight.medication} inactive`}
+                      aria-label={`Mark ${insight.medication} inactive`}
+                    ><X className="h-3 w-3 mx-auto" /></button>
                     </div>
 
                     {/* Expanded content */}
@@ -6560,6 +6568,68 @@ const wipeAllData = () => {
                   </div>
                     );
                 })}
+
+                {(() => {
+                  const { rows } = getWeeklyDoseAndWeightSummary();
+                  if (!rows.length) return null;
+                  return (
+                    <section className="ui-card overflow-hidden mt-4">
+                      <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] p-4">
+                        <div>
+                          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Calendar className="h-4 w-4 text-gold-400" />Weekly stack &amp; weight</h3>
+                          <p className="mt-1 text-[11px] text-gray-500">What you took each week and how your weight changed.</p>
+                        </div>
+                        <select
+                          value={weeklyDoseWeekStartsOn}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            setWeeklyDoseWeekStartsOn(value);
+                            saveData('health-weekly-dose-week-starts-on', value);
+                          }}
+                          className="rounded-lg border border-white/[0.07] bg-slate-800 px-2 py-1.5 text-[11px] text-gray-300"
+                          aria-label="Week starts on"
+                        >
+                          <option value={1}>Mon</option>
+                          <option value={0}>Sun</option>
+                          <option value={2}>Tue</option>
+                          <option value={3}>Wed</option>
+                          <option value={4}>Thu</option>
+                          <option value={5}>Fri</option>
+                          <option value={6}>Sat</option>
+                        </select>
+                      </div>
+                      <div className="divide-y divide-white/[0.06]">
+                        {[...rows].reverse().map((row) => {
+                          const doses = Object.entries(row.perMed || {}).filter(([, value]) => Number(value?.displayDose) > 0);
+                          return (
+                            <div key={`${row.weekIndex}-${row.weekLabel}`} className="p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-200">{row.weekLabel}</div>
+                                  <div className="mt-1 text-[11px] text-gray-500">
+                                    {row.weekStartWeight != null || row.weekEndWeight != null
+                                      ? `${row.weekStartWeight != null ? row.weekStartWeight.toFixed(1) : '—'} → ${row.weekEndWeight != null ? row.weekEndWeight.toFixed(1) : '—'} lb`
+                                      : 'No weight logged'}
+                                  </div>
+                                </div>
+                                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${row.weightChange == null ? 'bg-white/[0.04] text-gray-500' : row.weightChange < 0 ? 'bg-green-500/12 text-green-400' : row.weightChange > 0 ? 'bg-red-500/12 text-red-400' : 'bg-white/[0.05] text-gray-300'}`}>
+                                  {row.weightChange == null ? '—' : `${row.weightChange > 0 ? '+' : ''}${row.weightChange.toFixed(1)} lb`}
+                                </span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {doses.length ? doses.map(([medName, value]) => (
+                                  <span key={medName} className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] text-gray-300">
+                                    <span className="font-medium text-white">{medName}</span> · {Number(value.displayDose).toFixed(2).replace(/\.00$/, '')} {value.unit || 'mg'}
+                                  </span>
+                                )) : <span className="text-[11px] text-gray-600">No doses logged</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })()}
             </>
             )}
           </div>
