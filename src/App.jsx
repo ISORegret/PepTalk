@@ -4626,7 +4626,6 @@ const wipeAllData = () => {
               const summaryData = getSummaryChartData(chartRangeWeeks);
               const pointCount = summaryData.length;
               const xInterval = pointCount > 12 ? Math.max(0, Math.floor(pointCount / 6)) : 0;
-              const showAllDots = pointCount <= 35;
               const weightValues = summaryData.map(p => p.weight).filter(w => w != null && !isNaN(w));
               const wMin = weightValues.length ? Math.min(...weightValues) : 0;
               const wMax = weightValues.length ? Math.max(...weightValues) : 100;
@@ -4661,7 +4660,7 @@ const wipeAllData = () => {
                     <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 28, bottom: 4 }}>
                       <defs>
                         <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.2} />
+                          <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.12} />
                           <stop offset="100%" stopColor="#e8b84c" stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -4759,22 +4758,19 @@ const wipeAllData = () => {
                           stroke="#e8b84c" 
                           strokeWidth={2.5} 
                           dot={({ cx, cy, payload }) => {
-                            if (payload.weight == null) return null;
-                            if (!showAllDots && !payload.hasInjection) return null;
-                            const isInjectionDay = payload.hasInjection;
-                            const r = isInjectionDay ? 6 : 4;
+                            if (payload.weight == null || !payload.hasInjection) return null;
                             return (
                               <circle 
                                 cx={cx} 
                                 cy={cy} 
-                                r={r} 
-                                fill="#0f172a" 
-                                stroke={isInjectionDay ? '#10b981' : '#e8b84c'} 
-                                strokeWidth={2}
+                                r={2.75}
+                                fill="#101722"
+                                stroke="#34d399"
+                                strokeWidth={1.25}
                               />
                             );
                           }}
-                          activeDot={{ r: 6, stroke: '#e8b84c', strokeWidth: 2, fill: '#0f172a' }}
+                          activeDot={{ r: 4, stroke: '#f59e0b', strokeWidth: 1.5, fill: '#101722' }}
                           connectNulls={false}
                           name="Weight"
                         />
@@ -4813,7 +4809,7 @@ const wipeAllData = () => {
                         7-day average
                       </button>
                     </div>
-                    <p className="text-gray-500 text-xs">Green ring = injection that day{!showAllDots && ' · Dots only on injection days when zoomed out'}</p>
+                    <p className="text-gray-600 text-[11px]">Small green ring = injection day</p>
                   </div>
                 </div>
                 </div>
