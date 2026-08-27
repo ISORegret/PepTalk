@@ -36,6 +36,7 @@ const MEDICATIONS = [
   { name: '5-Amino-1MQ', category: 'Other', color: '#e99173', defaultSchedule: 1, halfLife: 7, peakHours: 2, effectDuration: 24 },
   { name: 'Cagrilintide', category: 'Other', color: '#ec8f72', defaultSchedule: 3.5, halfLife: 168, peakHours: 24, effectDuration: 168 },
   { name: 'Tesamorelin / Ipamorelin', category: 'Peptide', color: '#f08f70', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 4, blendComponents: ['Tesamorelin', 'Ipamorelin'], vialComposition: { Tesamorelin: 10, Ipamorelin: 3 } },
+  { name: 'NAD+', category: 'Other', color: '#e99173', defaultSchedule: 2, halfLife: 0.75, peakHours: 0.5, effectDuration: 4 },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
@@ -240,6 +241,53 @@ const REGIMEN_KLOW_IMPORT = [
   ...(site ? { site } : {}),
   notes: 'Imported from Regimen screenshot',
   sideEffects: [],
+}));
+
+const REGIMEN_NAD_IMPORT = [
+  ['2026-08-26', '05:58', 25, null],
+  ['2026-08-24', '06:19', 25, null],
+  ['2026-08-19', '06:00', 25, 'Love Handles (R)'],
+  ['2026-08-14', '06:10', 25, 'Belly (Right)'],
+  ['2026-08-12', '06:10', 25, 'Belly (Right)'],
+  ['2026-08-10', '06:24', 20, 'Love Handles (R)'],
+  ['2026-08-07', '05:58', 20, 'Belly (Left)'],
+  ['2026-08-05', '06:15', 20, 'Belly (Right)'],
+  ['2026-08-03', '06:04', 20, 'Love Handles (L)'],
+  ['2026-07-31', '09:08', 20, null],
+  ['2026-07-29', '06:00', 20, null],
+].map(([date, time, dose, site]) => ({
+  id: `regimen-nad-${date}-${time.replace(':', '')}`,
+  type: 'NAD+',
+  dose,
+  unit: 'mg',
+  date,
+  time,
+  route: 'SubQ',
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
+}));
+
+// One consistent reading per day keeps the weight graph useful when Apple Health contains
+// several scale readings on the same day. These are the earliest visible daily readings.
+const APPLE_HEALTH_WEIGHT_IMPORT = [
+  ['2026-08-27', '05:42', 189.2],
+  ['2026-08-26', '05:32', 188.7],
+  ['2026-08-25', '02:01', 185.8],
+  ['2026-08-24', '05:42', 186.3],
+  ['2026-08-23', '08:58', 187],
+  ['2026-08-22', '05:53', 187.6],
+  ['2026-08-21', '05:46', 187.8],
+  ['2026-08-20', '17:19', 188.3],
+  ['2026-08-19', '05:53', 185.8],
+  ['2026-08-18', '05:44', 185],
+  ['2026-08-17', '05:43', 185.2],
+].map(([date, time, weight]) => ({
+  id: new Date(`${date}T${time}:00`).getTime(),
+  date,
+  time,
+  weight,
+  source: 'Apple Health screenshot',
 }));
 
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
@@ -1724,9 +1772,18 @@ const PepTalk = () => {
       const labData = localStorage.getItem('health-lab-entries');
       const blendConversionData = localStorage.getItem('health-blend-conversions');
       const inactiveInsightsData = localStorage.getItem('health-insights-inactive-meds');
-      if (weightData) {
-        const parsed = JSON.parse(weightData);
-        setWeightEntries(sortWeightByDateAsc(parsed));
+      {
+        const parsed = weightData ? JSON.parse(weightData) : [];
+        const existing = Array.isArray(parsed) ? parsed : [];
+        const importKey = 'peptalk-apple-health-weight-import-aug-17-27-v1';
+        let merged = existing;
+        if (localStorage.getItem(importKey) !== 'done') {
+          const existingDays = new Set(existing.map((entry) => toCalendarDay(entry.date)));
+          merged = [...existing, ...APPLE_HEALTH_WEIGHT_IMPORT.filter((entry) => !existingDays.has(entry.date))];
+          localStorage.setItem(importKey, 'done');
+          if (merged.length !== existing.length) saveData('health-weight-entries', sortWeightByDateAsc(merged));
+        }
+        setWeightEntries(sortWeightByDateAsc(merged));
       }
       {
         const parsed = injectionData ? JSON.parse(injectionData) : [];
@@ -1739,6 +1796,7 @@ const PepTalk = () => {
           { key: 'peptalk-regimen-testosterone-cypionate-import-v1', entries: REGIMEN_TESTOSTERONE_CYPIONATE_IMPORT },
           { key: 'peptalk-regimen-retatrutide-import-v1', entries: REGIMEN_RETATRUTIDE_IMPORT },
           { key: 'peptalk-regimen-klow-import-v1', entries: REGIMEN_KLOW_IMPORT },
+          { key: 'peptalk-regimen-nad-import-v1', entries: REGIMEN_NAD_IMPORT },
         ];
         let merged = [...existing];
         let changed = false;
@@ -1790,6 +1848,10 @@ const PepTalk = () => {
             key: 'peptalk-regimen-klow-schedule-v1',
             schedule: { id: 'regimen-klow-daily', medication: 'KLOW', frequencyDays: 1, preferredDay: 0, startDate: '2026-07-30', scheduleType: 'specific_days', specificDays: [0, 1, 2, 3, 4, 5, 6], preferredTime: '22:00' },
           },
+          {
+            key: 'peptalk-regimen-nad-schedule-v1',
+            schedule: { id: 'regimen-nad-mon-wed-fri', medication: 'NAD+', frequencyDays: 2, preferredDay: 1, startDate: '2026-07-29', scheduleType: 'specific_days', specificDays: [1, 3, 5], preferredTime: '06:00' },
+          },
         ];
         let merged = [...existing];
         let changed = false;
@@ -1804,7 +1866,27 @@ const PepTalk = () => {
         setSchedules(merged);
         if (changed) saveData('health-schedules', merged);
       }
-      if (titrationData) setTitrationPlans(JSON.parse(titrationData));
+      {
+        const parsed = titrationData ? JSON.parse(titrationData) : [];
+        const existing = Array.isArray(parsed) ? parsed : [];
+        const importKey = 'peptalk-regimen-nad-titration-v1';
+        let merged = existing;
+        const alreadyExists = existing.some((plan) => plan.medication === 'NAD+');
+        if (localStorage.getItem(importKey) !== 'done' && !alreadyExists) {
+          merged = [...existing, {
+            id: 'regimen-nad-titration',
+            medication: 'NAD+',
+            startDate: '2026-07-29',
+            steps: [
+              { dose: 20, weeks: 2, unit: 'mg' },
+              { dose: 25, weeks: 52, unit: 'mg' },
+            ],
+          }];
+          saveData('health-titration', merged);
+        }
+        if (alreadyExists || merged !== existing) localStorage.setItem(importKey, 'done');
+        setTitrationPlans(merged);
+      }
       if (journalData) setJournalEntries(JSON.parse(journalData));
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
       if (notificationSettingsData) setNotificationSettings(JSON.parse(notificationSettingsData));
