@@ -184,6 +184,29 @@ const REGIMEN_TESTOSTERONE_CYPIONATE_IMPORT = [
   sideEffects: [],
 }));
 
+const REGIMEN_RETATRUTIDE_IMPORT = [
+  ['2026-08-26', '23:25', 2.5, null],
+  ['2026-08-22', '23:46', 2, 'Belly (Left)'],
+  ['2026-08-12', '22:00', 2, null],
+  ['2026-08-08', '22:00', 2.5, 'Belly (Left)'],
+  ['2026-08-05', '22:00', 2, 'Belly (Left)'],
+  ['2026-08-01', '22:00', 2, 'Belly (Left)'],
+  ['2026-07-29', '22:00', 1, null],
+  ['2026-07-25', '22:00', 1, null],
+  ['2026-07-22', '22:00', 1, null],
+].map(([date, time, dose, site]) => ({
+  id: `regimen-retatrutide-${date}-${time.replace(':', '')}`,
+  type: 'Retatrutide',
+  dose,
+  unit: 'mg',
+  date,
+  time,
+  route: 'SubQ',
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
+}));
+
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
 const RETATRUTIDE_UNITS_PER_MG = 10;
 
@@ -1679,6 +1702,7 @@ const PepTalk = () => {
           { key: 'peptalk-regimen-cagrilintide-import-v1', entries: REGIMEN_CAGRILINTIDE_IMPORT },
           { key: 'peptalk-regimen-tesamorelin-ipamorelin-import-v1', entries: REGIMEN_TESAMORELIN_IPAMORELIN_IMPORT },
           { key: 'peptalk-regimen-testosterone-cypionate-import-v1', entries: REGIMEN_TESTOSTERONE_CYPIONATE_IMPORT },
+          { key: 'peptalk-regimen-retatrutide-import-v1', entries: REGIMEN_RETATRUTIDE_IMPORT },
         ];
         let merged = [...existing];
         let changed = false;
@@ -1721,6 +1745,10 @@ const PepTalk = () => {
           {
             key: 'peptalk-regimen-testosterone-cypionate-schedule-v1',
             schedule: { id: 'regimen-testosterone-cypionate-wed-sat', medication: 'Testosterone Cypionate', frequencyDays: 3, preferredDay: 3, startDate: '2026-07-22', scheduleType: 'specific_days', specificDays: [3, 6], preferredTime: '22:00' },
+          },
+          {
+            key: 'peptalk-regimen-retatrutide-schedule-v1',
+            schedule: { id: 'regimen-retatrutide-wed-sat', medication: 'Retatrutide', frequencyDays: 3, preferredDay: 3, startDate: '2026-01-07', scheduleType: 'specific_days', specificDays: [3, 6], preferredTime: '22:00' },
           },
         ];
         let merged = [...existing];
