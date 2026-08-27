@@ -1354,6 +1354,7 @@ const PepTalk = () => {
   const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
   const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
   const [insightsMedRanges, setInsightsMedRanges] = useState({}); // per-compound detail graph range
+  const [insightsInactiveMeds, setInsightsInactiveMeds] = useState([]); // hidden from Insights, history remains intact
   const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
   const [weeklyDoseWeightExcludedMeds, setWeeklyDoseWeightExcludedMeds] = useState([]); // med names hidden from Weekly dose & weight change table
   /** 0 Sun … 6 Sat — start of each 7-day bucket for Weekly dose & weight (default 1 = Monday) */
@@ -1639,6 +1640,7 @@ const PepTalk = () => {
       const a1cData = localStorage.getItem('health-a1c-entries');
       const labData = localStorage.getItem('health-lab-entries');
       const blendConversionData = localStorage.getItem('health-blend-conversions');
+      const inactiveInsightsData = localStorage.getItem('health-insights-inactive-meds');
       if (weightData) {
         const parsed = JSON.parse(weightData);
         setWeightEntries(sortWeightByDateAsc(parsed));
@@ -1734,6 +1736,12 @@ const PepTalk = () => {
           saveData('health-blend-conversions', merged);
         }
         setBlendConversions(merged);
+      }
+      if (inactiveInsightsData) {
+        try {
+          const parsed = JSON.parse(inactiveInsightsData);
+          if (Array.isArray(parsed)) setInsightsInactiveMeds(parsed.filter((name) => typeof name === 'string'));
+        } catch (_) { /* ignore */ }
       }
       const sleepData = localStorage.getItem('health-sleep-entries');
       if (sleepData) {
@@ -2357,7 +2365,8 @@ const PepTalk = () => {
       sleepEntries,
       userProfile,
       vials,
-      blendConversions
+      blendConversions,
+      insightsInactiveMeds
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -2479,6 +2488,10 @@ const PepTalk = () => {
         if (imported.blendConversions && typeof imported.blendConversions === 'object' && !Array.isArray(imported.blendConversions)) {
           setBlendConversions(imported.blendConversions);
           saveData('health-blend-conversions', imported.blendConversions);
+        }
+        if (Array.isArray(imported.insightsInactiveMeds)) {
+          setInsightsInactiveMeds(imported.insightsInactiveMeds);
+          saveData('health-insights-inactive-meds', imported.insightsInactiveMeds);
         }
         
         alert('Data imported successfully!');
@@ -2656,6 +2669,7 @@ const wipeAllData = () => {
     'health-user-profile',
     'health-vials',
     'health-blend-conversions',
+    'health-insights-inactive-meds',
     'health-weekly-dose-weight-excluded-meds',
     'health-goals-user-stack',
     'health-sleep-entries',
@@ -2679,6 +2693,7 @@ const wipeAllData = () => {
   setLabEntries([]);
   setVials([]);
   setBlendConversions({});
+  setInsightsInactiveMeds([]);
   setWeeklyDoseWeightExcludedMeds([]);
   setGoalUserStack([]);
   setSleepEntries([]);
@@ -4328,6 +4343,17 @@ const wipeAllData = () => {
 
   const stats = getWeightStats();
   const bmiCategory = getBMICategory(stats.bmi);
+  const medicationInsights = getMedicationInsights();
+  const activeMedicationInsights = medicationInsights.filter((insight) => !insightsInactiveMeds.includes(insight.medication));
+  const inactiveMedicationInsights = medicationInsights.filter((insight) => insightsInactiveMeds.includes(insight.medication));
+  const setInsightMedicationInactive = (medName, inactive) => {
+    const next = inactive
+      ? [...new Set([...insightsInactiveMeds, medName])]
+      : insightsInactiveMeds.filter((name) => name !== medName);
+    setInsightsInactiveMeds(next);
+    saveData('health-insights-inactive-meds', next);
+    if (inactive && insightsExpandedMed === medName) setInsightsExpandedMed(null);
+  };
   const upcomingInjections = getNextInjections();
   const measurementStats = getMeasurementStats();
 
@@ -5014,37 +5040,35 @@ const wipeAllData = () => {
               );
             })()}
 
-            {/* Weight Change — hero block (matches Goals stack accent treatment) */}
-            <div className="ui-hero-panel">
+            {/* Weight Change — one calm, readable snapshot */}
+            <div className="ui-hero-panel overflow-hidden">
               <div className="ui-hero-panel__wash" aria-hidden />
               <div className="ui-hero-panel__top-bar" aria-hidden />
-              <div className="ui-hero-panel__body space-y-3">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-white">Weight Change</h2>
-                  <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
-                    <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+              <div className="ui-hero-panel__body">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">Current weight</p>
+                    <div className="mt-1 text-4xl font-semibold tracking-tight text-white">{stats.current}<span className="ml-1.5 text-base font-normal text-gray-500">lb</span></div>
                   </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
-                    <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
-                    <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
+                  <div className="text-right">
+                    <span className={`inline-flex rounded-full px-3 py-1.5 text-sm font-semibold ${parseFloat(stats.change) < 0 ? 'bg-green-500/12 text-green-400' : parseFloat(stats.change) > 0 ? 'bg-red-500/12 text-red-400' : 'bg-white/[0.06] text-gray-300'}`}>
+                      {parseFloat(stats.change) > 0 ? '+' : ''}{stats.change} lb
+                    </span>
+                    <p className="mt-1.5 text-[11px] text-gray-500">{getDateRangeLabel()}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
-                    <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
+                <div className="mt-5 grid grid-cols-3 divide-x divide-white/[0.07] border-t border-white/[0.07] pt-4">
+                  <div className="pr-3">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-600">Weekly</div>
+                    <div className={`mt-1 text-sm font-semibold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-400' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg} <span className="text-[10px] font-normal text-gray-500">lb/wk</span></div>
                   </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
-                    <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
+                  <div className="px-3">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-600">Change</div>
+                    <div className="mt-1 text-sm font-semibold text-white">{stats.percentChange}%</div>
+                  </div>
+                  <div className="pl-3">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-600">BMI</div>
+                    <div className={`mt-1 text-sm font-semibold ${bmiCategory.color}`}>{stats.bmi || '—'}</div>
                   </div>
                 </div>
               </div>
@@ -5648,39 +5672,34 @@ const wipeAllData = () => {
         {/* INSIGHTS TAB */}
         {activeTab === 'insights' && (
           <div key="insights" className="space-y-4 tab-enter">
-            {/* Hero: simple headline */}
-            <div className="text-center pb-2">
-              <h2 className="text-xl font-bold text-white tracking-tight">Insights</h2>
-              <p className="text-gray-400 text-sm mt-1">Your medication levels at a glance</p>
+            <div className="flex items-end justify-between gap-3 pb-1">
+              <div>
+                <h2 className="text-xl font-bold text-white tracking-tight">Active stacks</h2>
+                <p className="text-gray-500 text-xs mt-1">Open one stack at a time for its level graph.</p>
+              </div>
+              <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{activeMedicationInsights.length} active</span>
             </div>
 
-            {/* How levels work — simple explanation */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-semibold text-sm mb-2">How levels work</h3>
-              <p className="text-gray-400 text-xs">
-                Levels can be &gt;100% when doses build up (steady state). SubQ vs IM affects how fast the curve rises, but your total weekly dose still drives the long‑term level.
-              </p>
-            </div>
-
-            {/* Level phases legend — immediately under explanation */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-semibold text-sm mb-2">Level phases at a glance</h3>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 bg-slate-700/60 rounded-lg p-2.5 text-xs text-center">
-                  <div className="text-gray-400">Single dose</div>
-                  <div className="text-white font-medium">0–100%</div>
+            {inactiveMedicationInsights.length > 0 && (
+              <div className="ui-card p-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-200">Inactive stacks</h3>
+                    <p className="text-[11px] text-gray-500">Hidden only—dose history is still saved.</p>
+                  </div>
+                  <span className="text-xs text-gray-500">{inactiveMedicationInsights.length}</span>
                 </div>
-                <div className="flex-1 bg-yellow-500/10 rounded-lg p-2.5 text-xs text-center">
-                  <div className="text-yellow-400">Building up</div>
-                  <div className="text-white font-medium">100–150%</div>
-                </div>
-                <div className="flex-1 bg-green-500/10 rounded-lg p-2.5 text-xs text-center">
-                  <div className="text-green-500">Steady state ✓</div>
-                  <div className="text-white font-medium">150–200%</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {inactiveMedicationInsights.map((insight) => (
+                    <button key={insight.medication} type="button" onClick={() => setInsightMedicationInactive(insight.medication, false)} className="rounded-lg border border-white/[0.07] bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-gray-400 hover:text-white">
+                      Restore {insight.medication}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
-            {(() => {
+            )}
+
+            {false && (() => {
               const cutoff = new Date();
               cutoff.setDate(cutoff.getDate() - 30);
               const recent = injectionEntries.filter((e) => parseLocalDate(e.date) >= cutoff);
@@ -5716,7 +5735,7 @@ const wipeAllData = () => {
               );
             })()}
             {/* Single unified graph: estimated medication levels from half-life (all peptides/hormones) */}
-            {getMedicationInsights().length > 0 && (() => {
+            {false && getMedicationInsights().length > 0 && (() => {
               const { data: unifiedData, medications: unifiedMeds } = getUnifiedMedicationLevelChartData();
               if (unifiedData.length === 0) return null;
               const visibleMeds = unifiedMeds.filter(med => !insightsChartHiddenMeds.has(med.name));
@@ -5921,7 +5940,7 @@ const wipeAllData = () => {
             })()}
 
             {/* Weekly breakdown: dose & weight change */}
-            {(() => {
+            {false && (() => {
               const { rows, meds } = getWeeklyDoseAndWeightSummary();
               if (!rows.length) return null;
               const visibleMeds = meds.filter((m) => !weeklyDoseWeightExcludedMeds.includes(m));
@@ -6184,7 +6203,7 @@ const wipeAllData = () => {
             })()}
 
             {/* Side effects from logs */}
-            {getSideEffectsSummary().length > 0 && (
+            {false && getSideEffectsSummary().length > 0 && (
               <div className="ui-card p-4">
                 <h3 className="text-white font-semibold mb-2 text-sm">From your logs</h3>
                 <p className="text-gray-400 text-xs mb-2">Most mentioned side effects</p>
@@ -6197,7 +6216,7 @@ const wipeAllData = () => {
             )}
 
             {/* Side effects by day in cycle — reference only; shows all your logged meds */}
-            {(() => {
+            {false && (() => {
               const loggedMeds = getLoggedMedications();
               if (loggedMeds.length === 0) return null;
               return (
@@ -6249,7 +6268,7 @@ const wipeAllData = () => {
             })()}
 
             {/* Side-effect intelligence — correlate symptoms with dosing, suggest tips */}
-            {(() => {
+            {false && (() => {
               const patterns = getSideEffectPatterns();
               return patterns && patterns.length > 0 && (
               <div className="ui-card p-4 border border-gold-500/20 bg-gold-500/5">
@@ -6268,21 +6287,19 @@ const wipeAllData = () => {
               );
             })()}
 
-            {getMedicationInsights().length === 0 ? (
+            {activeMedicationInsights.length === 0 ? (
               <div className="ui-card p-8 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
                   <Activity className="h-7 w-7 text-gray-400" />
                 </div>
-                <h3 className="text-white font-semibold mb-1">No medication data yet</h3>
-                <p className="text-gray-400 text-sm mb-5">Log an injection to see levels and when to dose next.</p>
-                <button onClick={() => setActiveTab('injections')} className="ui-btn-primary px-5 py-2.5 text-sm">
-                  Log injection
-                </button>
+                <h3 className="text-white font-semibold mb-1">{medicationInsights.length ? 'No active stacks' : 'No medication data yet'}</h3>
+                <p className="text-gray-400 text-sm mb-5">{medicationInsights.length ? 'Restore a stack above whenever you start it again.' : 'Log an injection to see levels and when to dose next.'}</p>
+                {!medicationInsights.length && <button onClick={() => setActiveTab('injections')} className="ui-btn-primary px-5 py-2.5 text-sm">Log injection</button>}
               </div>
             ) : (
               <>
                 {/* Active Medications Overview */}
-                {getMedicationInsights().map(insight => {
+                {activeMedicationInsights.map(insight => {
                   const isExpanded = insightsExpandedMed === insight.medication;
                   const levelNum = parseFloat(insight.currentLevel);
                   const statusLabel = levelNum >= 150 ? 'Steady state' : levelNum >= 100 ? 'Building up' : 'Single dose range';
@@ -6290,7 +6307,8 @@ const wipeAllData = () => {
                   return (
                   <div key={insight.medication} className="ui-card overflow-hidden">
                     {/* Compact header — always visible */}
-                    <button type="button" onClick={() => setInsightsExpandedMed(isExpanded ? null : insight.medication)} className="w-full px-4 py-4 flex items-center gap-4 text-left hover:bg-white/[0.03] transition-colors">
+                    <div className="flex items-center">
+                    <button type="button" onClick={() => setInsightsExpandedMed(isExpanded ? null : insight.medication)} className="min-w-0 flex-1 px-4 py-4 pr-2 flex items-center gap-3 text-left hover:bg-white/[0.03] transition-colors">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${insight.color}22` }}>
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: insight.color }} />
                       </div>
@@ -6304,6 +6322,8 @@ const wipeAllData = () => {
                       </div>
                       <ChevronDown className={`h-5 w-5 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
+                    <button type="button" onClick={() => setInsightMedicationInactive(insight.medication, true)} className="mr-3 h-9 w-9 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03] text-gray-500 hover:text-gray-200" title={`Mark ${insight.medication} inactive`} aria-label={`Mark ${insight.medication} inactive`}><X className="h-4 w-4 mx-auto" /></button>
+                    </div>
 
                     {/* Expanded content */}
                     {isExpanded && (
