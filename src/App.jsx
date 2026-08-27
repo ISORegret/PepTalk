@@ -1,8182 +1,661 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown, Cloud, WifiOff, Download, Sparkles, ChevronLeft, Stethoscope, Search, Layers, Info, Moon, HelpCircle, FileText, BarChart3 } from 'lucide-react';
-import { useSupabaseAuth } from './context/SupabaseAuthContext.jsx';
-import { checkForAppUpdate, dismissUpdatePrompt, openDownloadUrl } from './lib/appUpdateCheck.js';
-import { formatCloudError, scheduleCloudSync } from './lib/cloudSync.js';
-import { MEDICATION_EFFECT_PROFILES, MEDICATION_PHASE_TIMELINES, TYPICAL_SIDE_EFFECTS_BY_DAY } from './medicationInsights';
-import { GOAL_CATEGORIES, GOAL_GUIDE_DISCLAIMER, GOAL_TRACK_ACTIONS, getStackSuggestions, getMedicationEducation } from './goalPeptideGuide.js';
-import { getStackTimingContent } from './lib/stackTimingGuide.js';
-import { PEP_TALK_FAQ } from './lib/pepTalkFaq.js';
-import { downloadClinicianSummaryPdf } from './lib/clinicianPdf.js';
-import { downloadGraphicalSummaryPdf } from './lib/graphicalSummaryPdf.js';
-import { buildWeeklyDoseWeightPdf, getWeekStartsOnLabel } from './lib/weeklyDoseWeightPdf.js';
-import { savePdfBlob } from './lib/savePdfBlob.js';
-import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
-import { computeSleepHours } from './lib/sleepUtils.js';
-import { compressImageFileToDataUrl } from './lib/imageCompress.js';
-
-const APP_VERSION = '1.4.7';
-
-// Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
-const MEDICATIONS = [
-  { name: 'Semaglutide', category: 'GLP-1', color: '#10b981', defaultSchedule: 7, halfLife: 168, peakHours: 48, effectDuration: 168 },
-  { name: 'Rybelsus (Oral Semaglutide)', category: 'GLP-1', color: '#10b981', defaultSchedule: 1, halfLife: 168, peakHours: 4, effectDuration: 24 },
-  { name: 'Tirzepatide', category: 'GLP-1/GIP', color: '#14b8a6', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
-  { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
-  { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
-  // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
-  { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
-  { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
-  { name: 'Testosterone Enanthate', category: 'Hormone', color: '#2563eb', defaultSchedule: 7, halfLife: 108, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
-  { name: 'HCG', category: 'Hormone', color: '#6366f1', defaultSchedule: 3, halfLife: 56, peakHours: 12, effectDuration: 72 },
-  { name: 'BPC-157', category: 'Peptide', color: '#e8b84c', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
-  { name: 'TB-500', category: 'Peptide', color: '#d97706', defaultSchedule: 3, halfLife: 2, peakHours: 2, effectDuration: 72 },
-  { name: 'Ipamorelin', category: 'Peptide', color: '#fbbf24', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 4 },
-  { name: 'CJC-1295', category: 'Peptide', color: '#f97316', defaultSchedule: 1, halfLife: 168, peakHours: 12, effectDuration: 168 },
-  { name: 'Tesamorelin', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 0.35, peakHours: 0.15, effectDuration: 3 },
-  { name: 'Sermorelin', category: 'Peptide', color: '#fb923c', defaultSchedule: 1, halfLife: 0.12, peakHours: 0.5, effectDuration: 1 },
-  { name: 'MK-677', category: 'Peptide', color: '#c2410c', defaultSchedule: 1, halfLife: 24, peakHours: 2, effectDuration: 24 },
-  { name: 'AOD-9604', category: 'Peptide', color: '#ec4899', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 3 },
-  { name: 'MOTS-C', category: 'Peptide', color: '#22c55e', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
-  { name: 'Melanotan II', category: 'Peptide', color: '#db2777', defaultSchedule: 7, halfLife: 33, peakHours: 12, effectDuration: 168 },
-  { name: 'PT-141', category: 'Peptide', color: '#be185d', defaultSchedule: 0, halfLife: 3, peakHours: 1, effectDuration: 8 },
-  { name: 'Enclomiphene (Enclo)', category: 'SERM', color: '#7c3aed', defaultSchedule: 1, halfLife: 10, peakHours: 24, effectDuration: 24 },
-  { name: 'KLOW', category: 'Peptide', color: '#0891b2', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
-  { name: 'Kisspeptin', category: 'Peptide', color: '#a855f7', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
-  { name: 'Gonadorelin', category: 'Peptide', color: '#9333ea', defaultSchedule: 2, halfLife: 0.3, peakHours: 0.5, effectDuration: 4 },
-  { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6 },
-  // Premixed CJC-1295 without DAC + Ipamorelin (vial total mg = sum of both; e.g. 10+10 mg + 2 mL BAC ‚Üí 4 U ‚âà ~200 mcg each ‚Äî Tesamorelin 18 U is a separate vial)
-  { name: 'CJC/Ipa Blend (10mg/10mg)', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
-  { name: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', category: 'Peptide', color: '#b45309', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 8 },
-  { name: 'BPC/TB Blend (5mg/5mg)', category: 'Peptide', color: '#ca8a04', defaultSchedule: 3, halfLife: 3, peakHours: 2, effectDuration: 48 },
-  { name: 'Fragment 176-191', category: 'Peptide', color: '#06b6d4', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 12 },
-  { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 1, peakHours: 0.5, effectDuration: 24 },
-  { name: 'Semax', category: 'Peptide', color: '#6366f1', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 4 },
-  { name: 'Epithalon', category: 'Peptide', color: '#64748b', defaultSchedule: 7, halfLife: 1, peakHours: 1, effectDuration: 24 },
-  { name: 'BPC-157 (Oral)', category: 'Peptide', color: '#eab308', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
-  { name: 'Anamorelin', category: 'Peptide', color: '#ca8a04', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
-  { name: 'Other', category: 'Other', color: '#6b7280', defaultSchedule: 7, halfLife: 168, peakHours: 24, effectDuration: 168 }
-];
-
-/** Retatrutide pen dial: units √∑ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
-const RETATRUTIDE_UNITS_PER_MG = 10;
-
-/** Schedule picker: offer Mon‚ÄìFri / weekend-off shortcut (common GH-secretagogue & some daily peptide protocols). */
-const MON_FRI_SCHEDULE_HINT_MEDS = new Set([
-  'KLOW',
-  'Tesa/Ipa Blend (5mg/5mg)',
-  'CJC/Ipa Blend (10mg/10mg)',
-  'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)',
-]);
-
-// Effect profiles for different medication categories
-const EFFECT_PROFILES = {
-  'GLP-1': {
-    effects: ['Appetite Suppression', 'Nausea Risk', 'Blood Sugar Control', 'Weight Loss'],
-    sideEffects: ['Nausea', 'Fatigue', 'Constipation', 'Headache'],
-    peakEffects: 'Days 1-3 post-injection',
-    steadyState: '4-5 weeks of consistent dosing'
-  },
-  'GLP-1/GIP': {
-    effects: ['Appetite Suppression', 'Insulin Sensitivity', 'Fat Burning', 'Weight Loss'],
-    sideEffects: ['Nausea', 'Diarrhea', 'Fatigue', 'Injection Site Reactions'],
-    peakEffects: 'Days 1-3 post-injection',
-    steadyState: '4-5 weeks of consistent dosing'
-  },
-  'Triple Agonist': {
-    effects: ['Appetite Control', 'Metabolic Boost', 'Fat Loss', 'Energy Increase'],
-    sideEffects: ['Nausea', 'Increased Heart Rate', 'Fatigue'],
-    peakEffects: 'Days 1-3 post-injection',
-    steadyState: '4-6 weeks of consistent dosing'
-  },
-  'Hormone': {
-    effects: ['Muscle Growth', 'Energy', 'Mood Enhancement', 'Libido'],
-    sideEffects: ['Injection Site Pain', 'Acne', 'Mood Changes'],
-    peakEffects: 'Days 2-3 post-injection',
-    steadyState: '4 weeks of consistent dosing'
-  },
-  'Peptide': {
-    effects: ['Healing', 'Recovery', 'Growth Hormone Release'],
-    sideEffects: ['Injection Site Reactions', 'Water Retention'],
-    peakEffects: 'Hours to days post-injection',
-    steadyState: 'Varies by peptide'
-  },
-  'SERM': {
-    effects: ['LH/FSH Stimulation', 'Natural Testosterone Support', 'Estrogen Receptor Modulation', 'Fertility Support'],
-    sideEffects: ['Visual Disturbances', 'Mood Changes', 'Hot Flashes', 'Headache'],
-    peakEffects: 'Days 1‚Äì2 of daily dosing; steady state in 1‚Äì2 weeks',
-    steadyState: '1‚Äì2 weeks of consistent daily dosing'
-  }
-};
-
-// Typical weekly weight loss (lb/week) from trials ‚Äî for "On track?" comparison (approximate)
-const TYPICAL_WEEKLY_LOSS = {
-  'Semaglutide': 0.6, 'Wegovy': 0.6, 'Ozempic': 0.5,
-  'Rybelsus (Oral Semaglutide)': 0.4,
-  'Tirzepatide': 0.7, 'Mounjaro': 0.7, 'Zepbound': 0.7,
-  'Liraglutide': 0.4, 'Dulaglutide': 0.4,
-  'Retatrutide': 0.8
-};
-
-// Dose-specific typical lb/week from trials ‚Äî dose = mg per 7 days (weekly total)
-// [ [weeklyMg, rate], ... ] sorted ascending by weeklyMg
-const TYPICAL_WEEKLY_LOSS_BY_DOSE = {
-  'Semaglutide': [[0.25, 0.2], [0.5, 0.35], [1, 0.5], [2.4, 0.6]],
-  'Wegovy': [[0.25, 0.2], [0.5, 0.35], [1, 0.5], [2.4, 0.6]],
-  'Ozempic': [[0.25, 0.2], [0.5, 0.35], [1, 0.5], [2, 0.5]],
-  'Rybelsus (Oral Semaglutide)': [[3, 0.3], [7, 0.35], [14, 0.4]],
-  'Tirzepatide': [[2.5, 0.3], [5, 0.5], [7.5, 0.6], [10, 0.65], [15, 0.7]],
-  'Mounjaro': [[2.5, 0.3], [5, 0.5], [7.5, 0.6], [10, 0.65], [15, 0.7]],
-  'Zepbound': [[2.5, 0.3], [5, 0.5], [7.5, 0.6], [10, 0.65], [15, 0.7]],
-  'Liraglutide': [[0.6, 0.2], [1.2, 0.3], [1.8, 0.35], [2.4, 0.4], [3, 0.4]],
-  'Dulaglutide': [[0.75, 0.25], [1.5, 0.35], [3, 0.4], [4.5, 0.4]],
-  'Retatrutide': [[0.5, 0.4], [1, 0.5], [2, 0.65], [4, 0.75], [6, 0.78], [8, 0.8], [12, 0.85]]
-};
-
-function getTypicalWeeklyLossForDose(medName, doseMg) {
-  const byDose = TYPICAL_WEEKLY_LOSS_BY_DOSE[medName];
-  if (byDose && byDose.length > 0 && doseMg != null && !isNaN(doseMg)) {
-    let rate = byDose[0][1];
-    for (const [dose, r] of byDose) {
-      if (doseMg >= dose) rate = r;
-    }
-    return rate;
-  }
-  return TYPICAL_WEEKLY_LOSS[medName] ?? TYPICAL_WEEKLY_LOSS['Semaglutide'] ?? 0.5;
-}
-
-// Simple meal estimator: common foods (cal, protein, carbs, fat per serving; optional hydrationOz)
-const COMMON_FOODS = {
-  'egg': { cal: 70, protein: 6, carbs: 0.5, fat: 5 },
-  'eggs': { cal: 70, protein: 6, carbs: 0.5, fat: 5 },
-  'toast': { cal: 80, protein: 3, carbs: 14, fat: 1 },
-  'bread': { cal: 80, protein: 3, carbs: 14, fat: 1 },
-  'chicken breast': { cal: 165, protein: 31, carbs: 0, fat: 4 },
-  'chicken thigh': { cal: 209, protein: 26, carbs: 0, fat: 11 },
-  'chicken': { cal: 165, protein: 31, carbs: 0, fat: 4 },
-  'turkey': { cal: 135, protein: 30, carbs: 0, fat: 1 },
-  'salmon': { cal: 208, protein: 20, carbs: 0, fat: 13 },
-  'tilapia': { cal: 110, protein: 23, carbs: 0, fat: 2 },
-  'shrimp': { cal: 100, protein: 24, carbs: 0.5, fat: 0.3 },
-  'tuna': { cal: 130, protein: 28, carbs: 0, fat: 1 },
-  'ground beef': { cal: 215, protein: 24, carbs: 0, fat: 13 },
-  'steak': { cal: 270, protein: 26, carbs: 0, fat: 17 },
-  'bacon': { cal: 45, protein: 3, carbs: 0, fat: 3 },
-  'pork chop': { cal: 250, protein: 26, carbs: 0, fat: 15 },
-  'greek yogurt': { cal: 100, protein: 17, carbs: 6, fat: 0.7 },
-  'yogurt': { cal: 100, protein: 10, carbs: 15, fat: 2 },
-  'cottage cheese': { cal: 120, protein: 14, carbs: 6, fat: 5 },
-  'protein shake': { cal: 120, protein: 24, carbs: 3, fat: 1 },
-  'protein bar': { cal: 200, protein: 20, carbs: 22, fat: 6 },
-  'oatmeal': { cal: 150, protein: 5, carbs: 27, fat: 3 },
-  'oats': { cal: 150, protein: 5, carbs: 27, fat: 3 },
-  'rice': { cal: 205, protein: 4, carbs: 45, fat: 0.4 },
-  'quinoa': { cal: 220, protein: 8, carbs: 39, fat: 4 },
-  'pasta': { cal: 220, protein: 8, carbs: 43, fat: 1 },
-  'sweet potato': { cal: 103, protein: 2, carbs: 24, fat: 0 },
-  'potato': { cal: 160, protein: 2, carbs: 37, fat: 0 },
-  'broccoli': { cal: 55, protein: 4, carbs: 11, fat: 0.6 },
-  'spinach': { cal: 23, protein: 3, carbs: 4, fat: 0.4 },
-  'kale': { cal: 35, protein: 3, carbs: 4, fat: 1 },
-  'asparagus': { cal: 20, protein: 2, carbs: 4, fat: 0 },
-  'green beans': { cal: 35, protein: 2, carbs: 8, fat: 0 },
-  'carrots': { cal: 25, protein: 1, carbs: 6, fat: 0 },
-  'cauliflower': { cal: 25, protein: 2, carbs: 5, fat: 0 },
-  'salad': { cal: 50, protein: 3, carbs: 8, fat: 1 },
-  'chicken salad': { cal: 350, protein: 30, carbs: 12, fat: 20 },
-  'caesar salad': { cal: 360, protein: 12, carbs: 18, fat: 28 },
-  'avocado': { cal: 240, protein: 3, carbs: 13, fat: 22 },
-  'banana': { cal: 105, protein: 1, carbs: 27, fat: 0.4 },
-  'apple': { cal: 95, protein: 0.5, carbs: 25, fat: 0.3 },
-  'orange': { cal: 62, protein: 1, carbs: 15, fat: 0.2 },
-  'berries': { cal: 50, protein: 1, carbs: 12, fat: 0.3 },
-  'strawberries': { cal: 50, protein: 1, carbs: 12, fat: 0.3 },
-  'blueberries': { cal: 85, protein: 1, carbs: 21, fat: 0.5 },
-  'grapefruit': { cal: 52, protein: 1, carbs: 13, fat: 0.2 },
-  'pear': { cal: 100, protein: 1, carbs: 27, fat: 0.2 },
-  'nuts': { cal: 170, protein: 6, carbs: 6, fat: 15 },
-  'almonds': { cal: 170, protein: 6, carbs: 6, fat: 15 },
-  'peanut butter': { cal: 190, protein: 8, carbs: 7, fat: 16 },
-  'hummus': { cal: 70, protein: 2, carbs: 6, fat: 5 },
-  'cheese': { cal: 110, protein: 7, carbs: 1, fat: 9 },
-  'milk': { cal: 150, protein: 8, carbs: 12, fat: 8 },
-  'almond milk': { cal: 40, protein: 1, carbs: 2, fat: 3 },
-  'smoothie': { cal: 200, protein: 5, carbs: 35, fat: 5 },
-  'soup': { cal: 120, protein: 6, carbs: 15, fat: 4 },
-  'chicken soup': { cal: 90, protein: 8, carbs: 8, fat: 3 },
-  'burger': { cal: 350, protein: 20, carbs: 30, fat: 18 },
-  'pizza': { cal: 285, protein: 12, carbs: 36, fat: 10 },
-  'sandwich': { cal: 350, protein: 18, carbs: 40, fat: 12 },
-  'taco': { cal: 170, protein: 8, carbs: 13, fat: 10 },
-  'burrito': { cal: 500, protein: 22, carbs: 55, fat: 22 },
-  'coffee': { cal: 2, protein: 0, carbs: 0, fat: 0, hydrationOz: 8 },
-  'water': { cal: 0, protein: 0, carbs: 0, fat: 0, hydrationOz: 8 },
-  'tea': { cal: 2, protein: 0, carbs: 0, fat: 0, hydrationOz: 8 },
-  'soda': { cal: 140, protein: 0, carbs: 39, fat: 0, hydrationOz: 12 },
-  'juice': { cal: 110, protein: 1, carbs: 26, fat: 0, hydrationOz: 8 },
-  'energy drink': { cal: 110, protein: 0, carbs: 28, fat: 0, hydrationOz: 8 }
-};
-
-function estimateMealFromDescription(desc) {
-  const text = (desc || '').toLowerCase().trim();
-  if (!text) return null;
-  const hasOz = /\d+\s*oz/i.test(text);
-  let mult = 1;
-  let rest = text;
-  if (!hasOz) {
-    const numMatch = text.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
-    if (numMatch) {
-      mult = parseFloat(numMatch[1]);
-      rest = numMatch[2].trim();
-    }
-  }
-  const ozMatch = rest.match(/(\d+)\s*oz/i);
-  const oz = ozMatch ? parseInt(ozMatch[1], 10) : null;
-  const withoutOz = oz != null ? rest.replace(/\d+\s*oz\s*/gi, ' ').replace(/\s+/g, ' ').trim() : rest;
-  const key = Object.keys(COMMON_FOODS).find(k => withoutOz === k || withoutOz.includes(k));
-  const food = key ? COMMON_FOODS[key] : null;
-  if (!food) return null;
-  const hydrationOz = (oz != null && (key === 'water' || key === 'coffee' || key === 'tea')) ? oz : (food.hydrationOz ?? 0) * mult;
-  return {
-    label: desc.trim().slice(0, 40),
-    calories: Math.round((food.cal || 0) * mult),
-    protein: Math.round((food.protein || 0) * mult),
-    carbs: Math.round((food.carbs || 0) * mult),
-    fat: Math.round((food.fat || 0) * mult),
-    hydrationOz: hydrationOz ? Math.round(hydrationOz) : 0
-  };
-}
-
-// Phase timelines for each medication category (like glapp.io)
-const PHASE_TIMELINES = {
-  'GLP-1': {
-    phases: [
-      {
-        name: 'Absorption',
-        hours: [0, 24],
-        icon: '‚¨ÜÔ∏è',
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-500/10',
-        borderColor: 'border-blue-500/30',
-        description: 'Medication entering your bloodstream',
-        whatsHappening: [
-          'Subcutaneous absorption beginning',
-          'Medication reaching circulation',
-          'Initial receptor binding starting'
-        ],
-        whatToExpect: [
-          'Minimal effects yet',
-          'Some people feel slight appetite reduction',
-          'Side effects unlikely'
-        ],
-        tips: [
-          'Stay hydrated',
-          'Eat normally today',
-          'Note injection site for rotation'
-        ]
-      },
-      {
-        name: 'Rising Effect',
-        hours: [24, 48],
-        icon: 'üìà',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: 'Effects building as levels increase',
-        whatsHappening: [
-          'GLP-1 receptors activating',
-          'Gastric emptying slowing',
-          'Appetite signals decreasing'
-        ],
-        whatToExpect: [
-          'Appetite reduction becoming noticeable',
-          'Feeling fuller on less food',
-          'Nausea may begin (usually mild)'
-        ],
-        tips: [
-          'Eat smaller portions',
-          'Choose bland foods if nauseated',
-          'Sip water throughout day'
-        ]
-      },
-      {
-        name: 'Peak Effect',
-        hours: [48, 96],
-        icon: 'üéØ',
-        color: 'text-green-500',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Maximum medication concentration and effectiveness',
-        whatsHappening: [
-          'Peak blood concentration reached',
-          'Maximum appetite suppression',
-          'Strongest therapeutic effects'
-        ],
-        whatToExpect: [
-          'Significant reduction in hunger',
-          '"Food noise" at minimum',
-          'Highest nausea risk (if occurs)'
-        ],
-        tips: [
-          'Focus on protein intake',
-          'Small, frequent meals work best',
-          'Ginger or bland foods for nausea',
-          'This is prime weight loss window'
-        ]
-      },
-      {
-        name: 'Cruise Phase',
-        hours: [96, 144],
-        icon: '‚ö°',
-        color: 'text-cyan-400',
-        bgColor: 'bg-cyan-500/10',
-        borderColor: 'border-cyan-500/30',
-        description: 'Optimal therapeutic window with stable effects',
-        whatsHappening: [
-          'Stable medication levels',
-          'Consistent appetite control',
-          'Fat oxidation elevated'
-        ],
-        whatToExpect: [
-          'Steady, comfortable appetite suppression',
-          'Side effects minimal or resolved',
-          'Best overall feeling of the week'
-        ],
-        tips: [
-          'Exercise most effective now',
-          'Maintain consistent eating schedule',
-          'Enjoy the stable energy',
-          'Track your weight - best time to see loss'
-        ]
-      },
-      {
-        name: 'Declining',
-        hours: [144, 168],
-        icon: 'üìâ',
-        color: 'text-orange-400',
-        bgColor: 'bg-orange-500/10',
-        borderColor: 'border-orange-500/30',
-        description: 'Medication levels dropping, effects fading',
-        whatsHappening: [
-          'Blood concentration decreasing',
-          'Receptor activity reducing',
-          'Effects gradually waning'
-        ],
-        whatToExpect: [
-          'Appetite slowly returning',
-          'Food thoughts more frequent',
-          'Still have appetite control, but less'
-        ],
-        tips: [
-          'Prepare for next injection',
-          'Stay mindful of portions',
-          'Normal to feel hungrier',
-          'Next dose coming soon'
-        ]
-      },
-      {
-        name: 'Trough',
-        hours: [168, 999],
-        icon: 'üíâ',
-        color: 'text-red-400',
-        bgColor: 'bg-red-500/10',
-        borderColor: 'border-red-500/30',
-        description: 'Time for next injection',
-        whatsHappening: [
-          'Medication mostly cleared',
-          'Baseline appetite returning',
-          'Ready for next dose'
-        ],
-        whatToExpect: [
-          'Hunger similar to pre-medication',
-          'Food noise may return',
-          'Effects minimal'
-        ],
-        tips: [
-          'Inject your next dose today',
-          'Plan your injection timing',
-          'Cycle starts over tomorrow',
-          'Consider injection site rotation'
-        ]
-      }
-    ]
-  },
-  'GLP-1/GIP': {
-    phases: [
-      {
-        name: 'Absorption',
-        hours: [0, 24],
-        icon: '‚¨ÜÔ∏è',
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-500/10',
-        borderColor: 'border-blue-500/30',
-        description: 'Dual agonist entering system',
-        whatsHappening: [
-          'GLP-1 and GIP receptors being activated',
-          'Medication absorbing from injection site',
-          'Initial metabolic changes starting'
-        ],
-        whatToExpect: [
-          'Minimal effects in first hours',
-          'Some energy changes possible',
-          'Side effects rare this early'
-        ],
-        tips: [
-          'Eat a balanced meal today',
-          'Stay well hydrated',
-          'Normal activity fine'
-        ]
-      },
-      {
-        name: 'Rising Effect',
-        hours: [24, 48],
-        icon: 'üìà',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: 'Dual action ramping up',
-        whatsHappening: [
-          'GLP-1 reducing appetite',
-          'GIP improving insulin sensitivity',
-          'Metabolic rate increasing'
-        ],
-        whatToExpect: [
-          'Appetite reduction starting',
-          'Possible energy increase',
-          'Mild GI effects may begin'
-        ],
-        tips: [
-          'Notice how you feel with food',
-          'Smaller portions work better',
-          'Stay hydrated'
-        ]
-      },
-      {
-        name: 'Peak Effect',
-        hours: [48, 96],
-        icon: 'üéØ',
-        color: 'text-green-500',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Maximum dual-agonist effect',
-        whatsHappening: [
-          'Peak concentration achieved',
-          'Both GLP-1 and GIP maximally active',
-          'Strongest appetite suppression',
-          'Maximum metabolic effects'
-        ],
-        whatToExpect: [
-          'Significant hunger reduction',
-          'Enhanced fat burning',
-          'Possible nausea or GI effects',
-          'Steady energy levels'
-        ],
-        tips: [
-          'High protein meals critical',
-          'Eat slowly and mindfully',
-          'Best weight loss window - stay active',
-          'Manage any GI symptoms'
-        ]
-      },
-      {
-        name: 'Cruise Phase',
-        hours: [96, 144],
-        icon: '‚ö°',
-        color: 'text-cyan-400',
-        bgColor: 'bg-cyan-500/10',
-        borderColor: 'border-cyan-500/30',
-        description: 'Sweet spot - stable powerful effects',
-        whatsHappening: [
-          'Optimal therapeutic range',
-          'Sustained appetite control',
-          'Consistent metabolic boost',
-          'Best insulin sensitivity'
-        ],
-        whatToExpect: [
-          'Comfortable appetite suppression',
-          'Stable energy all day',
-          'Side effects usually minimal',
-          'Feel your best this phase'
-        ],
-        tips: [
-          'Great time for exercise',
-          'Body composition changes most visible',
-          'Maintain protein goals',
-          'Enjoy the smooth effects'
-        ]
-      },
-      {
-        name: 'Declining',
-        hours: [144, 168],
-        icon: 'üìâ',
-        color: 'text-orange-400',
-        bgColor: 'bg-orange-500/10',
-        borderColor: 'border-orange-500/30',
-        description: 'Effects gradually fading',
-        whatsHappening: [
-          'Medication levels dropping',
-          'Appetite control lessening',
-          'Still therapeutic but reduced'
-        ],
-        whatToExpect: [
-          'Hunger slowly returning',
-          'Still have control, just less',
-          'Energy remains good'
-        ],
-        tips: [
-          'Stay mindful of portions',
-          'Plan for next injection',
-          'Normal to notice changes'
-        ]
-      },
-      {
-        name: 'Trough',
-        hours: [168, 999],
-        icon: 'üíâ',
-        color: 'text-red-400',
-        bgColor: 'bg-red-500/10',
-        borderColor: 'border-red-500/30',
-        description: 'Next injection due',
-        whatsHappening: [
-          'Low medication levels',
-          'Baseline returning',
-          'Time to re-dose'
-        ],
-        whatToExpect: [
-          'Appetite more normal',
-          'Ready for next dose',
-          'Effects mostly gone'
-        ],
-        tips: [
-          'Inject today for best results',
-          'Consistent timing matters',
-          'Rotate injection sites'
-        ]
-      }
-    ]
-  },
-  'Triple Agonist': {
-    phases: [
-      {
-        name: 'Absorption',
-        hours: [0, 24],
-        icon: '‚¨ÜÔ∏è',
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-500/10',
-        borderColor: 'border-blue-500/30',
-        description: 'Triple-action medication loading',
-        whatsHappening: [
-          'GLP-1, GIP, and Glucagon receptors activating',
-          'Complex metabolic changes initiating',
-          'Medication entering circulation'
-        ],
-        whatToExpect: [
-          'Minimal effects first hours',
-          'Possible energy changes',
-          'Side effects unlikely yet'
-        ],
-        tips: [
-          'Eat normally today',
-          'Stay hydrated',
-          'Monitor how you feel'
-        ]
-      },
-      {
-        name: 'Rising Effect',
-        hours: [24, 48],
-        icon: 'üìà',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: 'Triple receptor activation building',
-        whatsHappening: [
-          'All three receptors becoming active',
-          'Appetite suppression starting',
-          'Metabolic rate increasing',
-          'Energy expenditure rising'
-        ],
-        whatToExpect: [
-          'Noticeable appetite reduction',
-          'Possible energy boost',
-          'Mild GI effects may start'
-        ],
-        tips: [
-          'Reduce portion sizes',
-          'High protein priority',
-          'Normal activity encouraged'
-        ]
-      },
-      {
-        name: 'Peak Power',
-        hours: [48, 96],
-        icon: 'üî•',
-        color: 'text-green-500',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Maximum triple-agonist effect',
-        whatsHappening: [
-          'Peak blood levels achieved',
-          'All three pathways maximally active',
-          'Strongest appetite suppression',
-          'Maximum fat burning',
-          'Highest energy expenditure'
-        ],
-        whatToExpect: [
-          'Dramatic hunger reduction',
-          'Increased heart rate possible',
-          'Enhanced thermogenesis',
-          'Strongest effects of the week'
-        ],
-        tips: [
-          'Monitor heart rate if concerned',
-          'Prioritize protein intake',
-          'Prime fat loss window',
-          'Stay well hydrated',
-          'Listen to your body'
-        ]
-      },
-      {
-        name: 'Cruise Phase',
-        hours: [96, 144],
-        icon: '‚ö°',
-        color: 'text-cyan-400',
-        bgColor: 'bg-cyan-500/10',
-        borderColor: 'border-cyan-500/30',
-        description: 'Sustained triple action',
-        whatsHappening: [
-          'Stable therapeutic levels',
-          'Consistent multi-pathway effects',
-          'Optimal metabolic state'
-        ],
-        whatToExpect: [
-          'Excellent appetite control',
-          'Steady elevated energy',
-          'Side effects usually minimal',
-          'Best overall feeling'
-        ],
-        tips: [
-          'Great time for intense workouts',
-          'Body recomposition most effective',
-          'Maintain hydration and electrolytes',
-          'Enjoy the powerful effects'
-        ]
-      },
-      {
-        name: 'Declining',
-        hours: [144, 168],
-        icon: 'üìâ',
-        color: 'text-orange-400',
-        bgColor: 'bg-orange-500/10',
-        borderColor: 'border-orange-500/30',
-        description: 'Effects tapering off',
-        whatsHappening: [
-          'Medication levels dropping',
-          'Receptor activity decreasing',
-          'Effects gradually fading'
-        ],
-        whatToExpect: [
-          'Appetite slowly returning',
-          'Energy normalizing',
-          'Still effective, but less'
-        ],
-        tips: [
-          'Stay mindful with food',
-          'Prepare for next dose',
-          'Normal transition'
-        ]
-      },
-      {
-        name: 'Trough',
-        hours: [168, 999],
-        icon: 'üíâ',
-        color: 'text-red-400',
-        bgColor: 'bg-red-500/10',
-        borderColor: 'border-red-500/30',
-        description: 'Re-dose needed',
-        whatsHappening: [
-          'Low medication levels',
-          'Baseline state returning',
-          'Time for next injection'
-        ],
-        whatToExpect: [
-          'Hunger more normal',
-          'Energy baseline',
-          'Ready for next cycle'
-        ],
-        tips: [
-          'Inject today',
-          'Rotate injection site',
-          'Cycle restarts tomorrow'
-        ]
-      }
-    ]
-  },
-  'Hormone': {
-    phases: [
-      {
-        name: 'Loading',
-        hours: [0, 24],
-        icon: '‚¨ÜÔ∏è',
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-500/10',
-        borderColor: 'border-blue-500/30',
-        description: 'Testosterone entering system',
-        whatsHappening: [
-          'Ester slowly releasing hormone',
-          'Initial absorption from injection site',
-          'Blood levels beginning to rise'
-        ],
-        whatToExpect: [
-          'No immediate effects',
-          'Possible injection site soreness',
-          'Normal energy levels'
-        ],
-        tips: [
-          'Massage injection site gently',
-          'Stay active - promotes absorption',
-          'Expect effects tomorrow onward'
-        ]
-      },
-      {
-        name: 'Rising',
-        hours: [24, 72],
-        icon: 'üìà',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: 'Testosterone levels climbing',
-        whatsHappening: [
-          'Blood testosterone increasing',
-          'Androgen receptors activating',
-          'Protein synthesis ramping up'
-        ],
-        whatToExpect: [
-          'Energy levels improving',
-          'Mood enhancement starting',
-          'Libido may increase',
-          'Motivation improving'
-        ],
-        tips: [
-          'Great time to start workouts',
-          'Increased protein synthesis - eat more protein',
-          'Notice mood and energy improvements'
-        ]
-      },
-      {
-        name: 'Peak',
-        hours: [72, 96],
-        icon: 'üí™',
-        color: 'text-green-500',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Maximum testosterone levels',
-        whatsHappening: [
-          'Peak blood concentration',
-          'Maximum anabolic effects',
-          'Optimal androgen receptor activation',
-          'Strongest muscle-building window'
-        ],
-        whatToExpect: [
-          'Peak energy and motivation',
-          'Best gym performance',
-          'Heightened libido',
-          'Confident, focused mood',
-          'Possible oily skin/acne'
-        ],
-        tips: [
-          'Schedule heavy workouts now',
-          'Maximum muscle growth potential',
-          'High protein intake critical',
-          'Manage skin if needed',
-          'Leverage the peak performance'
-        ]
-      },
-      {
-        name: 'Cruise',
-        hours: [96, 144],
-        icon: '‚ö°',
-        color: 'text-cyan-400',
-        bgColor: 'bg-cyan-500/10',
-        borderColor: 'border-cyan-500/30',
-        description: 'Optimal therapeutic range',
-        whatsHappening: [
-          'Stable elevated testosterone',
-          'Consistent anabolic effects',
-          'Sustained energy and recovery'
-        ],
-        whatToExpect: [
-          'Excellent overall feeling',
-          'Stable high energy',
-          'Good recovery between workouts',
-          'Consistent mood'
-        ],
-        tips: [
-          'Maintain training intensity',
-          'Focus on progressive overload',
-          'Best time for consistent gains',
-          'Enjoy the stable effects'
-        ]
-      },
-      {
-        name: 'Declining',
-        hours: [144, 168],
-        icon: 'üìâ',
-        color: 'text-orange-400',
-        bgColor: 'bg-orange-500/10',
-        borderColor: 'border-orange-500/30',
-        description: 'Levels dropping toward baseline',
-        whatsHappening: [
-          'Testosterone levels falling',
-          'Still above baseline',
-          'Effects gradually reducing'
-        ],
-        whatToExpect: [
-          'Energy still good but declining',
-          'Still have therapeutic effects',
-          'Approaching next dose time'
-        ],
-        tips: [
-          'Training still productive',
-          'Normal to feel slight changes',
-          'Next injection coming soon'
-        ]
-      },
-      {
-        name: 'Trough',
-        hours: [168, 999],
-        icon: 'üíâ',
-        color: 'text-red-400',
-        bgColor: 'bg-red-500/10',
-        borderColor: 'border-red-500/30',
-        description: 'Next injection needed',
-        whatsHappening: [
-          'Levels at or approaching baseline',
-          'Time to re-dose for stability',
-          'Avoid prolonged trough'
-        ],
-        whatToExpect: [
-          'Energy returning to baseline',
-          'Ready for next injection',
-          'May notice slight mood dip if delayed'
-        ],
-        tips: [
-          'Inject today for consistency',
-          'Don\'t let levels drop too long',
-          'Stable levels = better results'
-        ]
-      }
-    ]
-  },
-  'Peptide': {
-    phases: [
-      {
-        name: 'Rapid Absorption',
-        hours: [0, 2],
-        icon: '‚ö°',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: 'Fast-acting peptide entering system',
-        whatsHappening: [
-          'Rapid peptide absorption',
-          'Quick circulation',
-          'Immediate receptor binding'
-        ],
-        whatToExpect: [
-          'Effects starting within minutes to hours',
-          'Depending on peptide type',
-          'Minimal side effects'
-        ],
-        tips: [
-          'Effects begin quickly',
-          'Stay hydrated',
-          'Monitor how you respond'
-        ]
-      },
-      {
-        name: 'Peak Effect',
-        hours: [2, 8],
-        icon: 'üéØ',
-        color: 'text-green-500',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Maximum peptide activity',
-        whatsHappening: [
-          'Peak blood concentration',
-          'Maximum receptor activation',
-          'Strongest therapeutic effects'
-        ],
-        whatToExpect: [
-          'Full peptide effects active',
-          'Healing/recovery processes enhanced',
-          'Optimal therapeutic window'
-        ],
-        tips: [
-          'Best time for targeted activity',
-          'Healing peptides: rest/recovery',
-          'GH peptides: fasted state ideal',
-          'Effects are strongest now'
-        ]
-      },
-      {
-        name: 'Active Phase',
-        hours: [8, 24],
-        icon: '‚ö°',
-        color: 'text-cyan-400',
-        bgColor: 'bg-cyan-500/10',
-        borderColor: 'border-cyan-500/30',
-        description: 'Continued therapeutic activity',
-        whatsHappening: [
-          'Sustained beneficial effects',
-          'Ongoing repair processes',
-          'Gradual clearance beginning'
-        ],
-        whatToExpect: [
-          'Effects still present',
-          'Recovery processes continuing',
-          'Gradually diminishing'
-        ],
-        tips: [
-          'Continue normal activities',
-          'Multiple daily doses often used',
-          'Next dose timing depends on peptide'
-        ]
-      },
-      {
-        name: 'Next Dose',
-        hours: [24, 999],
-        icon: 'üíâ',
-        color: 'text-orange-400',
-        bgColor: 'bg-orange-500/10',
-        borderColor: 'border-orange-500/30',
-        description: 'Ready for next injection',
-        whatsHappening: [
-          'Peptide mostly cleared',
-          'Effects resolved',
-          'Time for next dose if scheduled'
-        ],
-        whatToExpect: [
-          'Back to baseline',
-          'Ready for next injection',
-          'Frequency depends on protocol'
-        ],
-        tips: [
-          'BPC-157/TB-500: Often daily or EOD',
-          'GH peptides: Often multiple times daily',
-          'Follow your protocol',
-          'Consistency matters for results'
-        ]
-      }
-    ]
-  },
-  'SERM': {
-    phases: [
-      {
-        name: 'Absorption',
-        hours: [0, 6],
-        icon: '‚¨ÜÔ∏è',
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-500/10',
-        borderColor: 'border-blue-500/30',
-        description: 'Oral medication absorbing',
-        whatsHappening: [
-          'Enclomiphene absorbing from gut',
-          'Estrogen receptor blockade beginning',
-          'Pituitary signaling starting to shift'
-        ],
-        whatToExpect: [
-          'No immediate effects',
-          'Take with or without food as prescribed',
-          'Consistent daily timing helps'
-        ],
-        tips: [
-          'Take at same time each day',
-          'Stay consistent with dosing',
-          'Note any visual changes to report'
-        ]
-      },
-      {
-        name: 'Rising',
-        hours: [6, 12],
-        icon: 'üìà',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: 'LH/FSH stimulation building',
-        whatsHappening: [
-          'Estrogen receptors blocked in hypothalamus/pituitary',
-          'LH and FSH release increasing',
-          'Natural testosterone production ramping up'
-        ],
-        whatToExpect: [
-          'Effects building through the day',
-          'Cumulative effect over days to weeks',
-          'Peak benefit with steady-state dosing'
-        ],
-        tips: [
-          'Give it 1‚Äì2 weeks for steady state',
-          'Track mood and energy if desired',
-          'Report any visual symptoms'
-        ]
-      },
-      {
-        name: 'Peak',
-        hours: [12, 24],
-        icon: 'üéØ',
-        color: 'text-green-500',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Therapeutic effect before next dose',
-        whatsHappening: [
-          'Sustained LH/FSH elevation',
-          'Natural testosterone support',
-          'Estrogen modulation active'
-        ],
-        whatToExpect: [
-          'Stable effect with daily use',
-          'Steady state after 1‚Äì2 weeks of dosing',
-          'Long half-life means levels build over time'
-        ],
-        tips: [
-          'Take next dose at usual time',
-          'Consistency matters more than exact hour',
-          'Monitor with labs as directed'
-        ]
-      },
-      {
-        name: 'Next Dose',
-        hours: [24, 999],
-        icon: 'üíä',
-        color: 'text-orange-400',
-        bgColor: 'bg-orange-500/10',
-        borderColor: 'border-orange-500/30',
-        description: 'Time for next daily dose',
-        whatsHappening: [
-          'Levels still present (long half-life)',
-          'Cumulative effect maintained with daily dosing',
-          'Ready for next dose to maintain steady state'
-        ],
-        whatToExpect: [
-          'Take today‚Äôs dose to stay on schedule',
-          'Skipping can shift steady state',
-          'Effects persist due to long half-life'
-        ],
-        tips: [
-          'Take your daily dose today',
-          'Same time daily for best consistency',
-          'If missed, take when remembered per your protocol'
-        ]
-      }
-    ]
-  }
-};
-
-const INJECTION_ROUTES = ['SubQ', 'IM'];
-const BODY_LOCATIONS = ['Stomach', 'Thigh (Left)', 'Thigh (Right)', 'Arm (Left)', 'Arm (Right)', 'Glute (Left)', 'Glute (Right)', 'Upper Arm', 'Abdomen'];
-const SIDE_EFFECTS = ['Nausea', 'Fatigue', 'Headache', 'Injection Site Pain', 'Diarrhea', 'Constipation', 'Dizziness', 'Appetite Loss', 'Acid Reflux', 'Vomiting', 'Insomnia', 'Bloating'];
-const MEASUREMENT_TYPES = ['Neck', 'Chest', 'Waist', 'Hips', 'Bicep (L)', 'Bicep (R)', 'Thigh (L)', 'Thigh (R)', 'Calf (L)', 'Calf (R)'];
-
-// Helper: parse to a Date. For plain YYYY-MM-DD (pickers), local midnight that day.
-// For ISO datetimes (‚Ä¶T‚Ä¶Z / offset), use the **local** calendar day at local midnight ‚Äî not UTC YYYY-MM-DD slice
-// (that shifted injections & chart dots one day in US/evening‚Äìzone cases).
-const parseLocalDate = (dateString) => {
-  if (dateString instanceof Date) return new Date(dateString.getTime());
-  const s = typeof dateString === 'string' ? dateString.trim() : String(dateString).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const [y, m, d] = s.split('-').map(Number);
-    if (!y || !m || !d) return new Date(NaN);
-    return new Date(y, m - 1, d);
-  }
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s) || s.endsWith('Z')) {
-    const inst = new Date(s);
-    if (isNaN(inst.getTime())) return new Date(NaN);
-    return new Date(inst.getFullYear(), inst.getMonth(), inst.getDate());
-  }
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const [y, m, d] = s.slice(0, 10).split('-').map(Number);
-    if (!y || !m || !d) return new Date(NaN);
-    return new Date(y, m - 1, d);
-  }
-  const [year, month, day] = s.split('-').map(Number);
-  return new Date(year, month - 1, day);
-};
-
-// Today as YYYY-MM-DD in local timezone (fixes date picker showing "next day" in some timezones)
-const getTodayLocal = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-const formatDateLocal = (d) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-// Normalize any date string to YYYY-MM-DD for calendar-day comparison (ISO ‚Üí **local** calendar day)
-const toCalendarDay = (dateString) => {
-  if (!dateString && dateString !== 0) return '';
-  if (dateString instanceof Date) {
-    const d = dateString;
-    if (isNaN(d.getTime())) return '';
-    return formatDateLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
-  }
-  const s = String(dateString).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const d = parseLocalDate(dateString);
-  return isNaN(d.getTime()) ? '' : formatDateLocal(d);
-};
-
-// True if value yields a valid calendar day (used so bad/malformed entry dates don't crash charts or insights)
-const isValidEntryDate = (value) => {
-  const day = toCalendarDay(value);
-  if (!day) return false;
-  const d = parseLocalDate(day);
-  return d && Number.isFinite(d.getTime());
-};
-
-// Sort weight entries by date then id (same-day order = entry order). Use for "previous" / "current" / "start".
-const sortWeightByDateAsc = (entries) => [...entries].sort((a, b) => {
-  const d = parseLocalDate(a.date) - parseLocalDate(b.date);
-  return d !== 0 ? d : ((a.id || 0) - (b.id || 0));
-});
-const sortWeightByDateDesc = (entries) => [...entries].sort((a, b) => {
-  const d = parseLocalDate(b.date) - parseLocalDate(a.date);
-  return d !== 0 ? d : ((b.id || 0) - (a.id || 0));
-});
-
-const getVialRemainingMg = (v) => {
-  if (!v) return 0;
-  const r = v.remainingMg;
-  if (r !== undefined && r !== null && String(r) !== '' && !isNaN(Number(r))) return Number(r);
-  const t = v.totalMg;
-  if (t !== undefined && t !== null && !isNaN(Number(t))) return Number(t);
-  return 0;
-};
-
-/** Drop vials with no remaining product (inventory empty). */
-const pruneEmptyVials = (list) => {
-  if (!Array.isArray(list)) return [];
-  return list.filter((v) => getVialRemainingMg(v) > 0);
-};
-
-const PepTalk = () => {
-  const {
-    user,
-    authLoading: supabaseAuthLoading,
-    isConfigured: supabaseConfigured,
-    pendingCloudRestore,
-    resolveCloudRestore,
-    signIn: supabaseSignIn,
-    signUp: supabaseSignUp,
-    signOut: supabaseSignOut,
-    syncNow: supabaseSyncNow,
-  } = useSupabaseAuth();
-  const [cloudEmail, setCloudEmail] = useState('');
-  const [cloudPassword, setCloudPassword] = useState('');
-  const [cloudAuthMessage, setCloudAuthMessage] = useState('');
-  const [cloudBusy, setCloudBusy] = useState(false);
-  const [cloudOptOut, setCloudOptOut] = useState(() => {
-    try {
-      return typeof localStorage !== 'undefined' && localStorage.getItem('peptalk-cloud-opt-out') === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
-  const [backgroundSyncError, setBackgroundSyncError] = useState('');
-
-  const [activeTab, setActiveTab] = useState('summary');
-  const [weightEntries, setWeightEntries] = useState([]);
-  const [injectionEntries, setInjectionEntries] = useState([]);
-  const [measurementEntries, setMeasurementEntries] = useState([]);
-  const [progressPhotos, setProgressPhotos] = useState([]);
-  const [schedules, setSchedules] = useState([]);
-  const [titrationPlans, setTitrationPlans] = useState([]);
-  const [journalEntries, setJournalEntries] = useState([]);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [injectionHistorySort, setInjectionHistorySort] = useState('byMed'); // 'byMed' | 'byDate'
-  const [weightHistoryFilterDate, setWeightHistoryFilterDate] = useState('');
-  const [injectionHistoryFilterDate, setInjectionHistoryFilterDate] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [showSplash, setShowSplash] = useState(true);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [celebrationMessage, setCelebrationMessage] = useState('');
-  const [userProfile, setUserProfile] = useState({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
-  const [timeRange, setTimeRange] = useState('all');
-  const [activeToolSection, setActiveToolSection] = useState('calculator');
-  const [exportFormat, setExportFormat] = useState('json'); // 'json' | 'csv'
-  const [csvType, setCsvType] = useState('full'); // 'full' | 'weight' | 'injections'
-  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
-  const [wipeConfirmChecked, setWipeConfirmChecked] = useState(false);
-  const [showGraphicalSummary, setShowGraphicalSummary] = useState(false);
-  const [graphicalPdfBusy, setGraphicalPdfBusy] = useState(false);
-  const graphicalSummaryCaptureRef = useRef(null);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
-  const [updatePrompt, setUpdatePrompt] = useState(null);
-  const [showLowVialPopup, setShowLowVialPopup] = useState(false);
-  const previousActiveTabRef = useRef(null);
-  const [selectedVialId, setSelectedVialId] = useState(null);
-  const [vials, setVials] = useState([]);
-  const [vialMedication, setVialMedication] = useState('Semaglutide');
-  const [vialTotalMg, setVialTotalMg] = useState('');
-  const [vialUnit, setVialUnit] = useState('mg');
-  const [vialBacWaterMl, setVialBacWaterMl] = useState(''); // ml of bac water used for reconstitution
-  const [vialConcentrationForMl, setVialConcentrationForMl] = useState(''); // mg/ml when vial size is entered in ml
-  const [vialExpiry, setVialExpiry] = useState('');
-  const [vialReconstituted, setVialReconstituted] = useState(false);
-  const [vialReconstitutedDate, setVialReconstitutedDate] = useState('');
-  const [editingVialId, setEditingVialId] = useState(null);
-  const [vialRemainingMg, setVialRemainingMg] = useState('');
-
-  
-  // Graph visibility state
-  const [visibleLines, setVisibleLines] = useState({ weight: true, trend: true });
-  const [chartRangeWeeks, setChartRangeWeeks] = useState(0); // 0 = all, 4, 8, 12
-  const [insightsExpandedMed, setInsightsExpandedMed] = useState(null); // medication name or null
-  const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
-  const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
-  const [insightsChartRange, setInsightsChartRange] = useState('1m'); // '1w' | '1m' | '3m' | 'all' for estimated levels chart
-  const [insightsSideEffectsExpandedMed, setInsightsSideEffectsExpandedMed] = useState(null); // medication name expanded in side effects by day, or null
-  const [weeklyDoseWeightExcludedMeds, setWeeklyDoseWeightExcludedMeds] = useState([]); // med names hidden from Weekly dose & weight change table
-  /** 0 Sun ‚Ä¶ 6 Sat ‚Äî start of each 7-day bucket for Weekly dose & weight (default 1 = Monday) */
-  const [weeklyDoseWeekStartsOn, setWeeklyDoseWeekStartsOn] = useState(1);
-  const [goalGuideCategoryId, setGoalGuideCategoryId] = useState(null); // null = pick a goal; id = detail view
-  const [goalGuideSearch, setGoalGuideSearch] = useState('');
-  const [goalUserStack, setGoalUserStack] = useState([]); // medication names ‚Äî conceptual stack from Goals guide
-  const [goalStackInfoMed, setGoalStackInfoMed] = useState(null); // modal: which med to explain
-
-  // Weight form states
-  const [weight, setWeight] = useState('');
-  const [weightDate, setWeightDate] = useState(getTodayLocal());
-  const [editingWeight, setEditingWeight] = useState(null);
-  
-  // Fasting window tracker states (separate from weight)
-  const [fastingEntries, setFastingEntries] = useState([]);
-  const [fastingHours, setFastingHours] = useState('');
-  const [fastingDate, setFastingDate] = useState(getTodayLocal());
-  const [showFastingForm, setShowFastingForm] = useState(false);
-  const [editingFasting, setEditingFasting] = useState(null);
-  
-  // Notification states
-  const [notificationPermission, setNotificationPermission] = useState('default');
-  const [notificationSettings, setNotificationSettings] = useState({
-    injectionReminders: true,
-    reminderTime: '09:00',
-    overdueAlerts: true,
-    weightReminders: false,
-    weightReminderTime: '07:00'
-  });
-  const [dismissedAlerts, setDismissedAlerts] = useState([]); // Track dismissed alert IDs
-  
-  // Injection form states
-  const [injectionType, setInjectionType] = useState('Semaglutide');
-  const [injectionDose, setInjectionDose] = useState('');
-  const [injectionUnit, setInjectionUnit] = useState('mg');
-  const [injectionDate, setInjectionDate] = useState(getTodayLocal());
-  const [injectionTime, setInjectionTime] = useState('09:00');
-  const [injectionRoute, setInjectionRoute] = useState('SubQ');
-  const [injectionSite, setInjectionSite] = useState('Stomach');
-  const [injectionNotes, setInjectionNotes] = useState('');
-  const [selectedSideEffects, setSelectedSideEffects] = useState([]);
-  const [editingInjection, setEditingInjection] = useState(null);
-  const [showMedDropdown, setShowMedDropdown] = useState(false);
-  const [medSearchTerm, setMedSearchTerm] = useState('');
-  const [trialTargetMg, setTrialTargetMg] = useState(''); // protocol mg ‚Üí suggest units/mL (Log Injection)
-
-  // Measurement form states
-  const [measurementType, setMeasurementType] = useState('Waist');
-  const [measurementValue, setMeasurementValue] = useState('');
-  const [measurementDate, setMeasurementDate] = useState(getTodayLocal());
-
-  // Schedule form states
-  const [scheduleMed, setScheduleMed] = useState('Semaglutide');
-  const [scheduleFrequency, setScheduleFrequency] = useState(7);
-  const [scheduleDay, setScheduleDay] = useState(0);
-  const [scheduleStartDate, setScheduleStartDate] = useState(getTodayLocal());
-  const [scheduleType, setScheduleType] = useState('recurring'); // 'recurring' or 'specific_days'
-  const [selectedDays, setSelectedDays] = useState([]); // [0,1,2,3,4,5,6] for Sun-Sat
-
-  // Titration form states
-  const [titrationMed, setTitrationMed] = useState('Semaglutide');
-  const [titrationSteps, setTitrationSteps] = useState([{ dose: '', weeks: 4, unit: 'mg' }]);
-
-  // Calculator states
-  const [reconPeptideAmount, setReconPeptideAmount] = useState('');
-  const [reconPeptideUnit, setReconPeptideUnit] = useState('mg');
-  const [reconWaterAmount, setReconWaterAmount] = useState('');
-  const [reconDesiredDose, setReconDesiredDose] = useState('');
-  const [reconDesiredUnit, setReconDesiredUnit] = useState('mcg');
-  const [reconResult, setReconResult] = useState(null);
-  const [reconMode, setReconMode] = useState('vial_bac'); // 'vial_bac' = vial + bac ‚Üí concentration & dose per ml; 'vial_dose' = vial + dose ‚Üí bac water needed
-  const [reconVolumePerDose, setReconVolumePerDose] = useState('0.5'); // ml per dose when solving for bac water
-  // Calorie / TDEE calculator
-  const [tdeeAge, setTdeeAge] = useState('');
-  const [tdeeGender, setTdeeGender] = useState('male');
-  const [tdeeWeightLbs, setTdeeWeightLbs] = useState('');
-  const [tdeeHeightIn, setTdeeHeightIn] = useState('');
-  const [tdeeActivity, setTdeeActivity] = useState('moderate');
-  const [tdeeResult, setTdeeResult] = useState(null);
-
-  // Glucose & A1C (optional for GLP-1/diabetes)
-  const [glucoseEntries, setGlucoseEntries] = useState([]);
-  const [a1cEntries, setA1cEntries] = useState([]);
-  const [glucoseValue, setGlucoseValue] = useState('');
-  const [glucoseDate, setGlucoseDate] = useState(getTodayLocal());
-  const [glucoseType, setGlucoseType] = useState('fasting');
-  const [a1cValue, setA1cValue] = useState('');
-  const [a1cDate, setA1cDate] = useState(getTodayLocal());
-  const [showGlucoseForm, setShowGlucoseForm] = useState(false);
-  const [showA1cForm, setShowA1cForm] = useState(false);
-
-  // Bloodwork / Labs (any lab type: Testosterone, LDL, etc.)
-  const [labEntries, setLabEntries] = useState([]);
-  const [labType, setLabType] = useState('Testosterone');
-  const [labValue, setLabValue] = useState('');
-  const [labUnit, setLabUnit] = useState('ng/dL');
-  const [labDate, setLabDate] = useState(getTodayLocal());
-  const [showLabForm, setShowLabForm] = useState(false);
-  const LAB_TYPES = ['A1C', 'Testosterone', 'Free Testosterone', 'LDL', 'HDL', 'Triglycerides', 'Fasting Glucose', 'HbA1c', 'Creatinine', 'eGFR', 'Other'];
-
-  // Daily track (hydration & protein from meals + optional extra water)
-  const [dailyTrackEntries, setDailyTrackEntries] = useState([]);
-  const [nutritionLabel, setNutritionLabel] = useState('');
-  const [nutritionCalories, setNutritionCalories] = useState('');
-  const [nutritionProtein, setNutritionProtein] = useState('');
-  const [nutritionCarbs, setNutritionCarbs] = useState('');
-  const [nutritionFat, setNutritionFat] = useState('');
-  const [nutritionHydrationOz, setNutritionHydrationOz] = useState('');
-  const [extraHydrationOz, setExtraHydrationOz] = useState('');
-  const [mealDescription, setMealDescription] = useState('');
-
-  // More tab sub-section (when using 5 tabs)
-  const [activeMoreSection, setActiveMoreSection] = useState('profile');
-
-  // Journal form states
-  const [journalDate, setJournalDate] = useState(getTodayLocal());
-  const [journalContent, setJournalContent] = useState('');
-  const [journalMood, setJournalMood] = useState('neutral');
-  const [journalEnergy, setJournalEnergy] = useState(5);
-  const [journalHunger, setJournalHunger] = useState(5);
-  const [editingJournal, setEditingJournal] = useState(null);
-
-  const [sleepEntries, setSleepEntries] = useState([]);
-  const [sleepBedDate, setSleepBedDate] = useState(getTodayLocal());
-  const [sleepBedTime, setSleepBedTime] = useState('22:30');
-  const [sleepWakeTime, setSleepWakeTime] = useState('07:00');
-  const [sleepQuality, setSleepQuality] = useState(3);
-  const [sleepNotes, setSleepNotes] = useState('');
-  const [showSleepForm, setShowSleepForm] = useState(false);
-  const [editingSleep, setEditingSleep] = useState(null);
-  const [todayStepsInput, setTodayStepsInput] = useState('');
-  const [sideEffectSeverity, setSideEffectSeverity] = useState({});
-  const [storageQuotaWarning, setStorageQuotaWarning] = useState(false);
-  const [lastCloudSyncAt, setLastCloudSyncAt] = useState(() => {
-    try {
-      return typeof localStorage !== 'undefined' ? localStorage.getItem('peptalk-last-cloud-sync') || '' : '';
-    } catch {
-      return '';
-    }
-  });
-  const [toastUndo, setToastUndo] = useState(null);
-  const [vialPhotoDataUrl, setVialPhotoDataUrl] = useState(null);
-  const [vialPhotoRemoved, setVialPhotoRemoved] = useState(false);
-  const [faqOpenId, setFaqOpenId] = useState(null);
-
-  // Calendar state
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
-
-  const photoInputRef = useRef(null);
-  const moreSectionRefs = useRef({});
-  const undoTimerRef = useRef(null);
-
-  useEffect(() => { loadData(); }, []);
-
-  // Welcome/tutorial: after local data loads, when Supabase is off ‚Äî version-based only. When Supabase is on ‚Äî only after sign-in (version change or first signed-in tutorial). Cloud opt-out treats the app like local-only for welcome.
-  useEffect(() => {
-    if (isLoading) return;
-    if (supabaseConfigured && !cloudOptOut && (!user || supabaseAuthLoading)) return;
-    try {
-      const hideForever = localStorage.getItem('peptalk-welcome-hide-forever') === 'true';
-      if (hideForever) return;
-      const lastSeenVersion = localStorage.getItem('peptalk-welcome-version');
-      const seenSignedIn = localStorage.getItem('peptalk-welcome-seen-signed-in') === 'true';
-      const needVersionWelcome = lastSeenVersion !== APP_VERSION;
-      const needPostAuthWelcome = supabaseConfigured && !cloudOptOut && user && !seenSignedIn;
-      if (needVersionWelcome && (!supabaseConfigured || cloudOptOut)) setShowWelcomeModal(true);
-      else if (supabaseConfigured && !cloudOptOut && user && (needVersionWelcome || needPostAuthWelcome)) setShowWelcomeModal(true);
-    } catch (_) {}
-  }, [isLoading, supabaseConfigured, cloudOptOut, user, supabaseAuthLoading]);
-
-  useEffect(() => {
-    if (supabaseConfigured && !cloudOptOut && !user && !supabaseAuthLoading) setShowWelcomeModal(false);
-  }, [supabaseConfigured, cloudOptOut, user, supabaseAuthLoading]);
-
-  useEffect(() => {
-    const on = () => setIsOnline(true);
-    const off = () => setIsOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
-
-  useEffect(() => {
-    const onResult = (e) => {
-      if (e.detail?.ok) {
-        setBackgroundSyncError('');
-        const iso = new Date().toISOString();
-        setLastCloudSyncAt(iso);
-        try {
-          localStorage.setItem('peptalk-last-cloud-sync', iso);
-        } catch (_) {}
-      } else if (e.detail?.message) setBackgroundSyncError(e.detail.message);
-    };
-    window.addEventListener('peptalk:cloud-sync-result', onResult);
-    return () => window.removeEventListener('peptalk:cloud-sync-result', onResult);
-  }, []);
-
-  useEffect(() => {
-    if (!isOnline) setBackgroundSyncError('');
-  }, [isOnline]);
-
-  const updateManifestUrl = import.meta.env.VITE_APP_UPDATE_MANIFEST_URL || '';
-
-  useEffect(() => {
-    if (!updateManifestUrl || isLoading) return;
-    if (supabaseConfigured && !user && !cloudOptOut) return;
-    if (showWelcomeModal) return;
-    let cancelled = false;
-    const run = async () => {
-      const info = await checkForAppUpdate(updateManifestUrl, APP_VERSION);
-      if (cancelled || !info.updateAvailable) return;
-      setUpdatePrompt(info);
-    };
-    const t = setTimeout(run, 2800);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [isLoading, supabaseConfigured, cloudOptOut, user, showWelcomeModal, updateManifestUrl]);
-
-  useEffect(() => {
-    if (!updateManifestUrl || isLoading) return;
-    if (supabaseConfigured && !user && !cloudOptOut) return;
-    if (showWelcomeModal) return;
-    const onVis = () => {
-      if (document.visibilityState !== 'visible') return;
-      checkForAppUpdate(updateManifestUrl, APP_VERSION).then((info) => {
-        if (info.updateAvailable) setUpdatePrompt(info);
-      });
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [isLoading, supabaseConfigured, cloudOptOut, user, showWelcomeModal, updateManifestUrl]);
-
-  // Hide splash screen after data loads
-  useEffect(() => {
-    if (!isLoading) {
-      setTimeout(() => setShowSplash(false), 1500);
-    }
-  }, [isLoading]);
-
-  // Reschedule local (push) notifications when app loads and any reminder is on
-  useEffect(() => {
-    if (!isLoading && notificationPermission === 'granted' && (notificationSettings.injectionReminders || notificationSettings.weightReminders)) {
-      scheduleLocalInjectionReminders();
-    }
-  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime]);
-
-  // When on More tab, scroll the active section tab into view so Profile isn‚Äôt hidden off-screen
-  useEffect(() => {
-    if (activeTab !== 'more' || !activeMoreSection) return;
-    const el = moreSectionRefs.current[activeMoreSection];
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-  }, [activeTab, activeMoreSection]);
-  
-  // Celebration trigger function
-  const celebrate = (message) => {
-    setCelebrationMessage(message);
-    setShowCelebration(true);
-    setTimeout(() => setShowCelebration(false), 3000);
-  };
-  
-
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const weightData = localStorage.getItem('health-weight-entries');
-      const injectionData = localStorage.getItem('health-injection-entries');
-      const profileData = localStorage.getItem('health-user-profile');
-      const measurementData = localStorage.getItem('health-measurements');
-      const photoData = localStorage.getItem('health-photos');
-      const scheduleData = localStorage.getItem('health-schedules');
-      const titrationData = localStorage.getItem('health-titration');
-      const journalData = localStorage.getItem('health-journal');
-      const fastingData = localStorage.getItem('health-fasting-entries');
-      const notificationSettingsData = localStorage.getItem('health-notification-settings');
-      const dailyTrackData = localStorage.getItem('health-daily-track');
-      const glucoseData = localStorage.getItem('health-glucose-entries');
-      const a1cData = localStorage.getItem('health-a1c-entries');
-      const labData = localStorage.getItem('health-lab-entries');
-      if (weightData) {
-        const parsed = JSON.parse(weightData);
-        setWeightEntries(sortWeightByDateAsc(parsed));
-      }
-      if (injectionData) setInjectionEntries(JSON.parse(injectionData));
-      if (profileData) {
-        const parsed = JSON.parse(profileData);
-        setUserProfile({ height: 70, goalWeight: 200, ...parsed, hydrationGoalOz: parsed.hydrationGoalOz ?? 64 });
-      }
-      if (measurementData) setMeasurementEntries(JSON.parse(measurementData));
-      if (photoData) setProgressPhotos(JSON.parse(photoData));
-      if (scheduleData) setSchedules(JSON.parse(scheduleData));
-      if (titrationData) setTitrationPlans(JSON.parse(titrationData));
-      if (journalData) setJournalEntries(JSON.parse(journalData));
-      if (fastingData) setFastingEntries(JSON.parse(fastingData));
-      if (notificationSettingsData) setNotificationSettings(JSON.parse(notificationSettingsData));
-      if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
-      if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
-      if (a1cData) setA1cEntries(JSON.parse(a1cData));
-      if (labData) setLabEntries(JSON.parse(labData));
-      const sleepData = localStorage.getItem('health-sleep-entries');
-      if (sleepData) {
-        try {
-          const parsed = JSON.parse(sleepData);
-          if (Array.isArray(parsed)) setSleepEntries(parsed);
-        } catch (_) { /* ignore */ }
-      }
-      const vialsData = localStorage.getItem('health-vials');
-      if (vialsData) {
-        const parsed = JSON.parse(vialsData);
-        const normalized = parsed.map(v => ({ ...v, remainingMg: v.remainingMg ?? v.totalMg }));
-        const pruned = pruneEmptyVials(normalized);
-        if (pruned.length !== normalized.length) saveData('health-vials', pruned);
-        setVials(pruned);
-      }
-      const weeklyDoseExcluded = localStorage.getItem('health-weekly-dose-weight-excluded-meds');
-      if (weeklyDoseExcluded) {
-        try {
-          const parsed = JSON.parse(weeklyDoseExcluded);
-          if (Array.isArray(parsed)) setWeeklyDoseWeightExcludedMeds(parsed);
-        } catch (_) { /* ignore */ }
-      }
-      const weeklyDoseWeekStart = localStorage.getItem('health-weekly-dose-week-starts-on');
-      if (weeklyDoseWeekStart != null && weeklyDoseWeekStart !== '') {
-        try {
-          const parsed = JSON.parse(weeklyDoseWeekStart);
-          if (typeof parsed === 'number' && parsed >= 0 && parsed <= 6) setWeeklyDoseWeekStartsOn(parsed);
-        } catch (_) { /* ignore */ }
-      }
-      const goalsStackData = localStorage.getItem('health-goals-user-stack');
-      if (goalsStackData) {
-        try {
-          const parsed = JSON.parse(goalsStackData);
-          if (Array.isArray(parsed)) setGoalUserStack(parsed.filter((x) => typeof x === 'string'));
-        } catch (_) { /* ignore */ }
-      }
-
-      // Check notification permission status (web vs native)
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const { LocalNotifications } = await import('@capacitor/local-notifications');
-          const perm = await LocalNotifications.checkPermissions();
-          setNotificationPermission(perm.display === 'granted' ? 'granted' : perm.display === 'denied' ? 'denied' : 'default');
-        } catch (_) {
-          setNotificationPermission('default');
-        }
-      } else if ('Notification' in window) {
-        setNotificationPermission(Notification.permission);
-      }
-    } catch (error) {
-      console.log('Loading data:', error);
-    }
-    setIsLoading(false);
-  };
-
-  const saveData = (key, data) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(data));
-      setStorageQuotaWarning(false);
-      scheduleCloudSync();
-      return true;
-    } catch (error) {
-      console.error('Error saving:', error);
-      const name = error?.name || '';
-      const code = error?.code;
-      if (name === 'QuotaExceededError' || code === 22) setStorageQuotaWarning(true);
-      return false;
-    }
-  };
-
-  const pushUndoToast = (message, onUndo) => {
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setToastUndo({ message, onUndo });
-    undoTimerRef.current = setTimeout(() => {
-      setToastUndo(null);
-      undoTimerRef.current = null;
-    }, 8000);
-  };
-
-  // Form reset functions
-  const resetWeightForm = () => { setWeight(''); setWeightDate(getTodayLocal()); setEditingWeight(null); setShowAddForm(false); };
-  const resetInjectionForm = () => { setInjectionType('Semaglutide'); setInjectionDose(''); setInjectionUnit('mg'); setInjectionDate(getTodayLocal()); setInjectionTime('09:00'); setInjectionRoute('SubQ'); setInjectionSite('Stomach'); setInjectionNotes(''); setSelectedSideEffects([]); setSideEffectSeverity({}); setEditingInjection(null); setShowAddForm(false); setShowMedDropdown(false); setMedSearchTerm(''); setSelectedVialId(null); setTrialTargetMg(''); };
-  const resetMeasurementForm = () => { setMeasurementType('Waist'); setMeasurementValue(''); setMeasurementDate(getTodayLocal()); setShowAddForm(false); };
-  const resetJournalForm = () => { setJournalContent(''); setJournalMood('neutral'); setJournalEnergy(5); setJournalHunger(5); setJournalDate(getTodayLocal()); setEditingJournal(null); setShowAddForm(false); };
-  const resetFastingForm = () => { setFastingHours(''); setFastingDate(getTodayLocal()); setEditingFasting(null); setShowFastingForm(false); };
-
-  // CRUD operations
-  const addOrUpdateWeight = () => {
-    if (!weight || isNaN(parseFloat(weight))) return;
-    const newWeight = parseFloat(weight);
-    let updated = editingWeight 
-      ? weightEntries.map(e => e.id === editingWeight.id ? { ...e, weight: newWeight, date: weightDate } : e)
-      : [...weightEntries, { id: Date.now(), weight: newWeight, date: weightDate }];
-    // Store in chronological order (date asc, then id for same-day)
-    updated = sortWeightByDateAsc(updated);
-    
-    // Check for milestones and celebrate! Use date/time order, not array position.
-    if (!editingWeight && weightEntries.length > 0) {
-      const byDateDesc = sortWeightByDateDesc(weightEntries);
-      const byDateAsc = sortWeightByDateAsc(weightEntries);
-      const oldWeight = byDateDesc[0].weight;   // most recent entry by date (and time via id)
-      const startWeight = byDateAsc[0].weight; // oldest entry by date
-      const weightLost = oldWeight - newWeight;
-      const totalLost = startWeight - newWeight;
-      
-      if (weightLost >= 1) celebrate('üéâ Down ' + weightLost.toFixed(1) + ' lbs!');
-      if (Math.floor(totalLost) % 10 === 0 && totalLost >= 10) celebrate('üèÜ ' + Math.floor(totalLost) + ' lbs lost total!');
-      if (userProfile.goalWeight && newWeight <= userProfile.goalWeight) celebrate('üéØ Goal Weight Reached!');
-    }
-    
-    setWeightEntries(updated);
-    saveData('health-weight-entries', updated);
-    resetWeightForm();
-  };
-
-  const deleteWeight = (id) => {
-    const removed = weightEntries.find(e => e.id === id);
-    if (!removed) return;
-    const prev = weightEntries;
-    const updated = prev.filter(e => e.id !== id);
-    setWeightEntries(updated);
-    if (!saveData('health-weight-entries', updated)) {
-      setWeightEntries(prev);
-      return;
-    }
-    pushUndoToast('Weight entry removed', () => {
-      const restored = sortWeightByDateAsc([...updated, removed]);
-      setWeightEntries(restored);
-      saveData('health-weight-entries', restored);
-    });
-  };
-
-  // Glucose & A1C CRUD
-  const addGlucose = () => {
-    const v = parseFloat(glucoseValue);
-    if (!glucoseValue || isNaN(v) || v < 20 || v > 500) return;
-    const updated = [...glucoseEntries, { id: Date.now(), date: glucoseDate, value: v, type: glucoseType }];
-    updated.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    setGlucoseEntries(updated);
-    saveData('health-glucose-entries', updated);
-    setGlucoseValue('');
-    setGlucoseDate(getTodayLocal());
-    setShowGlucoseForm(false);
-  };
-  const deleteGlucose = (id) => {
-    const updated = glucoseEntries.filter(e => e.id !== id);
-    setGlucoseEntries(updated);
-    saveData('health-glucose-entries', updated);
-  };
-  const addA1c = () => {
-    const v = parseFloat(a1cValue);
-    if (!a1cValue || isNaN(v) || v < 4 || v > 15) return;
-    const updated = [...a1cEntries, { id: Date.now(), date: a1cDate, value: v }];
-    updated.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    setA1cEntries(updated);
-    saveData('health-a1c-entries', updated);
-    setA1cValue('');
-    setA1cDate(getTodayLocal());
-    setShowA1cForm(false);
-  };
-  const deleteA1c = (id) => {
-    const updated = a1cEntries.filter(e => e.id !== id);
-    setA1cEntries(updated);
-    saveData('health-a1c-entries', updated);
-  };
-
-  const addLabEntry = () => {
-    const v = parseFloat(labValue);
-    if (!labType.trim() || isNaN(v)) return;
-    const entry = { id: Date.now(), type: labType.trim(), value: v, unit: labUnit.trim() || '‚Äî', date: labDate };
-    const updated = [...labEntries, entry].sort((a, b) => b.date.localeCompare(a.date));
-    setLabEntries(updated);
-    saveData('health-lab-entries', updated);
-    setLabValue('');
-    setLabDate(getTodayLocal());
-    setShowLabForm(false);
-  };
-  const deleteLabEntry = (id) => {
-    const updated = labEntries.filter(e => e.id !== id);
-    setLabEntries(updated);
-    saveData('health-lab-entries', updated);
-  };
-
-  // Fasting window CRUD operations
-  const addOrUpdateFasting = () => {
-    if (!fastingHours || isNaN(parseInt(fastingHours))) return;
-    const hours = parseInt(fastingHours);
-    if (hours < 1 || hours > 23) return; // Validate reasonable fasting hours
-    let updated = editingFasting
-      ? fastingEntries.map(e => e.id === editingFasting.id ? { ...e, fastingHours: hours, date: fastingDate } : e)
-      : [...fastingEntries, { id: Date.now(), fastingHours: hours, date: fastingDate }];
-    updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-    
-    // Calculate streak and celebrate milestones
-    if (!editingFasting) {
-      const streak = updated.filter((e, i) => {
-        const entryDate = parseLocalDate(e.date);
-        const today = new Date();
-        const daysDiff = Math.floor((today - entryDate) / (1000 * 60 * 60 * 24));
-        return daysDiff === i;
-      }).length;
-      
-      if (streak === 7) celebrate('üî• 7 Day Fasting Streak!');
-      if (streak === 14) celebrate('üî• 2 Week Streak!');
-      if (streak === 30) celebrate('üèÜ 30 Day Streak!');
-      if (hours >= 16) celebrate('üí™ Great ' + hours + ' hour fast!');
-    }
-    
-    setFastingEntries(updated);
-    saveData('health-fasting-entries', updated);
-    resetFastingForm();
-  };
-
-  const deleteFasting = (id) => {
-    const updated = fastingEntries.filter(e => e.id !== id);
-    setFastingEntries(updated);
-    saveData('health-fasting-entries', updated);
-  };
-
-  // Schedule local (push-style) notifications on device for when app is closed (Android/iOS)
-  const scheduleLocalInjectionReminders = async (settingsOverride) => {
-    try {
-      if (!Capacitor.isNativePlatform()) return;
-      const { LocalNotifications } = await import('@capacitor/local-notifications');
-      const perm = await LocalNotifications.checkPermissions();
-      if (perm.display !== 'granted') await LocalNotifications.requestPermissions();
-      const pending = await LocalNotifications.getPending();
-      if (pending?.notifications?.length) {
-        await LocalNotifications.cancel({ notifications: pending.notifications.map(n => ({ id: n.id })) });
-      }
-      const settings = settingsOverride ?? notificationSettings;
-      const [hr, min] = (settings.reminderTime || '09:00').split(':').map(Number);
-      const notifications = [];
-      let id = 1;
-      if (settings.injectionReminders) {
-        const upcoming = getNextInjections();
-        upcoming.forEach(injection => {
-          if (injection.daysUntil < 0 || injection.daysUntil > 14) return;
-          const at = new Date();
-          at.setDate(at.getDate() + injection.daysUntil);
-          at.setHours(hr, min, 0, 0);
-          if (at.getTime() <= Date.now()) return;
-          notifications.push({
-            id,
-            title: injection.isOverdue ? '‚ö†Ô∏è Injection Overdue' : 'üíâ Injection Reminder',
-            body: injection.isOverdue
-              ? `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`
-              : `Time to inject ${injection.medication}!`,
-            schedule: { at, allowWhileIdle: true }
-          });
-          id++;
-        });
-      }
-      // Weigh-in reminder: daily at weightReminderTime (id 50)
-      if (settings.weightReminders && (settings.weightReminderTime || '07:00')) {
-        const [wh, wm] = (settings.weightReminderTime || '07:00').split(':').map(Number);
-        const at = new Date();
-        at.setHours(wh, wm, 0, 0);
-        if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 1);
-        notifications.push({
-          id: 50,
-          title: '‚öñÔ∏è Weigh-in Reminder',
-          body: 'Time to log your weight',
-          schedule: { at, allowWhileIdle: true }
-        });
-      }
-      if (notifications.length) await LocalNotifications.schedule({ notifications });
-    } catch (e) {
-      console.warn('Local notifications:', e);
-    }
-  };
-
-  // Notification functions
-  const requestNotificationPermission = async () => {
-    try {
-      if (Capacitor.isNativePlatform()) {
-        const { LocalNotifications } = await import('@capacitor/local-notifications');
-        const perm = await LocalNotifications.requestPermissions();
-        const status = perm.display === 'granted' ? 'granted' : perm.display === 'denied' ? 'denied' : 'default';
-        setNotificationPermission(status);
-        if (status === 'granted') {
-          scheduleInjectionNotifications();
-          await scheduleLocalInjectionReminders();
-        }
-        return status === 'granted';
-      }
-      if (!('Notification' in window)) {
-        alert('This browser does not support notifications');
-        return false;
-      }
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === 'granted') {
-        scheduleInjectionNotifications();
-        await scheduleLocalInjectionReminders();
-      }
-      return permission === 'granted';
-    } catch (error) {
-      console.error('Error requesting notification permission:', error);
-      return false;
-    }
-  };
-
-  const scheduleInjectionNotifications = () => {
-    if (notificationPermission !== 'granted' || !notificationSettings.injectionReminders) return;
-    
-    const upcoming = getNextInjections();
-    upcoming.forEach(injection => {
-      if (injection.isDueToday && !injection.isOverdue) {
-        showNotification({
-          title: 'üíâ Injection Reminder',
-          body: `Time to inject ${injection.medication}!`,
-          tag: `injection-${injection.medication}`,
-          requireInteraction: true
-        });
-      } else if (injection.isOverdue && notificationSettings.overdueAlerts) {
-        showNotification({
-          title: '‚ö†Ô∏è Injection Overdue',
-          body: `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`,
-          tag: `injection-overdue-${injection.medication}`,
-          requireInteraction: true
-        });
-      }
-    });
-  };
-
-  const showNotification = async (options) => {
-    try {
-      if (Capacitor.isNativePlatform()) {
-        const { LocalNotifications } = await import('@capacitor/local-notifications');
-        const perm = await LocalNotifications.checkPermissions();
-        if (perm.display !== 'granted') {
-          alert('Please enable notifications first.');
-          return;
-        }
-        const testId = 99999;
-        await LocalNotifications.cancel({ notifications: [{ id: testId }] });
-        await LocalNotifications.schedule({
-          notifications: [{
-            id: testId,
-            title: options.title ?? 'Notification',
-            body: options.body ?? '',
-            schedule: { at: new Date(Date.now() + 500) }
-          }]
-        });
-        return;
-      }
-      if (!('Notification' in window)) {
-        console.log('Notifications not supported');
-        return;
-      }
-      if (Notification.permission !== 'granted') {
-        console.log('Notification permission not granted');
-        return;
-      }
-      const defaultOptions = {
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        vibrate: [200, 100, 200],
-        requireInteraction: false
-      };
-      const notification = new Notification(options.title, { ...defaultOptions, ...options });
-      if (!options.requireInteraction) {
-        setTimeout(() => notification.close(), 5000);
-      }
-      return notification;
-    } catch (error) {
-      console.error('Error showing notification:', error);
-      alert(`Notification: ${options.title}\n${options.body}`);
-    }
-  };
-
-  const updateNotificationSettings = (newSettings) => {
-    const updated = { ...notificationSettings, ...newSettings };
-    setNotificationSettings(updated);
-    saveData('health-notification-settings', updated);
-    if (notificationPermission === 'granted') scheduleLocalInjectionReminders(updated);
-  };
-
-  const addOrUpdateInjection = () => {
-    if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
-    const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
-    const sev = {};
-    selectedSideEffects.forEach((ef) => {
-      const n = Number(sideEffectSeverity[ef]);
-      sev[ef] = n >= 1 && n <= 5 ? n : 3;
-    });
-    const entryData = {
-      type: injectionType,
-      dose: parseFloat(injectionDose),
-      unit: injectionUnit,
-      date: injectionDate,
-      time: injectionTime,
-      route: injectionRoute,
-      site: injectionSite,
-      notes: injectionNotes,
-      sideEffects: selectedSideEffects,
-      sideEffectSeverity: selectedSideEffects.length ? sev : undefined,
-      vialId: selectedVialId || undefined,
-    };
-    let updated = editingInjection
-      ? injectionEntries.map(e => e.id === editingInjection.id ? { ...e, ...entryData } : e)
-      : [...injectionEntries, { id: Date.now(), ...entryData }];
-    updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-    setInjectionEntries(updated);
-    saveData('health-injection-entries', updated);
-    // Vial: add back old dose when editing, then deduct new dose if a vial is selected
-    let updatedVials = [...vials];
-    if (editingInjection?.vialId) {
-      const oldDoseMg = getDoseMgForVial(editingInjection.dose, editingInjection.unit || 'mg', editingInjection.vialId, editingInjection.type);
-      updatedVials = updatedVials.map(v => v.id === editingInjection.vialId ? { ...v, remainingMg: (v.remainingMg ?? v.totalMg) + oldDoseMg } : v);
-    }
-    if (selectedVialId) {
-      updatedVials = updatedVials.map(v => v.id === selectedVialId ? { ...v, remainingMg: Math.max(0, (v.remainingMg ?? v.totalMg) - doseMg) } : v);
-    }
-    if (editingInjection?.vialId || selectedVialId) {
-      updatedVials = pruneEmptyVials(updatedVials);
-      setVials(updatedVials);
-      saveData('health-vials', updatedVials);
-    }
-    resetInjectionForm();
-  };
-
-  const deleteInjection = (id) => {
-    const removed = injectionEntries.find(e => e.id === id);
-    if (!removed) return;
-    const prev = injectionEntries;
-    const updated = prev.filter(e => e.id !== id);
-    setInjectionEntries(updated);
-    if (!saveData('health-injection-entries', updated)) {
-      setInjectionEntries(prev);
-      return;
-    }
-    pushUndoToast('Injection removed', () => {
-      const restored = [...updated, removed].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-      setInjectionEntries(restored);
-      saveData('health-injection-entries', restored);
-    });
-  };
-
-  const addMeasurement = () => {
-    if (!measurementValue || isNaN(parseFloat(measurementValue))) return;
-    const updated = [...measurementEntries, { id: Date.now(), type: measurementType, value: parseFloat(measurementValue), date: measurementDate }];
-    updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-    setMeasurementEntries(updated);
-    saveData('health-measurements', updated);
-    resetMeasurementForm();
-  };
-
-  const deleteMeasurement = (id) => {
-    const updated = measurementEntries.filter(e => e.id !== id);
-    setMeasurementEntries(updated);
-    saveData('health-measurements', updated);
-  };
-
-  const addSchedule = () => {
-    const existing = schedules.find(s => s.medication === scheduleMed);
-    let updated;
-    if (existing) {
-      updated = schedules.map(s => s.medication === scheduleMed ? { 
-        ...s, 
-        frequencyDays: scheduleFrequency, 
-        preferredDay: scheduleDay,
-        startDate: scheduleStartDate,
-        scheduleType: scheduleType,
-        specificDays: selectedDays
-      } : s);
-    } else {
-      updated = [...schedules, { 
-        id: Date.now(), 
-        medication: scheduleMed, 
-        frequencyDays: scheduleFrequency, 
-        preferredDay: scheduleDay,
-        startDate: scheduleStartDate,
-        scheduleType: scheduleType,
-        specificDays: selectedDays
-      }];
-    }
-    setSchedules(updated);
-    saveData('health-schedules', updated);
-  };
-
-  const deleteSchedule = (id) => {
-    const updated = schedules.filter(s => s.id !== id);
-    setSchedules(updated);
-    saveData('health-schedules', updated);
-  };
-
-  const saveTitrationPlan = () => {
-    const validSteps = titrationSteps.filter(s => s.dose && !isNaN(parseFloat(s.dose)));
-    if (validSteps.length === 0) return;
-    const existing = titrationPlans.find(t => t.medication === titrationMed);
-    let updated;
-    if (existing) {
-      updated = titrationPlans.map(t => t.medication === titrationMed ? { ...t, steps: validSteps, startDate: getTodayLocal() } : t);
-    } else {
-      updated = [...titrationPlans, { id: Date.now(), medication: titrationMed, steps: validSteps, startDate: getTodayLocal() }];
-    }
-    setTitrationPlans(updated);
-    saveData('health-titration', updated);
-    setTitrationSteps([{ dose: '', weeks: 4, unit: 'mg' }]);
-  };
-
-  const deleteTitrationPlan = (id) => {
-    const updated = titrationPlans.filter(t => t.id !== id);
-    setTitrationPlans(updated);
-    saveData('health-titration', updated);
-  };
-
-  // Journal CRUD operations
-  const addOrUpdateJournal = () => {
-    if (!journalContent.trim()) return;
-    if (editingJournal) {
-      const updated = journalEntries.map(e => e.id === editingJournal.id ? { ...e, date: journalDate, content: journalContent, mood: journalMood, energy: journalEnergy, hunger: journalHunger } : e);
-      setJournalEntries(updated);
-      saveData('health-journal', updated);
-    } else {
-      const newEntry = { id: Date.now(), date: journalDate, content: journalContent, mood: journalMood, energy: journalEnergy, hunger: journalHunger };
-      const updated = [...journalEntries, newEntry];
-      setJournalEntries(updated);
-      saveData('health-journal', updated);
-    }
-    resetJournalForm();
-  };
-
-  const deleteJournal = (id) => {
-    const removed = journalEntries.find(e => e.id === id);
-    if (!removed) return;
-    const prev = journalEntries;
-    const updated = prev.filter(e => e.id !== id);
-    setJournalEntries(updated);
-    if (!saveData('health-journal', updated)) {
-      setJournalEntries(prev);
-      return;
-    }
-    pushUndoToast('Journal entry removed', () => {
-      const restored = [...updated, removed];
-      setJournalEntries(restored);
-      saveData('health-journal', restored);
-    });
-  };
-
-  const resetSleepForm = () => {
-    setSleepBedDate(getTodayLocal());
-    setSleepBedTime('22:30');
-    setSleepWakeTime('07:00');
-    setSleepQuality(3);
-    setSleepNotes('');
-    setEditingSleep(null);
-    setShowSleepForm(false);
-  };
-
-  const addOrUpdateSleep = () => {
-    const hours = computeSleepHours(sleepBedDate, sleepBedTime, sleepWakeTime);
-    if (hours == null) return;
-    const q = parseInt(sleepQuality, 10);
-    const row = {
-      id: editingSleep ? editingSleep.id : Date.now(),
-      date: sleepBedDate,
-      bedTime: sleepBedTime,
-      wakeTime: sleepWakeTime,
-      quality: q >= 1 && q <= 5 ? q : 3,
-      hours,
-      notes: sleepNotes.trim() || undefined,
-    };
-    const updated = editingSleep
-      ? sleepEntries.map((e) => (e.id === editingSleep.id ? row : e))
-      : [...sleepEntries, row];
-    updated.sort((a, b) => String(b.date).localeCompare(String(a.date)) || (b.id || 0) - (a.id || 0));
-    setSleepEntries(updated);
-    saveData('health-sleep-entries', updated);
-    resetSleepForm();
-  };
-
-  const deleteSleep = (id) => {
-    const updated = sleepEntries.filter((e) => e.id !== id);
-    setSleepEntries(updated);
-    saveData('health-sleep-entries', updated);
-  };
-
-  const saveTodaySteps = () => {
-    const n = parseInt(todayStepsInput, 10);
-    if (isNaN(n) || n < 0 || n > 200000) return;
-    const todayStr = getTodayLocal();
-    const existing = dailyTrackEntries.find((e) => e.date === todayStr);
-    let updated;
-    if (existing) {
-      updated = dailyTrackEntries.map((e) => (e.date === todayStr ? { ...e, steps: n } : e));
-    } else {
-      updated = [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals: [], steps: n }];
-    }
-    setDailyTrackEntries(updated);
-    saveData('health-daily-track', updated);
-    setTodayStepsInput('');
-  };
-
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const updated = [...progressPhotos, { id: Date.now(), data: reader.result, date: getTodayLocal(), note: '' }];
-      setProgressPhotos(updated);
-      saveData('health-photos', updated);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Export all data to JSON file (on native: write to cache + share so user can save)
-  const exportData = async () => {
-    const allData = {
-      exportDate: new Date().toISOString(),
-      version: '1.0',
-      weightEntries,
-      injectionEntries,
-      measurementEntries,
-      progressPhotos,
-      schedules,
-      titrationPlans,
-      journalEntries,
-      dailyTrackEntries,
-      glucoseEntries,
-      a1cEntries,
-      labEntries,
-      sleepEntries,
-      userProfile,
-      vials
-    };
-
-    const dataStr = JSON.stringify(allData, null, 2);
-    const filename = `health-tracker-backup-${getTodayLocal()}.json`;
-
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
-        const { Share } = await import('@capacitor/share');
-        const result = await Filesystem.writeFile({
-          path: filename,
-          data: dataStr,
-          directory: Directory.Cache,
-          encoding: Encoding.UTF8
-        });
-        await Share.share({
-          title: 'PepTalk backup',
-          files: [result.uri],
-          dialogTitle: 'Save backup (e.g. to Files or Drive)'
-        });
-      } catch (err) {
-        console.error('Export failed:', err);
-        alert('Export failed: ' + (err?.message || String(err)));
-      }
-      return;
-    }
-
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  // Import data from JSON file
-  const importData = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const imported = JSON.parse(event.target.result);
-        
-        // Validate the data structure
-        if (!imported.version || !imported.exportDate) {
-          alert('Invalid backup file format');
-          return;
-        }
-        
-        // Confirm before overwriting
-        const confirmImport = window.confirm(
-          `This will replace all current data with backup from ${new Date(imported.exportDate).toLocaleDateString()}. Continue?`
-        );
-        
-        if (!confirmImport) return;
-        
-        // Import all data
-        if (imported.weightEntries) {
-          setWeightEntries(imported.weightEntries);
-          saveData('health-weight-entries', imported.weightEntries);
-        }
-        if (imported.injectionEntries) {
-          setInjectionEntries(imported.injectionEntries);
-          saveData('health-injection-entries', imported.injectionEntries);
-        }
-        if (imported.measurementEntries) {
-          setMeasurementEntries(imported.measurementEntries);
-          saveData('health-measurements', imported.measurementEntries);
-        }
-        if (imported.progressPhotos) {
-          setProgressPhotos(imported.progressPhotos);
-          saveData('health-photos', imported.progressPhotos);
-        }
-        if (imported.schedules) {
-          setSchedules(imported.schedules);
-          saveData('health-schedules', imported.schedules);
-        }
-        if (imported.titrationPlans) {
-          setTitrationPlans(imported.titrationPlans);
-          saveData('health-titration', imported.titrationPlans);
-        }
-        if (imported.journalEntries) {
-          setJournalEntries(imported.journalEntries);
-          saveData('health-journal', imported.journalEntries);
-        }
-        if (imported.dailyTrackEntries) {
-          setDailyTrackEntries(imported.dailyTrackEntries);
-          saveData('health-daily-track', imported.dailyTrackEntries);
-        }
-        if (imported.glucoseEntries) {
-          setGlucoseEntries(imported.glucoseEntries);
-          saveData('health-glucose-entries', imported.glucoseEntries);
-        }
-        if (imported.a1cEntries) {
-          setA1cEntries(imported.a1cEntries);
-          saveData('health-a1c-entries', imported.a1cEntries);
-        }
-        if (imported.labEntries) {
-          setLabEntries(imported.labEntries);
-          saveData('health-lab-entries', imported.labEntries);
-        }
-        if (imported.sleepEntries) {
-          setSleepEntries(imported.sleepEntries);
-          saveData('health-sleep-entries', imported.sleepEntries);
-        }
-        if (imported.userProfile) {
-          setUserProfile(imported.userProfile);
-          saveData('health-user-profile', imported.userProfile);
-        }
-        if (imported.vials) {
-          setVials(imported.vials);
-          saveData('health-vials', imported.vials);
-        }
-        
-        alert('Data imported successfully!');
-        e.target.value = ''; // Reset file input
-            } catch (error) {
-        alert('Error importing data. Please check the file format.');
-        console.error('Import error:', error);
-      }
-    };
-
-    reader.readAsText(file);
-  };
-
-  // Print/save as PDF ‚Äî Constitute calculator (opens print dialog; user can "Save as PDF")
-  const printDoctorSummary = () => {
-    const sortedWeights = sortWeightByDateAsc(weightEntries);
-    const sortedInjections = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-    const byMed = {};
-    sortedInjections.forEach(inj => {
-      if (!byMed[inj.type]) byMed[inj.type] = [];
-      if (byMed[inj.type].length < 20) byMed[inj.type].push(inj);
-    });
-    const weightRows = sortedWeights.slice(-60).reverse().map(e =>
-      `<tr><td>${new Date(parseLocalDate(e.date)).toLocaleDateString('en-US')}</td><td>${e.weight} lbs</td></tr>`
-    ).join('');
-    const injectionRows = Object.entries(byMed).map(([med, list]) =>
-      `<tr><td>${med}</td><td>${list.map(i => `${new Date(parseLocalDate(i.date)).toLocaleDateString('en-US')}: ${i.dose}${i.unit}`).join('; ')}</td></tr>`
-    ).join('');
-    const measurementRows = [...measurementEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).slice(0, 50).map(e =>
-      `<tr><td>${e.type}</td><td>${e.value}"</td><td>${new Date(parseLocalDate(e.date)).toLocaleDateString('en-US')}</td></tr>`
-    ).join('');
-    const recentJournals = [...journalEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).slice(0, 30).map(e =>
-      `<tr><td>${new Date(parseLocalDate(e.date)).toLocaleDateString('en-US')}</td><td>${e.mood}</td><td>${e.energy}/10</td><td>${e.hunger}/10</td><td>${(e.content || '').replace(/</g, '&lt;').substring(0, 200)}${(e.content || '').length > 200 ? '‚Ä¶' : ''}</td></tr>`
-    ).join('');
-    const win = window.open('', '_blank');
-    win.document.write(`
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>PepTalk ‚Äì Constitute Calculator</title>
-<style>
-  body { font-family: system-ui, sans-serif; padding: 24px; color: #1e293b; max-width: 800px; margin: 0 auto; }
-  h1 { font-size: 1.5rem; margin-bottom: 4px; }
-  .meta { color: #64748b; font-size: 0.875rem; margin-bottom: 24px; }
-  h2 { font-size: 1.1rem; margin-top: 20px; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
-  table { border-collapse: collapse; width: 100%; margin-bottom: 16px; font-size: 0.875rem; }
-  th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
-  th { background: #f1f5f9; }
-  @media print { body { padding: 12px; } }
-</style></head><body>
-<h1>PepTalk ‚Äì Health Summary for Provider</h1>
-<p class="meta">Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}. Use browser Print ‚Üí Save as PDF to export.</p>
-<h2>Weight history (recent)</h2>
-<table><thead><tr><th>Date</th><th>Weight</th></tr></thead><tbody>${weightRows || '<tr><td colspan="2">No entries</td></tr>'}</tbody></table>
-<h2>Injections summary</h2>
-<table><thead><tr><th>Medication</th><th>Recent doses</th></tr></thead><tbody>${injectionRows || '<tr><td colspan="2">No entries</td></tr>'}</tbody></table>
-<h2>Body measurements</h2>
-<table><thead><tr><th>Type</th><th>Value</th><th>Date</th></tr></thead><tbody>${measurementRows || '<tr><td colspan="3">No entries</td></tr>'}</tbody></table>
-<h2>Journal (recent)</h2>
-<table><thead><tr><th>Date</th><th>Mood</th><th>Energy</th><th>Hunger</th><th>Notes</th></tr></thead><tbody>${recentJournals || '<tr><td colspan="5">No entries</td></tr>'}</tbody></table>
-${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeight} lbs.</p>` : ''}
-</body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { try { win.print(); } finally { win.close(); } }, 400);
-  };
-
-  const exportClinicianPdfFile = () => {
-    try {
-      downloadClinicianSummaryPdf({
-        generatedAt: new Date().toISOString(),
-        userProfile,
-        weightEntries,
-        injectionEntries,
-        journalEntries,
-        labEntries,
-        glucoseEntries,
-        sleepEntries,
-        goalStack: goalUserStack,
-      });
-    } catch (err) {
-      console.error(err);
-      alert('Could not generate PDF.');
-    }
-  };
-
-  const handleGraphicalSummaryPdf = async () => {
-    const el = graphicalSummaryCaptureRef.current;
-    if (!el) return;
-    setGraphicalPdfBusy(true);
-    try {
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await downloadGraphicalSummaryPdf(el);
-    } catch (err) {
-      console.error(err);
-      alert('Could not save visual summary PDF.');
-    } finally {
-      setGraphicalPdfBusy(false);
-    }
-  };
-
-  const exportCSV = async () => {
-    const sortedWeights = sortWeightByDateAsc(weightEntries);
-    const sortedInjections = [...injectionEntries].sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
-    const sortedGlucose = sortByDateDesc(glucoseEntries);
-    const sortedA1c = sortByDateDesc(a1cEntries);
-    const rows = [];
-    if (csvType === 'weight') {
-      rows.push('Date,Weight (lbs)');
-      sortedWeights.forEach(e => rows.push(`${e.date},${e.weight}`));
-    } else if (csvType === 'injections') {
-      rows.push('Date,Medication,Dose,Unit,Route,Site');
-      sortedInjections.forEach(e => rows.push(`${e.date},${e.type},${e.dose},${e.unit || ''},${e.route || ''},${e.site || ''}`));
-    } else {
-      rows.push('Type,Date,Value,Medication,Dose,Unit,Route,Site');
-      sortedWeights.forEach(e => rows.push(`Weight,${e.date},${e.weight},,,,,`));
-      sortedInjections.forEach(e => rows.push(`Injection,${e.date},,${e.type},${e.dose},${e.unit},${e.route || ''},${e.site || ''}`));
-      sortedGlucose.forEach(e => rows.push(`Glucose,${e.date},${e.value} mg/dL (${e.type}),,,`));
-      sortedA1c.forEach(e => rows.push(`A1C,${e.date},${e.value}%,,,`));
-      labEntries.sort((a, b) => a.date.localeCompare(b.date)).forEach(e => rows.push(`Lab,${e.date},${e.value} ${e.unit},${e.type},,,,`));
-    }
-    const csv = rows.join('\n');
-    const filename = csvType === 'weight' ? `PepTalk-weight-${getTodayLocal()}.csv` : csvType === 'injections' ? `PepTalk-injections-${getTodayLocal()}.csv` : `PepTalk-export-${getTodayLocal()}.csv`;
-
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
-        const { Share } = await import('@capacitor/share');
-        const result = await Filesystem.writeFile({
-          path: filename,
-          data: csv,
-          directory: Directory.Cache,
-          encoding: Encoding.UTF8
-        });
-        await Share.share({
-          title: 'PepTalk export',
-          files: [result.uri],
-          dialogTitle: 'Save CSV (e.g. to Files or Drive)'
-        });
-      } catch (err) {
-        console.error('CSV export failed:', err);
-        alert('Export failed: ' + (err?.message || String(err)));
-      }
-      return;
-    }
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const runExport = async () => {
-    if (exportFormat === 'json') await exportData();
-    else if (exportFormat === 'csv') await exportCSV();
-  };
-
-// Wipe ALL local data and reset state (factory reset)
-const wipeAllData = () => {
-  const keysToRemove = [
-    'health-weight-entries',
-    'health-injection-entries',
-    'health-measurements',
-    'health-photos',
-    'health-schedules',
-    'health-titration',
-    'health-journal',
-    'health-daily-track',
-    'health-glucose-entries',
-    'health-a1c-entries',
-    'health-lab-entries',
-    'health-user-profile',
-    'health-vials',
-    'health-weekly-dose-weight-excluded-meds',
-    'health-goals-user-stack',
-    'health-sleep-entries',
-    'peptalk-cloud-opt-out',
-  ];
-
-  keysToRemove.forEach((k) => localStorage.removeItem(k));
-
-  setCloudOptOut(false);
-
-  setWeightEntries([]);
-  setInjectionEntries([]);
-  setMeasurementEntries([]);
-  setProgressPhotos([]);
-  setSchedules([]);
-  setTitrationPlans([]);
-  setJournalEntries([]);
-  setDailyTrackEntries([]);
-  setGlucoseEntries([]);
-  setA1cEntries([]);
-  setLabEntries([]);
-  setVials([]);
-  setWeeklyDoseWeightExcludedMeds([]);
-  setGoalUserStack([]);
-  setSleepEntries([]);
-  setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
-
-  setShowWipeConfirm(false);
-  setWipeConfirmChecked(false);
-
-  setActiveTab('summary');
-  setActiveToolSection('calculator');
-
-  setCelebrationMessage('All data wiped. Fresh start ‚ú®');
-  setShowCelebration(true);
-  setTimeout(() => setShowCelebration(false), 2500);
-};
-
-  const deletePhoto = (id) => {
-    const updated = progressPhotos.filter(p => p.id !== id);
-    setProgressPhotos(updated);
-    saveData('health-photos', updated);
-  };
-
-  const toggleSideEffect = (effect) => {
-    setSelectedSideEffects((prev) => (prev.includes(effect) ? prev.filter((e) => e !== effect) : [...prev, effect]));
-    setSideEffectSeverity((prev) => {
-      if (prev[effect] !== undefined) {
-        const { [effect]: _, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [effect]: 3 };
-    });
-  };
-  const getMedicationColor = (type) => MEDICATIONS.find(m => m.name === type)?.color || '#6b7280';
-
-  // Filtering and calculations
-  const getFilteredData = (entries) => {
-    if (timeRange === 'all') return entries;
-    const months = { '1m': 1, '3m': 3, '6m': 6, '12m': 12 };
-    const cutoffDate = new Date();
-    cutoffDate.setMonth(cutoffDate.getMonth() - months[timeRange]);
-    cutoffDate.setHours(0, 0, 0, 0);
-    return entries.filter(e => {
-      const day = toCalendarDay(e.date);
-      if (!day) return false;
-      const d = parseLocalDate(day);
-      return !isNaN(d.getTime()) && d >= cutoffDate;
-    });
-  };
-
-  const getDateRangeLabel = () => {
-    const filtered = getFilteredData(weightEntries);
-    if (filtered.length === 0) return '';
-    const sorted = [...filtered].sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
-    const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    return `${formatDate(sorted[0].date)} ‚Äì ${formatDate(sorted[sorted.length - 1].date)}`;
-  };
-
-  const sortByDateDesc = (entries) => [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  // Week in review: this week (Mon‚Äìtoday) weight change, injections, hydration
-  const getWeeklyDigest = () => {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const toMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() + toMonday);
-    const startStr = formatDateLocal(startOfWeek);
-    const todayStr = getTodayLocal();
-
-    const weightInWeek = weightEntries.filter(e => e.date >= startStr && e.date <= todayStr);
-    const sortedWeights = sortWeightByDateAsc(weightEntries);
-    const beforeWeek = sortedWeights.filter(e => e.date < startStr);
-    const firstWeightOfWeek = weightInWeek.length ? parseFloat(sortWeightByDateAsc(weightInWeek)[0].weight) : (beforeWeek.length ? parseFloat(beforeWeek[beforeWeek.length - 1].weight) : null);
-    const lastWeightOfWeek = weightInWeek.length ? parseFloat(sortWeightByDateDesc(weightInWeek)[0].weight) : (sortedWeights.length ? parseFloat(sortedWeights[sortedWeights.length - 1].weight) : null);
-    const weightChange = (firstWeightOfWeek != null && lastWeightOfWeek != null) ? firstWeightOfWeek - lastWeightOfWeek : null;
-    const weightStr = weightChange != null ? (weightChange > 0 ? `‚àí${weightChange.toFixed(1)}` : weightChange < 0 ? `+${Math.abs(weightChange).toFixed(1)}` : '0') + ' lb' : '‚Äî';
-
-    const injectionsInWeek = injectionEntries.filter(e => e.date >= startStr && e.date <= todayStr);
-    let expectedInjections = 0;
-    schedules.forEach(s => {
-      if (s.scheduleType === 'specific_days' && s.specificDays?.length) expectedInjections += s.specificDays.length;
-      else if (s.frequencyDays) expectedInjections += Math.min(7, Math.ceil(7 / s.frequencyDays));
-    });
-    if (expectedInjections === 0 && injectionEntries.length > 0) {
-      const meds = [...new Set(injectionEntries.map(i => i.type))];
-      meds.forEach(() => { expectedInjections += 1; });
-    }
-    const injStr = `${injectionsInWeek.length}/${expectedInjections || '?'}`;
-
-    const weekDates = [];
-    const d = new Date(startOfWeek);
-    while (d <= now) {
-      weekDates.push(formatDateLocal(new Date(d)));
-      d.setDate(d.getDate() + 1);
-    }
-    const hydratedDays = weekDates.filter(date => dailyTrackEntries.some(e => e.date === date)).length;
-    const hydrationStr = `${hydratedDays}/7 days`;
-
-    const glucoseInWeek = glucoseEntries.filter(e => e.date >= startStr && e.date <= todayStr);
-    const avgGlucose = glucoseInWeek.length ? (glucoseInWeek.reduce((s, e) => s + parseFloat(e.value), 0) / glucoseInWeek.length).toFixed(0) : null;
-    const lastGlucose = glucoseEntries.length ? sortByDateDesc(glucoseEntries)[0] : null;
-
-    const lastA1c = a1cEntries.length ? sortByDateDesc(a1cEntries)[0] : null;
-
-    const journalInWeek = journalEntries.filter(e => e.date >= startStr && e.date <= todayStr).length;
-    const labsInWeek = labEntries.filter(e => e.date >= startStr && e.date <= todayStr).length;
-    const sleepInWeek = sleepEntries.filter(e => e.date >= startStr && e.date <= todayStr);
-    const avgSleepHours = sleepInWeek.length
-      ? Math.round((sleepInWeek.reduce((s, e) => s + (Number(e.hours) || 0), 0) / sleepInWeek.length) * 10) / 10
-      : null;
-    let stepsSum = 0;
-    let stepsDays = 0;
-    weekDates.forEach((date) => {
-      const row = dailyTrackEntries.find(e => e.date === date);
-      if (row?.steps != null && Number(row.steps) > 0) {
-        stepsSum += Number(row.steps);
-        stepsDays += 1;
-      }
-    });
-    const injWithFx = injectionsInWeek.filter((e) => (e.sideEffects || []).length > 0).length;
-
-    return {
-      weightStr,
-      injStr,
-      hydrationStr,
-      avgGlucose,
-      lastGlucose,
-      lastA1c,
-      journalInWeek,
-      labsInWeek,
-      avgSleepHours,
-      sleepNights: sleepInWeek.length,
-      stepsSum,
-      stepsDays,
-      injWithFx,
-    };
-  };
-
-  const calculateBMI = (weightLbs, heightInches) => heightInches ? ((weightLbs / (heightInches * heightInches)) * 703).toFixed(1) : null;
-  const getBMICategory = (bmi) => {
-    if (!bmi) return { label: '-', color: 'text-gray-400' };
-    if (bmi < 18.5) return { label: 'Underweight', color: 'text-blue-400' };
-    if (bmi < 25) return { label: 'Normal', color: 'text-green-500' };
-    if (bmi < 30) return { label: 'Overweight', color: 'text-yellow-400' };
-    return { label: 'Obese', color: 'text-red-400' };
-  };
-
-  const getWeightStats = () => {
-    const filtered = getFilteredData(weightEntries);
-    if (filtered.length === 0) return { current: '-', change: 0, trend: 'neutral', bmi: null, percentChange: 0, weeklyAvg: 0, toGoal: 0, estimatedGoalDate: null };
-    const sorted = sortWeightByDateDesc(filtered); // most recent first (by date then id)
-    const sortedAsc = sortWeightByDateAsc(filtered);
-    const current = sorted[0].weight;
-    const first = sortedAsc[0].weight; // oldest in range
-    const change = current - first;
-    const percentChange = (change / first) * 100;
-    const bmi = calculateBMI(current, userProfile.height);
-    const toGoal = current - (userProfile.goalWeight || 200);
-    
-    const firstDate = parseLocalDate(toCalendarDay(sortedAsc[0].date));
-    const lastDate = parseLocalDate(toCalendarDay(sorted[0].date));
-    const weeks = Math.max(1, (lastDate - firstDate) / (7 * 24 * 60 * 60 * 1000));
-    const weeklyAvg = change / weeks;
-    
-    // Estimated goal date calculation
-    let estimatedGoalDate = null;
-    if (weeklyAvg < 0 && toGoal > 0) {
-      const weeksToGoal = toGoal / Math.abs(weeklyAvg);
-      const goalDate = new Date();
-      goalDate.setDate(goalDate.getDate() + weeksToGoal * 7);
-      estimatedGoalDate = goalDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-    
-    return { current: current.toFixed(1), change: change.toFixed(1), trend: change < 0 ? 'down' : change > 0 ? 'up' : 'neutral', bmi, percentChange: percentChange.toFixed(1), weeklyAvg: weeklyAvg.toFixed(1), toGoal: toGoal.toFixed(1), estimatedGoalDate };
-  };
-
-  // "On track?" ‚Äî compare user's weekly loss to typical GLP-1 loss for their medication and dose (from trials)
-  const getOnTrackInfo = () => {
-    const filtered = getFilteredData(weightEntries);
-    if (filtered.length < 2) return null;
-    // Use most recent GLP-1‚Äìtype injection (user may also log hormones etc.; "On track?" is for GLP-1)
-    const medName = (e) => e.type ?? e.medication;
-    const lastGlp1Injection = [...injectionEntries]
-      .filter(e => {
-        const med = MEDICATIONS.find(m => m.name === medName(e));
-        return med && ['GLP-1', 'GLP-1/GIP', 'Triple Agonist'].includes(med.category);
-      })
-      .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
-    if (!lastGlp1Injection) return null;
-    const lastInjection = lastGlp1Injection;
-    const med = MEDICATIONS.find(m => m.name === medName(lastInjection));
-    if (!med) return null;
-    const injectionMed = medName(lastInjection);
-    // Weekly dose (mg per 7 days): sum of this med's injections in the last 7 days
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const injectionsLast7Days = injectionEntries.filter(e => medName(e) === injectionMed && parseLocalDate(e.date) >= sevenDaysAgo);
-    const weeklyDoseMg = injectionsLast7Days.length > 0
-      ? injectionsLast7Days.reduce((sum, inj) => sum + toDoseMgForLevel(inj), 0)
-      : toDoseMgForLevel(lastInjection);
-    const typical = getTypicalWeeklyLossForDose(injectionMed, weeklyDoseMg);
-    const userLoss = -parseFloat(stats.weeklyAvg); // positive = lbs lost per week
-    const doseLabel = injectionsLast7Days.length > 1 ? `${weeklyDoseMg} mg/week` : `${lastInjection.dose}${lastInjection.unit}`;
-
-    // Time on current medication (calendar days since first injection of this med)
-    const firstMedInjection = [...injectionEntries]
-      .filter(e => medName(e) === injectionMed)
-      .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date))[0];
-    const daysOnMed = firstMedInjection
-      ? Math.max(1, Math.round((now - parseLocalDate(firstMedInjection.date)) / (1000 * 60 * 60 * 24)))
-      : null;
-
-    // Projected weeks to next 5-lb milestone based on current weekly loss
-    let nextMilestone = null;
-    let projectedWeeksToMilestone = null;
-    if (userLoss > 0 && typical > 0) {
-      const milestones = getMilestones();
-      const next = milestones.find(m => !m.achieved);
-      if (next && next.toGo > 0) {
-        nextMilestone = next.label;
-        projectedWeeksToMilestone = next.toGo / userLoss;
-      }
-    }
-
-    if (userLoss <= 0) {
-      return { med: injectionMed, dose: doseLabel, typical, userLoss: 0, status: 'slower', daysOnMed, nextMilestone, projectedWeeksToMilestone };
-    }
-    const ratio = userLoss / typical;
-    let status = 'on_track';
-    if (ratio >= 1.2) status = 'ahead';
-    else if (ratio < 0.7) status = 'slower';
-    return { med: injectionMed, dose: doseLabel, typical, userLoss, status, daysOnMed, nextMilestone, projectedWeeksToMilestone };
-  };
-
-  // Chart data: your cumulative weight loss vs typical ‚Äî week 1 through current week + 1
-  const getYouVsTypicalChartData = () => {
-    const onTrack = getOnTrackInfo();
-    if (!onTrack) return [];
-    const filtered = getFilteredData(weightEntries);
-    const sorted = sortWeightByDateAsc(filtered);
-    if (sorted.length < 2) return [];
-    const startDate = parseLocalDate(toCalendarDay(sorted[0].date));
-    const startWeight = parseFloat(sorted[0].weight);
-    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-    const now = new Date();
-    const currentWeekIndex = Math.floor((now - startDate) / msPerWeek);
-    const endWeek = Math.max(1, currentWeekIndex + 1);
-    const points = [];
-    for (let w = 1; w <= endWeek; w++) {
-      const weekEnd = new Date(startDate);
-      weekEnd.setDate(weekEnd.getDate() + w * 7);
-      const weekLabel = `W${w}`;
-      const typicalLoss = onTrack.typical * w;
-      const weightsUpToWeekEnd = sorted.filter(e => parseLocalDate(toCalendarDay(e.date)) <= weekEnd);
-      const latestInWindow = weightsUpToWeekEnd.length ? weightsUpToWeekEnd[weightsUpToWeekEnd.length - 1] : null;
-      const userLoss = latestInWindow ? Math.max(0, startWeight - parseFloat(latestInWindow.weight)) : null;
-      if (userLoss !== null) {
-        points.push({ weekLabel, weeks: w, userLoss, typicalLoss });
-      }
-    }
-    return points.length > 1 ? points : [];
-  };
-
-  // Milestones: 5 lb down, 10 lb down, ... from start weight toward goal
-  const getMilestones = () => {
-    const sorted = sortWeightByDateAsc(weightEntries);
-    if (sorted.length === 0) return [];
-    const startWeight = parseFloat(sorted[0].weight);
-    const currentWeight = parseFloat(stats.current);
-    if (stats.current === '-' || isNaN(currentWeight)) return [];
-    const goalWeight = userProfile?.goalWeight ? parseFloat(userProfile.goalWeight) : startWeight - 30;
-    const totalToLose = startWeight - goalWeight;
-    if (totalToLose <= 0) return [];
-    const list = [];
-    for (let lb = 5; lb <= Math.ceil(totalToLose / 5) * 5; lb += 5) {
-      const achieved = (startWeight - currentWeight) >= lb;
-      const toGo = achieved ? 0 : lb - (startWeight - currentWeight);
-      list.push({ label: `${lb} lb down`, lb, achieved, toGo });
-    }
-    return list;
-  };
-
-  const getNextInjections = () => {
-    const upcoming = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = formatDateLocal(today);
-    const msPerDay = 24 * 60 * 60 * 1000;
-
-    schedules.forEach(schedule => {
-      const medicationInjections = injectionEntries
-        .filter(e => e.type === schedule.medication)
-        .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-      const lastInjection = medicationInjections[0];
-      let nextDate;
-
-      if (schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0) {
-        // Next injection = next calendar day that is one of the scheduled weekdays
-        const specificDays = schedule.specificDays;
-        let start = new Date(today);
-        start.setHours(0, 0, 0, 0);
-        if (lastInjection) {
-          const lastDayStr = toCalendarDay(lastInjection.date);
-          const lastDayOfWeek = parseLocalDate(lastDayStr).getDay();
-          if (lastDayStr === todayStr && specificDays.includes(lastDayOfWeek)) {
-            start.setDate(start.getDate() + 1);
-          }
-        }
-        for (let i = 0; i < 8; i++) {
-          const d = new Date(start);
-          d.setDate(start.getDate() + i);
-          d.setHours(0, 0, 0, 0);
-          if (specificDays.includes(d.getDay())) {
-            nextDate = d;
-            break;
-          }
-        }
-        if (!nextDate) {
-          nextDate = new Date(today);
-          nextDate.setDate(today.getDate() + 7);
-        }
-      } else {
-        if (lastInjection) {
-          nextDate = parseLocalDate(lastInjection.date);
-          nextDate.setDate(nextDate.getDate() + (schedule.frequencyDays ?? 7));
-        } else {
-          nextDate = new Date(today);
-        }
-        nextDate.setHours(0, 0, 0, 0);
-      }
-
-      const daysUntil = Math.round((nextDate - today) / msPerDay);
-
-      upcoming.push({
-        medication: schedule.medication,
-        nextDate,
-        daysUntil,
-        isOverdue: daysUntil < 0,
-        isDueToday: daysUntil === 0
-      });
-    });
-
-    return upcoming.sort((a, b) => a.daysUntil - b.daysUntil);
-  };
-
-  // Logging streak: days with weight logged in last 7, and consecutive weeks with at least one entry
-  const getLoggingStreak = () => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const dayStrs = new Set();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      dayStrs.add(formatDateLocal(d));
-    }
-    const entriesInLast7 = weightEntries.filter(e => dayStrs.has(toCalendarDay(e.date)));
-    const uniqueDays = new Set(entriesInLast7.map(e => toCalendarDay(e.date)));
-    const weekKey = (dateStr) => {
-      const d = parseLocalDate(dateStr);
-      const start = new Date(d);
-      start.setDate(start.getDate() - start.getDay());
-      return formatDateLocal(start);
-    };
-    const byWeek = {};
-    weightEntries.forEach(e => {
-      const w = weekKey(toCalendarDay(e.date));
-      if (!byWeek[w]) byWeek[w] = true;
-    });
-    let weeksInRow = 0;
-    for (let i = 0; i < 52; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i * 7);
-      const w = weekKey(formatDateLocal(d));
-      if (byWeek[w]) weeksInRow++; else break;
-    }
-    return { daysLoggedLast7: uniqueDays.size, weeksInRow };
-  };
-
-  // Most-mentioned side effects from injection logs (for Insights/Summary)
-  const getSideEffectsSummary = () => {
-    const counts = {};
-    injectionEntries.forEach(entry => {
-      (entry.sideEffects || []).forEach(se => {
-        counts[se] = (counts[se] || 0) + 1;
-      });
-    });
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    return sorted.slice(0, 5).map(([name]) => name);
-  };
-
-  // Side effects by day in cycle (we only log on injection day = day 0)
-  const getSideEffectsByDayInCycle = (medicationName) => {
-    const entries = injectionEntries.filter(e => e.type === medicationName && (e.sideEffects?.length ?? 0) > 0);
-    const day0 = {};
-    entries.forEach(entry => {
-      (entry.sideEffects || []).forEach(se => {
-        day0[se] = (day0[se] || 0) + 1;
-      });
-    });
-    return { day0 };
-  };
-
-  // Typical dose in mg for a medication (from most recent injection)
-  const getTypicalDoseMg = (medicationName) => {
-    const last = injectionEntries.filter(e => e.type === medicationName).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
-    if (!last) return null;
-    return toDoseMgForLevel(last);
-  };
-
-  const getLowVials = () => {
-    if (!vials.length) return [];
-    return vials.filter(v => {
-      const rem = v.remainingMg ?? v.totalMg;
-      if (rem <= 0) return false;
-      const typical = getTypicalDoseMg(v.medication);
-      return typical != null && rem < typical;
-    });
-  };
-
-  // When returning to Summary tab, show low-vial popup if any vials are low (so the user notices)
-  useEffect(() => {
-    if (activeTab !== 'summary') {
-      previousActiveTabRef.current = activeTab;
-      return;
-    }
-    const wasAway = previousActiveTabRef.current != null && previousActiveTabRef.current !== 'summary';
-    previousActiveTabRef.current = activeTab;
-    if (wasAway && getLowVials().length > 0) setShowLowVialPopup(true);
-  }, [activeTab, vials]);
-
-  const getCurrentTitrationDose = (plan) => {
-    if (!plan.steps || plan.steps.length === 0) return null;
-    const startDate = new Date(plan.startDate);
-    const today = new Date();
-    let weeksPassed = Math.floor((today - startDate) / (7 * 24 * 60 * 60 * 1000));
-    let accumulatedWeeks = 0;
-    for (let i = 0; i < plan.steps.length; i++) {
-      accumulatedWeeks += plan.steps[i].weeks;
-      if (weeksPassed < accumulatedWeeks) {
-        const weeksIntoStep = weeksPassed - (accumulatedWeeks - plan.steps[i].weeks);
-        const weeksRemaining = plan.steps[i].weeks - weeksIntoStep;
-        return { step: i + 1, dose: plan.steps[i].dose, unit: plan.steps[i].unit, weeksRemaining, nextDose: plan.steps[i + 1] };
-      }
-    }
-    const lastStep = plan.steps[plan.steps.length - 1];
-    return { step: plan.steps.length, dose: lastStep.dose, unit: lastStep.unit, weeksRemaining: 0, nextDose: null, completed: true };
-  };
-
-  const getSummaryChartData = (maxWeeks = 0) => {
-    const filteredWeights = getFilteredData(weightEntries);
-    const filteredInjections = getFilteredData(injectionEntries);
-    // Use only dates that have a weight entry so the line is accurate (no null interpolation)
-    const weightDates = new Set();
-    filteredWeights.forEach(e => {
-      const day = toCalendarDay(e.date);
-      if (day) weightDates.add(day);
-    });
-    let sortedDates = Array.from(weightDates).sort((a, b) => parseLocalDate(a) - parseLocalDate(b));
-    if (maxWeeks > 0 && sortedDates.length > 0) {
-      const lastDay = parseLocalDate(sortedDates[sortedDates.length - 1]);
-      const cutoff = new Date(lastDay);
-      cutoff.setDate(cutoff.getDate() - maxWeeks * 7);
-      cutoff.setHours(0, 0, 0, 0);
-      sortedDates = sortedDates.filter(d => parseLocalDate(d) >= cutoff);
-    }
-    const points = sortedDates.map(date => {
-      const dayWeights = filteredWeights.filter(e => toCalendarDay(e.date) === date);
-      const weightEntry = dayWeights.length === 0 ? null : dayWeights.sort((a, b) => (b.id || 0) - (a.id || 0))[0];
-      const dayInjections = filteredInjections.filter(e => toCalendarDay(e.date) === date);
-      const doseData = {};
-      const unitData = {};
-      dayInjections.forEach(inj => {
-        const doseInMg = toDoseMgForLevel(inj);
-        doseData[inj.type] = doseInMg;
-        unitData[inj.type] = inj.unit;
-      });
-      const injectionsForTooltip = dayInjections.map(inj => ({ type: inj.type, dose: inj.dose, unit: inj.unit, route: inj.route, site: inj.site }));
-      return { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fullDate: date, weight: weightEntry?.weight != null ? parseFloat(weightEntry.weight) : null, units: unitData, hasInjection: dayInjections.length > 0, injections: injectionsForTooltip, ...doseData };
-    });
-    // 7-day moving average trend line (use parseLocalDate so timezone matches weight dates)
-    points.forEach(p => {
-      const pointDate = parseLocalDate(p.fullDate);
-      const windowStart = new Date(pointDate);
-      windowStart.setDate(windowStart.getDate() - 6);
-      const inWindow = filteredWeights.filter(e => {
-        const day = toCalendarDay(e.date);
-        if (!day) return false;
-        const d = parseLocalDate(day);
-        return d >= windowStart && d <= pointDate;
-      });
-      p.weightTrend = inWindow.length ? inWindow.reduce((s, e) => s + parseFloat(e.weight), 0) / inWindow.length : null;
-    });
-    return points;
-  };
-
-  const getLoggedMedications = () => {
-    const filteredInjections = getFilteredData(injectionEntries);
-    return Array.from(new Set(filteredInjections.map(e => e.type)));
-  };
-
-  const getMeasurementStats = () => {
-    const stats = {};
-    MEASUREMENT_TYPES.forEach(type => {
-      const typeEntries = measurementEntries.filter(e => e.type === type).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-      if (typeEntries.length > 0) {
-        const current = typeEntries[0].value;
-        const first = typeEntries[typeEntries.length - 1].value;
-        stats[type] = { current, change: (current - first).toFixed(1), entries: typeEntries.length };
-      }
-    });
-    return stats;
-  };
-
-  const getMeasurementChartData = () => {
-    const dates = [...new Set(measurementEntries.map(e => toCalendarDay(e.date)).filter(Boolean))].sort(
-      (a, b) => parseLocalDate(a) - parseLocalDate(b)
-    );
-    return dates.map(date => {
-      const dataPoint = { date: parseLocalDate(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
-      MEASUREMENT_TYPES.forEach(type => {
-        const entry = measurementEntries.find(e => toCalendarDay(e.date) === date && e.type === type);
-        if (entry) dataPoint[type] = parseFloat(entry.value);
-      });
-      return dataPoint;
-    });
-  };
-
-  // Stack timeline: which meds are active by month (from schedules with startDate)
-  const getStackTimelineMonths = () => {
-    const withStart = schedules.filter(s => s.startDate);
-    if (withStart.length === 0) return [];
-    const startDates = withStart.map(s => s.startDate);
-    const minDate = startDates.sort()[0];
-    const start = parseLocalDate(minDate);
-    const end = new Date();
-    end.setMonth(end.getMonth() + 3); // show 3 months ahead
-    const months = [];
-    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    while (cursor <= end) {
-      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-      const monthEndStr = formatDateLocal(monthEnd);
-      const active = withStart.filter(s => s.startDate <= monthEndStr).map(s => s.medication);
-      const prevActive = cursor.getMonth() === 0
-        ? withStart.filter(s => s.startDate <= formatDateLocal(new Date(cursor.getFullYear() - 1, 11, 31))).map(s => s.medication)
-        : withStart.filter(s => s.startDate <= formatDateLocal(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 31))).map(s => s.medication);
-      const added = active.filter(m => !prevActive.includes(m));
-      months.push({
-        label: cursor.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        active,
-        added
-      });
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-    return months;
-  };
-
-  // Injection site heatmap: count by site (last 30 days), color green/yellow/red
-  const getInjectionSiteCounts = () => {
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - 30);
-    const cutoffStr = formatDateLocal(cutoff);
-    const recent = injectionEntries.filter(e => e.date >= cutoffStr);
-    const bySite = {};
-    recent.forEach(e => {
-      const site = e.site || 'Other';
-      bySite[site] = (bySite[site] || 0) + 1;
-    });
-    const allSites = [...BODY_LOCATIONS];
-    Object.keys(bySite).filter(s => !allSites.includes(s)).forEach(s => allSites.push(s));
-    return allSites.map(site => {
-      const count = bySite[site] || 0;
-      const status = count <= 2 ? 'green' : count <= 5 ? 'yellow' : 'red';
-      return { site, count, status };
-    }).filter(x => x.count > 0).sort((a, b) => b.count - a.count);
-  };
-
-  // All body locations with count and status for body map (0 = green/safe)
-  const getInjectionSiteCountsForMap = () => {
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - 30);
-    const cutoffStr = formatDateLocal(cutoff);
-    const recent = injectionEntries.filter(e => e.date >= cutoffStr);
-    const bySite = {};
-    recent.forEach(e => {
-      const site = e.site || 'Other';
-      bySite[site] = (bySite[site] || 0) + 1;
-    });
-    return BODY_LOCATIONS.map(site => {
-      const count = bySite[site] || 0;
-      const status = count <= 2 ? 'green' : count <= 5 ? 'yellow' : 'red';
-      return { site, count, status };
-    });
-  };
-
-  // Side-effect intelligence: correlate side effects with days since injection, suggest tips
-  const getSideEffectPatterns = () => {
-    const withEffects = injectionEntries.filter(e => e.sideEffects && e.sideEffects.length > 0).sort((a, b) => a.date.localeCompare(b.date));
-    if (withEffects.length < 2) return null;
-    const byMed = {};
-    withEffects.forEach(inj => {
-      if (!byMed[inj.type]) byMed[inj.type] = [];
-      byMed[inj.type].push(inj);
-    });
-    const patterns = [];
-    Object.entries(byMed).forEach(([med, entries]) => {
-      entries.forEach((entry, i) => {
-        const entryDate = parseLocalDate(entry.date);
-        (entry.sideEffects || []).forEach(se => {
-          let daysSince = null;
-          if (i > 0) {
-            const prev = parseLocalDate(entries[i - 1].date);
-            daysSince = Math.round((entryDate - prev) / (24 * 60 * 60 * 1000));
-          }
-          patterns.push({ med, sideEffect: se, date: entry.date, daysSince });
-        });
-      });
-    });
-    const byEffect = {};
-    patterns.forEach(p => {
-      const key = `${p.med}|${p.sideEffect}`;
-      if (!byEffect[key]) byEffect[key] = { med: p.med, sideEffect: p.sideEffect, days: [] };
-      if (p.daysSince != null) byEffect[key].days.push(p.daysSince);
-    });
-    const insights = Object.values(byEffect)
-      .filter(x => x.days.length >= 2)
-      .map(x => {
-        const avg = x.days.reduce((a, b) => a + b, 0) / x.days.length;
-        const in24_48 = x.days.filter(d => d >= 1 && d <= 2).length / x.days.length;
-        let suggestion = null;
-        if (in24_48 >= 0.5) suggestion = 'Try evening injections so peak falls during sleep, or split dose (half twice per week). Increase electrolytes and small meals.';
-        else if (avg <= 0.5) suggestion = 'Effect often same day ‚Äî consider timing (e.g. evening) or smaller dose.';
-        return { ...x, avgDays: Math.round(avg * 10) / 10, in24_48, suggestion };
-      })
-      .filter(x => x.suggestion);
-    return insights.length ? insights : null;
-  };
-
-  const getCalendarDays = () => {
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - startDate.getDay());
-    const days = [];
-    for (let i = 0; i < 42; i++) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + i);
-      const dateStr = formatDateLocal(date);
-      const injections = injectionEntries.filter(inj => inj.date === dateStr);
-      const isCurrentMonth = date.getMonth() === month;
-      days.push({ date, dateStr, injections, isCurrentMonth, isToday: dateStr === getTodayLocal() });
-    }
-    return days;
-  };
-
-  const calculateReconstitution = () => {
-    const vialMg = reconPeptideUnit === 'mg' ? parseFloat(reconPeptideAmount) : parseFloat(reconPeptideAmount) / 1000;
-    if (!reconPeptideAmount || isNaN(vialMg) || vialMg <= 0) return;
-
-    if (reconMode === 'vial_bac') {
-      // Vial + Bac water ‚Üí concentration and dose (volume per desired dose)
-      const bacMl = parseFloat(reconWaterAmount);
-      if (!reconWaterAmount || isNaN(bacMl) || bacMl <= 0) return;
-      const concentrationMgPerMl = vialMg / bacMl;
-      const concentrationMcgPerMl = concentrationMgPerMl * 1000;
-      let mlPerDose = null;
-      let unitsPerDose = null;
-      if (reconDesiredDose) {
-        const desiredMg = reconDesiredUnit === 'mg' ? parseFloat(reconDesiredDose) : parseFloat(reconDesiredDose) / 1000;
-        if (!isNaN(desiredMg) && desiredMg > 0) {
-          mlPerDose = desiredMg / concentrationMgPerMl;
-          unitsPerDose = mlPerDose * 100;
-        }
-      }
-      setReconResult({
-        mode: 'vial_bac',
-        concentration: concentrationMgPerMl.toFixed(2),
-        concentrationMcg: concentrationMcgPerMl.toFixed(0),
-        bacMl,
-        mlPerDose: mlPerDose != null ? mlPerDose.toFixed(3) : null,
-        unitsPerDose: unitsPerDose != null ? unitsPerDose.toFixed(1) : null,
-        desiredDose: reconDesiredDose ? `${reconDesiredDose} ${reconDesiredUnit}` : null
-      });
-      return;
-    }
-
-    // Vial + Desired dose ‚Üí bac water needed (so that volumePerDose ml = desired dose)
-    const desiredMg = reconDesiredUnit === 'mg' ? parseFloat(reconDesiredDose) : parseFloat(reconDesiredDose) / 1000;
-    const volumePerDoseMl = parseFloat(reconVolumePerDose) || 0.5;
-    if (!reconDesiredDose || isNaN(desiredMg) || desiredMg <= 0 || volumePerDoseMl <= 0) return;
-    // desiredMg per volumePerDoseMl ‚Üí concentration = desiredMg / volumePerDoseMl; vialMg = concentration * bacMl ‚Üí bacMl = vialMg / concentration = vialMg * volumePerDoseMl / desiredMg
-    const bacMl = (vialMg * volumePerDoseMl) / desiredMg;
-    const concentrationMgPerMl = vialMg / bacMl;
-    setReconResult({
-      mode: 'vial_dose',
-      bacMl: bacMl.toFixed(2),
-      concentration: concentrationMgPerMl.toFixed(2),
-      mlPerDose: volumePerDoseMl.toFixed(2),
-      unitsPerDose: (volumePerDoseMl * 100).toFixed(1)
-    });
-  };
-
-  // Calorie / TDEE calculator (Mifflin-St Jeor BMR, then activity multiplier)
-  const ACTIVITY_MULT = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very: 1.9 };
-  const calculateTDEE = () => {
-    const age = parseInt(tdeeAge, 10);
-    const weightKg = parseFloat(tdeeWeightLbs) / 2.205;
-    const heightCm = parseFloat(tdeeHeightIn) * 2.54;
-    if (!age || !tdeeWeightLbs || !tdeeHeightIn || weightKg <= 0 || heightCm <= 0) return;
-    const bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age) + (tdeeGender === 'male' ? 5 : -161);
-    const tdee = Math.round(bmr * (ACTIVITY_MULT[tdeeActivity] || 1.55));
-    setTdeeResult({ bmr: Math.round(bmr), tdee });
-  };
-
-  // Daily track: hydration & protein derived from meals; optional extra water
-  const todayStr = getTodayLocal();
-  const todayDaily = dailyTrackEntries.find(e => e.date === todayStr);
-  const todayMeals = todayDaily?.meals ?? [];
-  const proteinFromMeals = todayMeals.reduce((s, m) => s + (m.protein ?? 0), 0);
-  const hydrationFromMeals = todayMeals.reduce((s, m) => s + (m.hydrationOz ?? 0), 0);
-  const proteinToday = todayMeals.length > 0 ? proteinFromMeals : (todayDaily?.proteinG ?? 0);
-  const hydrationToday = hydrationFromMeals + (todayDaily?.extraHydrationOz ?? (todayMeals.length > 0 ? 0 : todayDaily?.hydrationOz ?? 0));
-
-  const saveExtraHydration = () => {
-    const oz = extraHydrationOz !== '' ? parseFloat(extraHydrationOz) : 0;
-    if (isNaN(oz) || oz < 0) return;
-    const existing = dailyTrackEntries.find(e => e.date === todayStr);
-    const updated = existing
-      ? dailyTrackEntries.map(e => e.date === todayStr ? { ...e, extraHydrationOz: oz } : e)
-      : [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals: [], extraHydrationOz: oz }];
-    updated.sort((a, b) => b.date.localeCompare(a.date));
-    setDailyTrackEntries(updated);
-    saveData('health-daily-track', updated);
-    setExtraHydrationOz('');
-  };
-
-  const addQuickWater = (oz) => {
-    const existing = dailyTrackEntries.find(e => e.date === todayStr);
-    const currentExtra = existing?.extraHydrationOz ?? (existing && todayMeals.length === 0 ? (existing.hydrationOz ?? 0) : 0) ?? 0;
-    const newExtra = currentExtra + oz;
-    const updated = existing
-      ? dailyTrackEntries.map(e => e.date === todayStr ? { ...e, extraHydrationOz: newExtra } : e)
-      : [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals: [], extraHydrationOz: newExtra }];
-    updated.sort((a, b) => b.date.localeCompare(a.date));
-    setDailyTrackEntries(updated);
-    saveData('health-daily-track', updated);
-  };
-
-  const addNutritionEntry = () => {
-    const calories = nutritionCalories !== '' ? parseFloat(nutritionCalories) : 0;
-    if (isNaN(calories) || calories < 0) return;
-    const protein = nutritionProtein !== '' ? parseFloat(nutritionProtein) : 0;
-    const carbs = nutritionCarbs !== '' ? parseFloat(nutritionCarbs) : 0;
-    const fat = nutritionFat !== '' ? parseFloat(nutritionFat) : 0;
-    const hydrationOz = nutritionHydrationOz !== '' ? parseFloat(nutritionHydrationOz) : 0;
-    const meal = {
-      id: Date.now(),
-      label: nutritionLabel.trim() || 'Meal',
-      calories,
-      protein: isNaN(protein) ? 0 : protein,
-      carbs: isNaN(carbs) ? 0 : carbs,
-      fat: isNaN(fat) ? 0 : fat,
-      hydrationOz: isNaN(hydrationOz) ? 0 : Math.max(0, hydrationOz)
-    };
-    const existing = dailyTrackEntries.find(e => e.date === todayStr);
-    const meals = [...(existing?.meals ?? []), meal];
-    const updated = existing
-      ? dailyTrackEntries.map(e => e.date === todayStr ? { ...e, meals } : e)
-      : [...dailyTrackEntries, { id: Date.now(), date: todayStr, hydrationOz: 0, proteinG: 0, meals }];
-    updated.sort((a, b) => b.date.localeCompare(a.date));
-    setDailyTrackEntries(updated);
-    saveData('health-daily-track', updated);
-    setNutritionLabel('');
-    setNutritionCalories('');
-    setNutritionProtein('');
-    setNutritionCarbs('');
-    setNutritionFat('');
-    setNutritionHydrationOz('');
-    setMealDescription('');
-  };
-
-  const applyMealEstimate = () => {
-    const est = estimateMealFromDescription(mealDescription);
-    if (!est) return;
-    setNutritionLabel(est.label);
-    setNutritionCalories(String(est.calories));
-    setNutritionProtein(String(est.protein));
-    setNutritionCarbs(String(est.carbs));
-    setNutritionFat(String(est.fat));
-    setNutritionHydrationOz(est.hydrationOz ? String(est.hydrationOz) : '');
-  };
-
-  const deleteNutritionEntry = (mealId) => {
-    const existing = dailyTrackEntries.find(e => e.date === todayStr);
-    if (!existing?.meals?.length) return;
-    const meals = existing.meals.filter(m => m.id !== mealId);
-    const updated = dailyTrackEntries.map(e => e.date === todayStr ? { ...e, meals } : e);
-    setDailyTrackEntries(updated);
-    saveData('health-daily-track', updated);
-  };
-
-  // Suggest next injection site for rotation (based on last injection site for this med)
-  const getSuggestedInjectionSite = (medicationName) => {
-    const recent = injectionEntries
-      .filter(e => e.type === medicationName)
-      .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))
-      .slice(0, 10);
-    if (recent.length === 0) return BODY_LOCATIONS[0];
-    const lastSite = recent[0].site || 'Stomach';
-    const idx = BODY_LOCATIONS.indexOf(lastSite);
-    const nextIdx = idx >= 0 ? (idx + 1) % BODY_LOCATIONS.length : 0;
-    return BODY_LOCATIONS[nextIdx];
-  };
-
-  const filteredGoalCategories = useMemo(() => {
-    const q = goalGuideSearch.trim().toLowerCase();
-    if (!q) return GOAL_CATEGORIES;
-    return GOAL_CATEGORIES.filter((cat) => {
-      if (cat.title.toLowerCase().includes(q) || cat.description.toLowerCase().includes(q)) return true;
-      if (cat.clinicianTips?.some((t) => t.toLowerCase().includes(q))) return true;
-      return cat.items.some(
-        (i) =>
-          i.medicationName.toLowerCase().includes(q) ||
-          i.explain.toLowerCase().includes(q) ||
-          (i.stacksWellWith || []).some(
-            (s) => s.medicationName.toLowerCase().includes(q) || s.why.toLowerCase().includes(q)
-          )
-      );
-    });
-  }, [goalGuideSearch]);
-
-  const stackSuggestionList = useMemo(() => getStackSuggestions(goalUserStack), [goalUserStack]);
-
-  const userHasLoggedMedication = (name) => injectionEntries.some((e) => e.type === name);
-
-  const persistGoalUserStack = (next) => {
-    setGoalUserStack(next);
-    saveData('health-goals-user-stack', next);
-  };
-  const addToGoalUserStack = (medicationName) => {
-    if (!medicationName || goalUserStack.includes(medicationName)) return;
-    persistGoalUserStack([...goalUserStack, medicationName]);
-  };
-  const removeFromGoalUserStack = (medicationName) => {
-    persistGoalUserStack(goalUserStack.filter((x) => x !== medicationName));
-  };
-
-  const goalStackMedColor = (name) => MEDICATIONS.find((m) => m.name === name)?.color || '#94a3b8';
-
-  const handleGoalTrackAction = (action) => {
-    setActiveTab(action.tab);
-    if (action.moreSection) setActiveMoreSection(action.moreSection);
-    setShowAddForm(!!action.openInjectionForm);
-  };
-
-  // Convert injection dose to mg-equivalent for pharmacokinetic weighting (same units = comparable)
-  const toDoseMg = (inj) => {
-    let dose = parseFloat(inj.dose);
-    if (isNaN(dose)) return 0;
-    if (inj.unit === 'mcg') return dose / 1000;
-    if (inj.unit === 'ml') return dose; // generic: no vial context
-    if (inj.unit === 'units') {
-      if (inj.type === 'Retatrutide') return dose / RETATRUTIDE_UNITS_PER_MG;
-      return dose / 100;
-    }
-    if (inj.unit === 'IU') return dose / 1000;
-    return dose; // mg
-  };
-
-  // mg/ml from vial record (stored concentration, or totalMg √∑ bac water when reconstituted)
-  const getVialConcentrationMgPerMl = (v) => {
-    if (!v) return 0;
-    const c = parseFloat(v.concentration);
-    if (!isNaN(c) && c > 0) return c;
-    const bac = parseFloat(v.bacWaterMl);
-    const total = parseFloat(v.totalMg);
-    if (!isNaN(bac) && bac > 0 && !isNaN(total) && total > 0) return total / bac;
-    return 0;
-  };
-
-  // For vial deduction: ml √ó conc; U-100 units √ó conc; Retatrutide pen dial = units √∑ 10 per mg (not U-100 volume)
-  const getDoseMgForVial = (dose, unit, vialId, medicationName) => {
-    const u = (unit || 'mg').toLowerCase();
-    const v = vialId ? vials.find(x => x.id === vialId) : null;
-    const med = medicationName ?? v?.medication;
-    const d = parseFloat(dose);
-    if (u === 'units' && med === 'Retatrutide') {
-      return isNaN(d) ? 0 : d / RETATRUTIDE_UNITS_PER_MG;
-    }
-    const conc = getVialConcentrationMgPerMl(v);
-    if (u === 'ml' && vialId && conc > 0) return d * conc;
-    if (u === 'units' && vialId && conc > 0) return (d / 100) * conc;
-    return toDoseMg({ dose, unit: unit || 'mg', type: med });
-  };
-
-  // For level/curve only: ml ‚Üí mg using linked vial, inventory vial, or med-specific assumed mg/ml (TRT oil) when no vial is set.
-  const toDoseMgForLevel = (inj) => {
-    if (!inj || isNaN(parseFloat(inj.dose))) return 0;
-    const doseNum = parseFloat(inj.dose);
-    const unit = (inj.unit || '').toLowerCase();
-    const treatAsMl = unit === 'ml' || (doseNum > 0 && doseNum < 2 && inj.type && /testosterone|cypionate|enanthate/i.test(inj.type));
-    if (treatAsMl) {
-      if (inj.vialId) return getDoseMgForVial(inj.dose, 'ml', inj.vialId, inj.type);
-      const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
-      if (v) return doseNum * getVialConcentrationMgPerMl(v);
-      const med = MEDICATIONS.find(m => m.name === inj.type);
-      const assumed = med && parseFloat(med.assumedConcentrationMgPerMl);
-      if (!isNaN(assumed) && assumed > 0) return doseNum * assumed;
-      return 0;
-    }
-    if (unit === 'units') {
-      if (inj.type === 'Retatrutide') return doseNum / RETATRUTIDE_UNITS_PER_MG;
-      if (inj.vialId) {
-        const mg = getDoseMgForVial(inj.dose, 'units', inj.vialId, inj.type);
-        if (mg > 0) return mg;
-      }
-      const v = vials.find((v) => v.medication === inj.type && getVialConcentrationMgPerMl(v) > 0);
-      if (v) return (doseNum / 100) * getVialConcentrationMgPerMl(v);
-    }
-    return toDoseMg(inj);
-  };
-
-  // For level % denominator: max single-shot mg in the set (stable vs "most recent" when recent rows are ml or typos).
-  const getReferenceDoseMgForLevelPct = (injections) => {
-    if (!Array.isArray(injections) || injections.length === 0) return 0;
-    let maxMg = 0;
-    injections.forEach(inj => {
-      const mg = toDoseMgForLevel(inj);
-      if (mg > maxMg) maxMg = mg;
-    });
-    return maxMg;
-  };
-
-  // Convert vial amount + unit to mg for storage/deduction
-  const vialAmountToMg = (amount, unit, concentrationMgPerMl) => {
-    const a = parseFloat(amount);
-    if (isNaN(a) || a <= 0) return 0;
-    if (unit === 'mg') return a;
-    if (unit === 'mcg') return a / 1000;
-    if (unit === 'ml') {
-      const c = parseFloat(concentrationMgPerMl);
-      return a * (isNaN(c) || c <= 0 ? 1 : c); // assume 1 mg/ml if not set
-    }
-    return a; // units, IU: treat as mg equivalent
-  };
-
-  // Effective hours for decay: IM absorbs faster so dose "enters" sooner (earlier peak)
-  const getEffectiveHoursForDecay = (injection, medication, hoursElapsed) => {
-    const route = injection.route || 'SubQ';
-    if (route === 'IM' && medication.peakHours) {
-      return hoursElapsed + medication.peakHours * 0.35; // IM: treat as if injected ~35% of peak-time earlier
-    }
-    return hoursElapsed;
-  };
-
-  // Medication level calculations (pharmacokinetics) ‚Äî weighted by user's actual dose; SubQ vs IM affects curve
-  const calculateMedicationLevel = (injection, medication) => {
-    const now = new Date();
-    const injectionDate = parseLocalDate(toCalendarDay(injection.date));
-    if (!injectionDate || !Number.isFinite(injectionDate.getTime())) return 0;
-    const hoursElapsed = (now - injectionDate) / (1000 * 60 * 60);
-    
-    if (hoursElapsed < 0) return 0; // Future injection
-    if (!medication.halfLife) return 0;
-    
-    const effectiveHours = getEffectiveHoursForDecay(injection, medication, hoursElapsed);
-    const doseMg = toDoseMgForLevel(injection);
-    const halfLivesElapsed = effectiveHours / medication.halfLife;
-    const remainingMg = doseMg * Math.pow(0.5, halfLivesElapsed);
-    
-    return Math.max(0, remainingMg);
-  };
-
-  // Get current phase based on hours since injection (medication-specific first, then category fallback)
-  const getCurrentPhase = (hoursAgo, category, medName) => {
-    const timeline = (medName && MEDICATION_PHASE_TIMELINES[medName]) || PHASE_TIMELINES[category];
-    if (!timeline) return null;
-    
-    // Find which phase we're in based on hours elapsed
-    for (let i = 0; i < timeline.phases.length; i++) {
-      const phase = timeline.phases[i];
-      const [minHours, maxHours] = phase.hours;
-      if (hoursAgo >= minHours && (hoursAgo < maxHours || maxHours === 999)) {
-        return {
-          ...phase,
-          phaseIndex: i,
-          totalPhases: timeline.phases.length,
-          hoursIntoPhase: hoursAgo - minHours,
-          hoursRemainingInPhase: maxHours === 999 ? null : maxHours - hoursAgo
-        };
-      }
-    }
-    return null;
-  };
-
-  const getMedicationInsights = () => {
-    const insights = [];
-    const now = new Date();
-    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-    const withValidDate = injectionEntries.filter(inj => isValidEntryDate(inj.date));
-
-    // Get recent injections (last 90 days; fall back to all if none recent ‚Äî e.g. sample data). Skip entries with bad dates.
-    let recentInjections = withValidDate.filter(inj => {
-      const injDate = parseLocalDate(toCalendarDay(inj.date));
-      const daysAgo = (now - injDate) / (1000 * 60 * 60 * 24);
-      return daysAgo <= 90;
-    });
-    if (recentInjections.length === 0) recentInjections = withValidDate;
-    
-    // Group by medication type
-    const byMedication = {};
-    recentInjections.forEach(inj => {
-      if (!byMedication[inj.type]) byMedication[inj.type] = [];
-      byMedication[inj.type].push(inj);
-    });
-    
-    // Calculate insights for each medication
-    Object.entries(byMedication).forEach(([medName, injections]) => {
-      const medication = MEDICATIONS.find(m => m.name === medName);
-      if (!medication) return;
-      
-      // Sort by date, most recent first (use toCalendarDay so bad date formats don't break)
-      const sorted = injections.sort((a, b) => parseLocalDate(toCalendarDay(b.date)) - parseLocalDate(toCalendarDay(a.date)));
-      const lastInjection = sorted[0];
-      const lastDate = parseLocalDate(toCalendarDay(lastInjection.date));
-      const hoursAgo = lastDate && Number.isFinite(lastDate.getTime()) ? (now - lastDate) / (1000 * 60 * 60) : 0;
-      
-      // Calculate TOTAL current level from ALL recent injections, weighted by user's actual dose
-      let totalRemainingMg = 0;
-      injections.forEach(inj => {
-        const injDate = parseLocalDate(toCalendarDay(inj.date));
-        if (!injDate || !Number.isFinite(injDate.getTime())) return;
-        const hoursElapsed = (now - injDate) / (1000 * 60 * 60);
-        if (hoursElapsed >= 0) {
-          const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
-          const doseMg = toDoseMgForLevel(inj);
-          const halfLivesElapsed = effectiveHours / medication.halfLife;
-          const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
-          if (remaining > 0.0001) totalRemainingMg += remaining;
-        }
-      });
-      // Display as % of largest logged dose (mg) in this window ‚Äî avoids 1000% when "most recent" dose parses tiny but older shots still contribute.
-      const refDoseMg = getReferenceDoseMgForLevelPct(injections);
-      const rawLevel = refDoseMg > 0 ? (totalRemainingMg / refDoseMg) * 100 : 0;
-      const currentLevel = Math.min(1000, rawLevel);
-      
-      // Get current phase from timeline (medication-specific first, then category)
-      const currentPhase = getCurrentPhase(hoursAgo, medication.category, medication.name);
-      const timeline = (medName && MEDICATION_PHASE_TIMELINES[medName]) || PHASE_TIMELINES[medication.category];
-
-      // Fallback to simple phase if timeline not available
-      let phase = currentPhase ? currentPhase.name : 'Active';
-      let phaseColor = currentPhase ? currentPhase.color : 'text-gold-400';
-
-      // Calculate next injection time
-      const schedule = schedules.find(s => s.medication === medName);
-      let nextInjection = null;
-      if (schedule) {
-        const lastDay = toCalendarDay(lastInjection.date);
-        const nextDate = lastDay ? new Date(parseLocalDate(lastDay)) : null;
-        if (nextDate && Number.isFinite(nextDate.getTime())) {
-          nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
-          nextInjection = nextDate;
-        }
-      }
-
-      insights.push({
-        medication: medName,
-        color: medication.color,
-        category: medication.category,
-        currentLevel: Math.round(currentLevel), // Round to whole number
-        phase,
-        phaseColor,
-        currentPhase, // Full phase object with details
-        timeline, // Medication-specific or category timeline for phase list
-        lastInjection: lastInjection.date,
-        lastDose: lastInjection.dose,
-        lastUnit: lastInjection.unit,
-        hoursAgo: hoursAgo.toFixed(1),
-        nextInjection,
-        effectProfile: (medName && MEDICATION_EFFECT_PROFILES[medName]) || EFFECT_PROFILES[medication.category]
-      });
-    });
-    
-    return insights.sort((a, b) => parseFloat(b.currentLevel) - parseFloat(a.currentLevel));
-  };
-
-  const getMedicationLevelChartData = (medName) => {
-    const medication = MEDICATIONS.find(m => m.name === medName);
-    if (!medication) return [];
-    
-    const recentInjections = injectionEntries
-      .filter(inj => inj.type === medName)
-      .sort((a, b) => parseLocalDate(toCalendarDay(a.date)) - parseLocalDate(toCalendarDay(b.date)));
-    
-    if (recentInjections.length === 0) return [];
-    
-    const now = new Date();
-    const data = [];
-    
-    // Generate data points for the last 14 days. Compare by calendar day only so any injection
-    // logged on that day is always included and the curve goes up on injection days.
-    for (let i = -14; i <= 0; i++) {
-      const date = new Date(now);
-      date.setDate(date.getDate() + i);
-      date.setHours(23, 59, 59, 999);
-      const dateStr = formatDateLocal(date);
-      
-      // Include all injections on or before this calendar day (string comparison YYYY-MM-DD)
-      const injectionsBeforeDate = recentInjections.filter(inj => toCalendarDay(inj.date) <= dateStr);
-      let totalRemainingMg = 0;
-      injectionsBeforeDate.forEach(inj => {
-        const injDay = toCalendarDay(inj.date);
-        const injDate = parseLocalDate(injDay); // start of injection day
-        const hoursElapsed = (date.getTime() - injDate.getTime()) / (1000 * 60 * 60);
-        const effectiveHours = getEffectiveHoursForDecay(inj, medication, hoursElapsed);
-        const doseMg = toDoseMgForLevel(inj);
-        const halfLivesElapsed = effectiveHours / medication.halfLife;
-        const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
-        if (remaining > 0.0001) totalRemainingMg += remaining;
-      });
-      const refDoseMg = getReferenceDoseMgForLevelPct(injectionsBeforeDate);
-      const level = refDoseMg > 0 ? (totalRemainingMg / refDoseMg) * 100 : 0;
-      const injectionDatesSet = new Set(recentInjections.map(inj => toCalendarDay(inj.date)));
-      const hasInjection = injectionDatesSet.has(dateStr);
-
-      data.push({
-        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        fullDate: dateStr,
-        level: Math.round(level),
-        injectionDay: hasInjection
-      });
-    }
-
-    return data;
-  };
-
-  // Weekly breakdown: total dose per week (per medication) + weight change per week
-  const getWeeklyDoseAndWeightSummary = () => {
-    if (weightEntries.length < 2 || injectionEntries.length === 0) return { rows: [], meds: [] };
-    const medNames = [...new Set(injectionEntries.map(inj => inj.type).filter(Boolean))];
-    const sortedWeights = sortWeightByDateAsc(weightEntries);
-    const startDate = parseLocalDate(toCalendarDay(sortedWeights[0].date));
-    const endDate = parseLocalDate(toCalendarDay(sortedWeights[sortedWeights.length - 1].date));
-    if (!startDate || !endDate) return { rows: [], meds: medNames };
-
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const msPerWeek = 7 * msPerDay;
-
-    // Start of each 7-day bucket (anchor = weeklyDoseWeekStartsOn: 0 Sun ‚Ä¶ 6 Sat)
-    const startOfWeek = (d) => {
-      const date = new Date(d);
-      const day = date.getDay();
-      const anchor = weeklyDoseWeekStartsOn;
-      const diff = (day - anchor + 7) % 7;
-      date.setDate(date.getDate() - diff);
-      date.setHours(0, 0, 0, 0);
-      return date;
-    };
-
-    const firstWeekStart = startOfWeek(startDate);
-    const lastWeekStart = startOfWeek(endDate);
-    const weekCount = Math.max(1, Math.round((lastWeekStart - firstWeekStart) / msPerWeek) + 1);
-
-    const injectionsByWeek = {};
-    injectionEntries.forEach(inj => {
-      const d = parseLocalDate(toCalendarDay(inj.date));
-      if (!d || !Number.isFinite(d.getTime())) return;
-      const weekKey = formatDateLocal(startOfWeek(d));
-      const doseMg = toDoseMgForLevel(inj);
-      if (!injectionsByWeek[weekKey]) {
-        injectionsByWeek[weekKey] = {
-          totalMg: 0,
-          perMed: {}
-        };
-      }
-      const bucket = injectionsByWeek[weekKey];
-      const safeDose = doseMg || 0;
-      bucket.totalMg += safeDose;
-
-      const medName = inj.type || 'Other';
-      if (!bucket.perMed[medName]) {
-        bucket.perMed[medName] = { doseMg: 0 };
-      }
-      bucket.perMed[medName].doseMg += doseMg || 0;
-    });
-
-    const rows = [];
-    for (let i = 0; i < weekCount; i++) {
-      const ws = new Date(firstWeekStart);
-      ws.setDate(ws.getDate() + i * 7);
-      ws.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(ws);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      weekEnd.setHours(23, 59, 59, 999);
-      const wsKey = formatDateLocal(ws);
-
-      // Weight change in this week:
-      // - Start = last weight before week start (if any), otherwise first weight in this week
-      // - End   = last weight recorded in this week
-      const weekWeights = sortedWeights.filter(w => {
-        const d = parseLocalDate(toCalendarDay(w.date));
-        return d && d >= ws && d <= weekEnd;
-      });
-      const hasDoses = !!injectionsByWeek[wsKey];
-      if (weekWeights.length === 0 && !hasDoses) continue;
-
-      let change = null;
-      let weekStartWeight = null;
-      let weekEndWeight = null;
-      if (weekWeights.length > 0) {
-        const weightsBeforeWeek = sortedWeights.filter(w => {
-          const d = parseLocalDate(toCalendarDay(w.date));
-          return d && d < ws;
-        });
-        const startW = weightsBeforeWeek.length
-          ? weightsBeforeWeek[weightsBeforeWeek.length - 1].weight
-          : weekWeights[0].weight;
-        const endW = weekWeights[weekWeights.length - 1].weight;
-        const sw = parseFloat(startW);
-        const ew = parseFloat(endW);
-        if (!Number.isNaN(sw)) weekStartWeight = sw;
-        if (!Number.isNaN(ew)) weekEndWeight = ew;
-        if (startW != null && endW != null && !Number.isNaN(sw) && !Number.isNaN(ew)) {
-          change = ew - sw;
-        }
-      }
-
-      const doseBucket = injectionsByWeek[wsKey] || { totalMg: 0, perMed: {} };
-      rows.push({
-        weekIndex: rows.length + 1,
-        weekLabel: `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ‚Äì ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-        totalDoseMg: doseBucket.totalMg,
-        perMed: doseBucket.perMed,
-        weightChange: change,
-        weekStartWeight,
-        weekEndWeight
-      });
-    }
-
-    return { rows, meds: medNames };
-  };
-
-  // Phase label for a given day based on hours since last injection (Rising ‚Üí Peak ‚Üí Falling ‚Üí Trough)
-  // Trough = right before next dose; for weekly drugs with ~6‚Äì7 day half-life, that's day 6‚Äì7
-  const getPhaseLabelForDay = (hoursSinceInjection, med, isInjectionDay) => {
-    if (isInjectionDay && hoursSinceInjection < 24) return 'Injection';
-    const peak = med.peakHours || 24;
-    const halfLife = med.halfLife || 168;
-    if (hoursSinceInjection <= peak * 0.8) return 'Rising';
-    if (hoursSinceInjection <= peak * 2) return 'Peak';           // Peak through ~day 2‚Äì4 for weekly drugs
-    if (hoursSinceInjection <= halfLife * 0.85) return 'Falling'; // Falling until ~day 5‚Äì6
-    return 'Trough';                                              // Trough = last day(s) before next dose
-  };
-
-  // Unified chart: one graph with one curve per medication, estimated levels from half-life decay.
-  // "All" = start on first logged injection date ‚Üí today. Week/Month/3 mo = go back from current date by that period ‚Üí today.
-  const getUnifiedMedicationLevelChartData = () => {
-    const nowReal = new Date();
-    const todayStr = formatDateLocal(nowReal);
-    const endOfToday = new Date(nowReal);
-    endOfToday.setHours(23, 59, 59, 999);
-    const validInjections = injectionEntries.filter(inj => isValidEntryDate(inj.date));
-    const medNames = [...new Set(validInjections.map(inj => inj.type))];
-    const medications = medNames.map(name => MEDICATIONS.find(m => m.name === name)).filter(Boolean);
-    if (medications.length === 0 || validInjections.length === 0) return { data: [], medications: [] };
-
-    const firstInjectionDate = validInjections.reduce((earliest, inj) => {
-      const dayStr = toCalendarDay(inj.date);
-      if (!dayStr) return earliest;
-      const d = parseLocalDate(dayStr);
-      if (!d || !Number.isFinite(d.getTime())) return earliest;
-      return !earliest || d.getTime() < earliest.getTime() ? d : earliest;
-    }, null);
-    if (!firstInjectionDate || !Number.isFinite(firstInjectionDate.getTime())) return { data: [], medications: [] };
-
-    let chartStart;
-    if (insightsChartRange === 'all') {
-      chartStart = new Date(firstInjectionDate);
-      chartStart.setHours(23, 59, 59, 999);
-    } else {
-      const daysBack = insightsChartRange === '1w' ? 7 : insightsChartRange === '1m' ? 30 : 90;
-      chartStart = new Date(nowReal);
-      chartStart.setDate(chartStart.getDate() - daysBack);
-      chartStart.setHours(23, 59, 59, 999);
-    }
-
-    const data = [];
-    const endTime = endOfToday.getTime();
-    let date = new Date(chartStart);
-    date.setHours(23, 59, 59, 999);
-    while (date.getTime() <= endTime) {
-      const dateStr = formatDateLocal(date);
-      const isToday = dateStr === todayStr;
-      // Use **local midnight** for past/future days so injection dots align with that calendar day on the
-      // X-axis (end-of-day timestamps sat near the next tick and looked ‚Äúoff by one‚Äù). Today uses real time.
-      const startOfThisDay = new Date(date);
-      startOfThisDay.setHours(0, 0, 0, 0);
-      const timeForRow = isToday ? nowReal.getTime() : startOfThisDay.getTime();
-      const injectionMeds = new Set();
-      const injectionDoses = {}; // { medName: { dose, unit } } for tooltip
-      const phaseByMed = {};
-      const remainingMgByMed = {};
-      let totalActiveMg = 0;
-      const row = {
-        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        fullDate: dateStr,
-        timestamp: timeForRow,
-        isToday,
-        injectionMedNames: [],
-        injectionDoses,
-        phaseByMed,
-        remainingMgByMed
-      };
-      medications.forEach(med => {
-        const injOnDay = validInjections.find(inj => inj.type === med.name && toCalendarDay(inj.date) === dateStr);
-        if (injOnDay) {
-          injectionMeds.add(med.name);
-          injectionDoses[med.name] = { dose: String(injOnDay.dose), unit: injOnDay.unit || 'mg' };
-        }
-      });
-      medications.forEach(med => {
-        const recentInjections = validInjections
-          .filter(inj => inj.type === med.name)
-          .sort((a, b) => parseLocalDate(toCalendarDay(a.date)) - parseLocalDate(toCalendarDay(b.date)));
-        const injectionsBeforeDate = recentInjections.filter(inj => toCalendarDay(inj.date) <= dateStr);
-        if (injectionsBeforeDate.length === 0) {
-          row[med.name] = null;
-          return;
-        }
-        let totalRemainingMg = 0;
-        injectionsBeforeDate.forEach(inj => {
-          const dayStr = toCalendarDay(inj.date);
-          if (!dayStr) return;
-          const injDate = parseLocalDate(dayStr);
-          if (!injDate || !Number.isFinite(injDate.getTime())) return;
-          const hoursElapsed = (timeForRow - injDate.getTime()) / (1000 * 60 * 60);
-          const effectiveHours = getEffectiveHoursForDecay(inj, med, hoursElapsed);
-          const doseMg = toDoseMgForLevel(inj);
-          const halfLivesElapsed = effectiveHours / med.halfLife;
-          const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
-          if (Number.isFinite(remaining) && remaining > 0.0001) totalRemainingMg += remaining;
-        });
-        totalActiveMg += totalRemainingMg;
-        remainingMgByMed[med.name] = totalRemainingMg;
-        const refDoseMg = getReferenceDoseMgForLevelPct(injectionsBeforeDate);
-        const pct = refDoseMg > 0 ? (totalRemainingMg / refDoseMg) * 100 : null;
-        row[med.name] = pct != null && Number.isFinite(pct) ? Math.min(1000, Math.round(pct)) : null;
-        const lastInj = injectionsBeforeDate[injectionsBeforeDate.length - 1];
-        const lastDayStr = lastInj ? toCalendarDay(lastInj.date) : '';
-        const lastInjDate = lastDayStr ? parseLocalDate(lastDayStr) : null;
-        const hoursSinceInjection = lastInjDate && Number.isFinite(lastInjDate.getTime())
-          ? (timeForRow - lastInjDate.getTime()) / (1000 * 60 * 60)
-          : 0;
-        const isInjectionDay = injectionMeds.has(med.name);
-        const phaseFromTimeline = getCurrentPhase(hoursSinceInjection, med.category, med.name);
-        row.phaseByMed[med.name] = (isInjectionDay && hoursSinceInjection < 24)
-          ? 'Injection'
-          : (phaseFromTimeline ? phaseFromTimeline.name : getPhaseLabelForDay(hoursSinceInjection, med, isInjectionDay));
-      });
-      row.injectionMedNames = Array.from(injectionMeds);
-      row.totalActiveMg = totalActiveMg;
-      if (isToday) {
-        const insights = getMedicationInsights();
-        let sumActiveMg = 0;
-        insights.forEach(insight => {
-          row[insight.medication] = insight.currentLevel;
-          const med = medications.find(m => m.name === insight.medication);
-          if (med) {
-            const withValidDate = validInjections.filter(inj => isValidEntryDate(inj.date));
-            const recentInjections = withValidDate.filter(inj => inj.type === insight.medication);
-            let totalRemainingMg = 0;
-            recentInjections.forEach(inj => {
-              const injDate = parseLocalDate(toCalendarDay(inj.date));
-              if (!injDate || !Number.isFinite(injDate.getTime())) return;
-              const hoursElapsed = (nowReal - injDate) / (1000 * 60 * 60);
-              if (hoursElapsed >= 0) {
-                const effectiveHours = getEffectiveHoursForDecay(inj, med, hoursElapsed);
-                const doseMg = toDoseMgForLevel(inj);
-                const halfLivesElapsed = effectiveHours / med.halfLife;
-                const remaining = doseMg * Math.pow(0.5, halfLivesElapsed);
-                if (remaining > 0.0001) totalRemainingMg += remaining;
-              }
-            });
-            row.remainingMgByMed[insight.medication] = totalRemainingMg;
-            sumActiveMg += totalRemainingMg;
-          }
-        });
-        row.totalActiveMg = sumActiveMg;
-      }
-      data.push(row);
-      date.setDate(date.getDate() + 1);
-      date.setHours(23, 59, 59, 999);
-    }
-    return { data, medications };
-  };
-
-  const filteredMedications = MEDICATIONS.filter(med => med.name.toLowerCase().includes(medSearchTerm.toLowerCase()) || med.category.toLowerCase().includes(medSearchTerm.toLowerCase()));
-  const groupedMedications = filteredMedications.reduce((acc, med) => { if (!acc[med.category]) acc[med.category] = []; acc[med.category].push(med); return acc; }, {});
-
-  const stats = getWeightStats();
-  const bmiCategory = getBMICategory(stats.bmi);
-  const upcomingInjections = getNextInjections();
-  const measurementStats = getMeasurementStats();
-
-  const dismissWelcomeModal = () => {
-    setShowWelcomeModal(false);
-    try {
-      localStorage.setItem('peptalk-welcome-version', APP_VERSION);
-      if (welcomeDontShowAgain) localStorage.setItem('peptalk-welcome-hide-forever', 'true');
-      if (supabaseConfigured && user) localStorage.setItem('peptalk-welcome-seen-signed-in', 'true');
-    } catch (_) {}
-  };
-
-  const onCloudSignInSuccess = () => {
-    try {
-      localStorage.removeItem('peptalk-cloud-opt-out');
-    } catch (_) {}
-    setCloudOptOut(false);
-  };
-
-  const continueOfflineOnly = async () => {
-    try {
-      localStorage.setItem('peptalk-cloud-opt-out', 'true');
-    } catch (_) {}
-    setCloudOptOut(true);
-    await supabaseSignOut();
-  };
-
-  const clearCloudOptOut = () => {
-    try {
-      localStorage.removeItem('peptalk-cloud-opt-out');
-    } catch (_) {}
-    setCloudOptOut(false);
-  };
-
-  const showBlockingSplash = isLoading || showSplash || (supabaseConfigured && supabaseAuthLoading);
-  const splashSubtitle = isLoading ? 'Loading your data...' : supabaseAuthLoading ? 'Checking session‚Ä¶' : 'Loading your data...';
-  const showOfflineBanner = supabaseConfigured && !isOnline;
-  const showSyncFailBanner = supabaseConfigured && isOnline && user && !!backgroundSyncError;
-
-  if (showBlockingSplash) {
-    return (
-      <div className="min-h-screen flex items-center justify-center overflow-hidden bg-[var(--bg-base)]">
-        <div className="text-center relative">
-          {/* Outer glow ring */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="splash-ring w-48 h-48 rounded-full border-2 border-accent/30" />
-          </div>
-          <div className="relative mb-6 splash-icon-wrap">
-            <div className="absolute inset-0 bg-accent/25 blur-3xl rounded-full splash-glow" />
-            <div className="absolute inset-0 rounded-full border border-accent/20 splash-ring-inner" />
-            <Activity className="h-24 w-24 text-gold-400 mx-auto relative splash-float" strokeWidth={1.5} />
-          </div>
-          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight splash-title">PepTalk</h1>
-          <p className="text-gold-400 text-sm font-medium splash-subtitle">{splashSubtitle}</p>
-          <div className="flex justify-center gap-1 mt-4 splash-dots">
-            <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0s' }} />
-            <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0.2s' }} />
-            <span className="w-2 h-2 rounded-full bg-accent/60 splash-dot" style={{ animationDelay: '0.4s' }} />
-          </div>
-        </div>
-        <style>{`
-          .splash-glow {
-            animation: splash-glow 2.5s ease-in-out infinite;
-          }
-          @keyframes splash-glow {
-            0%, 100% { opacity: 0.6; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.15); }
-          }
-          .splash-ring {
-            animation: splash-ring 3s linear infinite;
-          }
-          @keyframes splash-ring {
-            from { transform: rotate(0deg); opacity: 0.4; }
-            50% { opacity: 0.8; }
-            to { transform: rotate(360deg); opacity: 0.4; }
-          }
-          .splash-ring-inner {
-            animation: splash-ring-inner 4s linear infinite reverse;
-          }
-          @keyframes splash-ring-inner {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-          .splash-float {
-            animation: splash-float 2.5s ease-in-out infinite;
-          }
-          @keyframes splash-float {
-            0%, 100% { transform: translateY(0) scale(1); }
-            50% { transform: translateY(-12px) scale(1.05); }
-          }
-          .splash-title {
-            animation: splash-title 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
-          }
-          @keyframes splash-title {
-            from { opacity: 0; transform: translateY(16px) scale(0.92); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-          }
-          .splash-subtitle {
-            animation: splash-subtitle 0.6s ease-out 0.5s both;
-          }
-          @keyframes splash-subtitle {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .splash-dots {
-            animation: splash-fade 0.5s ease-out 0.7s both;
-          }
-          .splash-dot {
-            animation: splash-dot-bounce 1.2s ease-in-out infinite;
-          }
-          @keyframes splash-dot-bounce {
-            0%, 100% { transform: translateY(0); opacity: 0.6; }
-            50% { transform: translateY(-4px); opacity: 1; }
-          }
-          @keyframes splash-fade {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (supabaseConfigured && !user && !cloudOptOut) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[var(--bg-base)] gap-3">
-        {showOfflineBanner && (
-          <div className="w-full max-w-md flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100/95 text-sm">
-            <WifiOff className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-400" aria-hidden />
-            <span>
-              <strong className="text-amber-50">You&apos;re offline.</strong> Sign-in needs a network connection. Your data on this device stays put until you can connect.
-            </span>
-          </div>
-        )}
-        <div className="w-full max-w-md ui-card p-6 border border-cyan-500/25">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent/15 border border-accent/30 mb-3">
-              <Activity className="h-8 w-8 text-gold-400" strokeWidth={1.5} />
-            </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">PepTalk</h1>
-            <p className="text-gray-400 text-sm mt-2">Sign in to sync across devices, or use the app on this device only without an account.</p>
-          </div>
-          <form
-            className="space-y-3"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setCloudAuthMessage('');
-              setCloudBusy(true);
-              const { error } = await supabaseSignIn(cloudEmail, cloudPassword);
-              setCloudBusy(false);
-              if (error) setCloudAuthMessage(formatCloudError(error));
-              else {
-                onCloudSignInSuccess();
-                setCloudPassword('');
-                setCloudAuthMessage('');
-              }
-            }}
-          >
-            <div>
-              <label className="text-gray-400 text-sm block mb-1">Email</label>
-              <input type="email" autoComplete="email" value={cloudEmail} onChange={(e) => setCloudEmail(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="you@example.com" />
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm block mb-1">Password</label>
-              <input type="password" autoComplete="current-password" value={cloudPassword} onChange={(e) => setCloudPassword(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢" />
-            </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button type="submit" disabled={cloudBusy} className="flex-1 min-w-[8rem] ui-btn-primary py-2.5 disabled:opacity-50">Sign in</button>
-              <button
-                type="button"
-                disabled={cloudBusy}
-                className="flex-1 min-w-[8rem] py-2.5 rounded-lg font-medium bg-white/10 text-gray-200 hover:bg-white/15 disabled:opacity-50"
-                onClick={async () => {
-                  setCloudAuthMessage('');
-                  setCloudBusy(true);
-                  const { error } = await supabaseSignUp(cloudEmail, cloudPassword);
-                  setCloudBusy(false);
-                  if (error) setCloudAuthMessage(formatCloudError(error));
-                  else setCloudAuthMessage('Check your email to confirm your account (if required by your Supabase project).');
-                }}
-              >
-                Sign up
-              </button>
-            </div>
-            {cloudAuthMessage && <p className="text-gray-400 text-xs pt-1">{cloudAuthMessage}</p>}
-          </form>
-          <div className="mt-4 pt-4 border-t border-white/10">
-            <button
-              type="button"
-              disabled={cloudBusy}
-              onClick={continueOfflineOnly}
-              className="w-full py-2.5 rounded-lg text-sm font-medium bg-white/5 text-gray-300 border border-white/15 hover:bg-white/10 disabled:opacity-50"
-            >
-              Continue without account (offline only)
-            </button>
-            <p className="text-gray-500 text-xs mt-2 text-center">Data stays on this device until you sign in later from Profile.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen p-3 pb-28 transition-all duration-300 bg-[var(--bg-base)]">
-      {storageQuotaWarning && (
-        <div className="sticky top-0 z-40 mb-2 -mt-1">
-          <div className="flex items-start gap-2 rounded-xl border border-orange-500/35 bg-orange-500/10 px-3 py-2.5 text-orange-100/95 text-sm">
-            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-orange-400" aria-hidden />
-            <span>
-              <strong className="text-orange-50">Storage almost full.</strong> Could not save some data. Export a backup (More ‚Üí Tools ‚Üí Data), then remove old photos or vial images, or clear space.
-            </span>
-            <button type="button" onClick={() => setStorageQuotaWarning(false)} className="text-orange-200 hover:text-white p-1 rounded-lg shrink-0" aria-label="Dismiss"><X className="h-4 w-4" /></button>
-          </div>
-        </div>
-      )}
-      {(showOfflineBanner || showSyncFailBanner) && (
-        <div className="sticky top-0 z-40 space-y-2 mb-2 -mt-1">
-          {showOfflineBanner && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-amber-100/95 text-sm shadow-lg shadow-black/20">
-              <WifiOff className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-400" aria-hidden />
-              <span>
-                <strong className="text-amber-50">You&apos;re offline.</strong> Changes are saved on this device. Cloud backup will resume when you&apos;re back online.
-              </span>
-            </div>
-          )}
-          {showSyncFailBanner && (
-            <div className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-sm text-red-100/90 shadow-lg shadow-black/20">
-              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-400" aria-hidden />
-              <span className="flex-1 min-w-0">{backgroundSyncError}</span>
-              <button
-                type="button"
-                onClick={() => setBackgroundSyncError('')}
-                className="text-red-200/90 hover:text-white p-1 rounded-lg shrink-0"
-                aria-label="Dismiss"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      {/* Success Celebration Popup */}
-      {showCelebration && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="animate-celebrate bg-gradient-to-r from-accent to-gold-600 text-gray-900 px-8 py-4 rounded-2xl shadow-2xl shadow-accent/40 pointer-events-auto transform scale-110">
-            <div className="text-2xl font-bold text-center">{celebrationMessage}</div>
-          </div>
-        </div>
-      )}
-      
-      {/* Wipe Data Confirmation */}
-{showWipeConfirm && (
-  <div className="ui-modal-overlay" onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}>
-    <div className="ui-modal" onClick={e => e.stopPropagation()}>
-      <h3 className="text-white text-xl font-semibold mb-2">Reset PepTalk?</h3>
-      <p className="text-gray-300 text-sm mb-4">
-        This permanently deletes all weight, injections, measurements, photos, schedules, and journal entries on this device.
-      </p>
-
-      <label className="flex items-start gap-3 rounded-xl p-3 mb-4 cursor-pointer border border-white/[0.08] bg-[var(--bg-elevated)]">
-        <input
-          type="checkbox"
-          checked={wipeConfirmChecked}
-          onChange={(e) => setWipeConfirmChecked(e.target.checked)}
-          className="mt-1"
-        />
-        <span className="text-gray-200 text-sm">
-          I understand this cannot be undone.
-        </span>
-      </label>
-
-      <div className="flex gap-3 mt-4">
-        <button
-          onClick={() => { setShowWipeConfirm(false); setWipeConfirmChecked(false); }}
-          className="flex-1 ui-btn-ghost py-3"
-        >
-          Cancel
-        </button>
-        <button
-          disabled={!wipeConfirmChecked}
-          onClick={wipeAllData}
-          className={`flex-1 font-semibold py-3 rounded-xl transition-all ${
-            wipeConfirmChecked
-              ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/30'
-              : 'bg-red-500/30 text-white/50 cursor-not-allowed'
-          }`}
-        >
-          Wipe Data
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-      {/* Welcome / Update modal ‚Äî after sign-in when cloud is on; version updates; "Do not show again" hides forever */}
-      <GraphicalSummaryModal
-        ref={graphicalSummaryCaptureRef}
-        open={showGraphicalSummary}
-        onClose={() => setShowGraphicalSummary(false)}
-        onDownloadPdf={handleGraphicalSummaryPdf}
-        pdfBusy={graphicalPdfBusy}
-        weightEntries={weightEntries}
-        injectionEntries={injectionEntries}
-        sleepEntries={sleepEntries}
-        glucoseEntries={glucoseEntries}
-        labEntries={labEntries}
-        journalEntries={journalEntries}
-        dailyTrackEntries={dailyTrackEntries}
-        measurementEntries={measurementEntries}
-        userProfile={userProfile}
-        schedules={schedules}
-        vials={vials}
-      />
-
-      {showWelcomeModal && (
-        <div className="ui-modal-overlay" onClick={dismissWelcomeModal}>
-          <div className="ui-modal max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2"><BookOpen className="h-6 w-6 text-gold-400" />Welcome to PepTalk</h3>
-              <button type="button" onClick={dismissWelcomeModal} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
-            </div>
-            <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} ‚Äî How to use the app</p>
-            <div className="text-gray-300 text-sm space-y-3 mb-4 pr-2">
-              <p><strong className="text-white">Summary</strong> ‚Äî Your dashboard. Use &quot;Log weight&quot; and &quot;Log injection&quot; for quick entries. View stats, goal date, milestones, and upcoming injections.</p>
-              <p><strong className="text-white">Weight</strong> ‚Äî Log and edit weight entries. See your trend and chart.</p>
-              <p><strong className="text-white">Injections</strong> ‚Äî Log doses (medication, amount, date, SubQ/IM, site, side effects). Keeps a full history.</p>
-              <p><strong className="text-white">Insights</strong> ‚Äî Medication levels over time, phases, and when to dose next. Tap a medication to expand details.</p>
-              <p><strong className="text-white">Journal</strong> ‚Äî Track how you feel, energy, hunger, and notes. Great for side effects and non-scale victories.</p>
-              <p><strong className="text-white">More</strong> ‚Äî Body measurements &amp; progress photos, daily nutrition/hydration, calendar, <strong className="text-gold-400">Tools</strong> (calculators, schedules, titration, reminders, export/import), and Glucose &amp; A1C.</p>
-              {weightEntries.length === 0 && injectionEntries.length === 0 && (
-                <p className="bg-accent/10 border border-accent/20 rounded-lg p-2.5 text-gold-400 text-xs mt-2">Get started: set your goal weight in More ‚Üí Tools, then log your first weight and injection from Summary.</p>
-              )}
-            </div>
-            <label className="flex items-start gap-3 rounded-xl p-3 mb-4 cursor-pointer border border-white/[0.08] bg-[var(--bg-card)]">
-              <input type="checkbox" checked={welcomeDontShowAgain} onChange={(e) => setWelcomeDontShowAgain(e.target.checked)} className="mt-1" />
-              <span className="text-gray-200 text-sm">Do not show this again (even after updates)</span>
-            </label>
-            <button type="button" onClick={dismissWelcomeModal} className="w-full ui-btn-primary py-3">
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* APK / app update ‚Äî optional manifest URL on your site (see VITE_APP_UPDATE_MANIFEST_URL) */}
-      {updatePrompt && (
-        <div className="ui-modal-overlay" onClick={() => { dismissUpdatePrompt(updatePrompt.latestVersion); setUpdatePrompt(null); }}>
-          <div className="ui-modal max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2 mb-2">
-              <Download className="h-6 w-6 text-cyan-400 flex-shrink-0" />
-              <h3 className="text-white font-semibold text-lg">Update available</h3>
-            </div>
-            <p className="text-gold-400 text-sm font-medium mb-3">
-              Version {updatePrompt.latestVersion} is ready (you have v{APP_VERSION}).
-            </p>
-            {updatePrompt.releaseNotes ? (
-              <p className="text-gray-300 text-sm mb-4 whitespace-pre-wrap">{updatePrompt.releaseNotes}</p>
-            ) : (
-              <p className="text-gray-400 text-sm mb-4">Download the new APK from the site to install this update.</p>
-            )}
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="w-full py-3 rounded-lg font-medium bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center gap-2"
-                onClick={() => {
-                  openDownloadUrl(updatePrompt.downloadUrl);
-                  dismissUpdatePrompt(updatePrompt.latestVersion);
-                  setUpdatePrompt(null);
-                }}
-              >
-                <Download className="h-4 w-4" />
-                Download update
-              </button>
-              <button
-                type="button"
-                className="w-full py-3 rounded-lg font-medium bg-white/10 hover:bg-white/15 text-gray-200"
-                onClick={() => {
-                  dismissUpdatePrompt(updatePrompt.latestVersion);
-                  setUpdatePrompt(null);
-                }}
-              >
-                Not now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Cloud backup: choose local vs account when both exist */}
-      {pendingCloudRestore && (
-        <div className="ui-modal-overlay" onClick={() => {}}>
-          <div className="ui-modal max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-white font-semibold text-lg mb-2 flex items-center gap-2"><Cloud className="h-6 w-6 text-cyan-400" />Restore from your account?</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              We found a saved backup in your cloud account
-              {pendingCloudRestore.updatedAt && (
-                <span> (last updated {new Date(pendingCloudRestore.updatedAt).toLocaleString()})</span>
-              )}.
-              This device already has data. Choose what to keep.
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                className="w-full py-3 rounded-lg font-medium bg-cyan-600 hover:bg-cyan-500 text-white"
-                onClick={() => resolveCloudRestore('cloud')}
-              >
-                Use cloud backup (replace this device)
-              </button>
-              <button
-                type="button"
-                className="w-full py-3 rounded-lg font-medium bg-white/10 hover:bg-white/15 text-gray-200"
-                onClick={() => resolveCloudRestore('local')}
-              >
-                Keep this device &amp; upload to cloud (overwrite backup)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Low-vial popup ‚Äî shows when returning to Summary tab so the user notices */}
-      {showLowVialPopup && getLowVials().length > 0 && (
-        <div className="ui-modal-overlay" onClick={() => setShowLowVialPopup(false)}>
-          <div className="ui-modal max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-8 w-8 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <h3 className="text-amber-400 font-semibold text-base mb-2">Vial low ‚Äî less than one dose left</h3>
-                <ul className="text-gray-300 text-sm space-y-1 list-disc list-inside mb-4">
-                  {getLowVials().map(v => {
-                    const rem = (v.remainingMg ?? v.totalMg).toFixed(1);
-                    const typical = getTypicalDoseMg(v.medication);
-                    return <li key={v.id}>{v.medication}: {rem} mg left (your usual dose is ~{typical?.toFixed(1)} mg)</li>;
-                  })}
-                </ul>
-                <div className="flex flex-col gap-2">
-                  <button type="button" onClick={() => { setShowLowVialPopup(false); setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="w-full py-2.5 rounded-lg font-medium text-sm bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30">
-                    Manage vials
-                  </button>
-                  <button type="button" onClick={() => setShowLowVialPopup(false)} className="w-full ui-btn-primary py-2.5 text-sm">
-                    Got it
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes celebrate {
-          0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-          50% { transform: scale(1.2) rotate(0deg); }
-          100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        .animate-celebrate { animation: celebrate 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
-        
-        /* Smooth transitions for all interactive elements */
-        button, .transition-all { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-        button:active { transform: scale(0.95); }
-        button:hover { transform: translateY(-1px); }
-        
-        /* Enhanced button styles with shadows */
-        .btn-primary {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-        }
-        .btn-primary:hover {
-          box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
-        }
-        .btn-primary:active {
-          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-        }
-        
-        .btn-secondary {
-          background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-        }
-        .btn-secondary:hover {
-          box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
-        }
-        
-        .btn-amber {
-          background: linear-gradient(135deg, #e8b84c 0%, #c99b2e 100%);
-          box-shadow: 0 4px 12px rgba(232, 184, 76, 0.3);
-        }
-        .btn-amber:hover {
-          box-shadow: 0 6px 16px rgba(232, 184, 76, 0.4);
-        }
-        
-        /* Card hover effects */
-        .card-hover {
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .card-hover:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        }
-        
-        /* Smooth tab transitions */
-        .tab-enter { animation: tab-enter 0.3s ease-out; }
-        @keyframes tab-enter {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* Alert slide in */
-        .alert-enter {
-          animation: alert-enter 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-        }
-        @keyframes alert-enter {
-          from { opacity: 0; transform: translateX(-100px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        
-        /* Smooth dismiss animation */
-        .alert-exit {
-          animation: alert-exit 0.3s ease-in forwards;
-        }
-        @keyframes alert-exit {
-          to { opacity: 0; transform: translateX(100px); }
-        }
-        
-        /* Pulse animation for important elements */
-        .pulse-glow {
-          animation: pulse-glow 2s ease-in-out infinite;
-        }
-        @keyframes pulse-glow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
-          50% { box-shadow: 0 0 20px 10px rgba(139, 92, 246, 0.2); }
-        }
-        
-        /* Float animation for icons */
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-        }
-        
-        /* Injection reminder card ‚Äî slide in + soft entrance */
-        .animate-injection-reminder {
-          animation: injection-reminder-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        @keyframes injection-reminder-in {
-          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        
-        /* Bell icon subtle pulse on reminder card */
-        .injection-reminder-bell {
-          animation: injection-bell-pulse 2s ease-in-out infinite;
-        }
-        @keyframes injection-bell-pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.85; transform: scale(1.05); }
-        }
-        
-        /* Header injection alert ‚Äî soft border glow pulse */
-        .injection-notify-pulse {
-          animation: injection-notify-pulse 2.5s ease-in-out infinite;
-        }
-        @keyframes injection-notify-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.2); }
-          50% { box-shadow: 0 0 12px 2px rgba(234, 179, 8, 0.15); }
-        }
-        .injection-notify-pulse.ui-alert-danger {
-          animation-name: injection-notify-pulse-danger;
-        }
-        @keyframes injection-notify-pulse-danger {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.2); }
-          50% { box-shadow: 0 0 12px 2px rgba(248, 113, 113, 0.2); }
-        }
-      `}</style>
-      
-      <div className="max-w-2xl mx-auto px-1">
-        <header className="text-center mb-5">
-          <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
-          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight ¬∑ Injections ¬∑ Insights ¬∑ Journal ¬∑ Tools</p>
-        </header>
-
-        {/* Upcoming Injections Alert ‚Äî single box for all due/overdue */}
-        {(() => {
-          const dueOrOverdue = upcomingInjections.filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`));
-          if (dueOrOverdue.length === 0) return null;
-          const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
-          return (
-            <div key="injection-alert" className={`alert-enter mb-3 ui-alert injection-notify-pulse ${hasOverdue ? 'ui-alert-danger' : 'ui-alert-warning'}`}>
-              <Bell className={`h-5 w-5 shrink-0 ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`} />
-              <div className="flex-1 min-w-0">
-                <div className={`font-semibold text-sm ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
-                  {hasOverdue && dueOrOverdue.every(inj => inj.isOverdue) ? 'Injections Overdue' : dueOrOverdue.every(inj => inj.isDueToday) ? 'Injections Due Today' : 'Injections Due'}
-                </div>
-                <div className="text-white text-sm mt-0.5">
-                  {dueOrOverdue.map((inj, i) => (
-                    <span key={`${inj.medication}-${inj.daysUntil}`}>
-                      {i > 0 && ', '}
-                      {inj.medication}
-                      {inj.isOverdue && ` (${Math.abs(inj.daysUntil)} day${Math.abs(inj.daysUntil) !== 1 ? 's' : ''} overdue)`}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setDismissedAlerts([...dismissedAlerts, ...dueOrOverdue.map(inj => `${inj.medication}-${inj.daysUntil}`)]); }}
-                className="ui-btn-ghost p-2 rounded-lg"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          );
-        })()}
-
-        {/* Tab Navigation */}
-        <div className="mb-4">
-          <div className="ui-tab-bar p-1 overflow-x-auto">
-            {[
-              { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
-              { id: 'weight', icon: Scale, label: 'Weight' },
-              { id: 'injections', icon: Syringe, label: 'Injections' },
-              { id: 'insights', icon: Activity, label: 'Insights' },
-              { id: 'journal', icon: BookOpen, label: 'Journal' },
-              { id: 'goals', icon: Sparkles, label: 'Goals' },
-              { id: 'more', icon: MoreHorizontal, label: 'More' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setShowAddForm(false);
-                  if (tab.id === 'goals') {
-                    setGoalGuideCategoryId(null);
-                    setGoalGuideSearch('');
-                  }
-                }}
-                className={`ui-tab whitespace-nowrap ${activeTab === tab.id ? 'ui-tab-active' : ''}`}
-              >
-                <tab.icon className="h-4 w-4 shrink-0" />
-                <span className="truncate max-w-full text-[11px]">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* SUMMARY TAB */}
-        {(activeTab === 'summary' || activeTab === 'cycles') && (
-          <div key="summary" className="space-y-4 tab-enter">
-            {/* Time Range Selector */}
-            <div className="ui-segmented">
-              {[{ id: '1m', label: '1m' }, { id: '3m', label: '3m' }, { id: '6m', label: '6m' }, { id: '12m', label: '12m' }, { id: 'all', label: 'All' }].map(range => (
-                <button
-                  key={range.id}
-                  onClick={() => setTimeRange(range.id)}
-                  className={`ui-segmented-btn ${timeRange === range.id ? 'ui-segmented-btn-active' : ''}`}
-                >
-                  {range.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Quick actions ‚Äî log from Summary */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => { setActiveTab('weight'); setShowAddForm(true); }}
-                className="flex-1 ui-btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
-              >
-                <Scale className="h-4 w-4" />
-                Log weight
-              </button>
-              <button
-                type="button"
-                onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
-                className="flex-1 ui-btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
-              >
-                <Syringe className="h-4 w-4" />
-                Log injection
-              </button>
-            </div>
-
-            {/* Vial low ‚Äî directly above Weight Change (single in-page warning) */}
-            {vials.length > 0 && (() => {
-              const low = vials.filter(v => {
-                const rem = v.remainingMg ?? v.totalMg;
-                if (rem <= 0) return false;
-                const typical = getTypicalDoseMg(v.medication);
-                return typical != null && rem < typical;
-              });
-              if (low.length === 0) return null;
-              return (
-                <div className="ui-card p-4 border-amber-500/30 bg-amber-500/10">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h3 className="text-amber-400 font-medium text-sm">Vial low ‚Äî less than one dose left</h3>
-                      <ul className="text-gray-300 text-xs mt-1 space-y-0.5 list-disc list-inside">
-                        {low.map(v => {
-                          const rem = (v.remainingMg ?? v.totalMg).toFixed(1);
-                          const typical = getTypicalDoseMg(v.medication);
-                          return <li key={v.id}>{v.medication}: {rem} mg left (your usual dose is ~{typical?.toFixed(1)} mg)</li>;
-                        })}
-                      </ul>
-                      <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-amber-400 hover:text-amber-300 text-xs mt-2 font-medium">Manage vials in More ‚Üí Tools</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Weight Change ‚Äî hero block (matches Goals stack accent treatment) */}
-            <div className="ui-hero-panel">
-              <div className="ui-hero-panel__wash" aria-hidden />
-              <div className="ui-hero-panel__top-bar" aria-hidden />
-              <div className="ui-hero-panel__body space-y-3">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-white">Weight Change</h2>
-                  <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
-                    <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Activity className="h-3 w-3" />Current BMI</div>
-                    <div className={`text-xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Weight</div>
-                    <div className="text-xl font-bold text-white">{stats.current}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><TrendingDown className="h-3 w-3" />Percent</div>
-                    <div className={`text-xl font-bold ${parseFloat(stats.percentChange) < 0 ? 'text-green-500' : parseFloat(stats.percentChange) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.percentChange}<span className="text-sm font-normal text-gray-400">%</span></div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
-                    <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
-                    <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Weight chart ‚Äî directly after Weight Change */}
-            {weightEntries.length > 0 && (() => {
-              const summaryData = getSummaryChartData(chartRangeWeeks);
-              const pointCount = summaryData.length;
-              const xInterval = pointCount > 12 ? Math.max(0, Math.floor(pointCount / 6)) : 0;
-              const showAllDots = pointCount <= 35;
-              const weightValues = summaryData.map(p => p.weight).filter(w => w != null && !isNaN(w));
-              const wMin = weightValues.length ? Math.min(...weightValues) : 0;
-              const wMax = weightValues.length ? Math.max(...weightValues) : 100;
-              const yDomain = [Math.floor(wMin) - 2, Math.ceil(wMax) + 2];
-              const lastPointWithWeight = [...summaryData].reverse().find(p => p.weight != null);
-              const currentWeight = lastPointWithWeight?.weight;
-              const currentWeightDate = lastPointWithWeight?.fullDate;
-              return (
-              <div className="ui-hero-panel overflow-hidden relative z-10">
-                <div className="ui-hero-panel__wash" aria-hidden />
-                <div className="ui-hero-panel__top-bar" aria-hidden />
-                <div className="relative">
-                <div className="px-2 sm:px-3 pt-5 pb-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                    <h3 className="text-gray-300 text-sm font-medium">Weight over time</h3>
-                    <div className="flex items-center gap-1">
-                      {[4, 8, 12, 0].map((w) => (
-                        <button
-                          key={w || 'all'}
-                          type="button"
-                          onClick={() => setChartRangeWeeks(w)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${chartRangeWeeks === w ? 'bg-accent/25 text-gold-400' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
-                        >
-                          {w === 0 ? 'All' : `${w}w`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="-mx-1 sm:-mx-2 w-full">
-                  <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={summaryData} margin={{ top: 8, right: 8, left: 28, bottom: 4 }}>
-                      <defs>
-                        <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#e8b84c" stopOpacity={0.2} />
-                          <stop offset="100%" stopColor="#e8b84c" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="0" stroke="#334155" vertical={false} strokeOpacity={0.4} />
-                      <XAxis 
-                        dataKey="date" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        stroke="#64748b" 
-                        fontSize={11} 
-                        tickMargin={8}
-                        interval={xInterval}
-                        minTickGap={pointCount > 14 ? 56 : pointCount > 8 ? 40 : 32}
-                      />
-                      <YAxis 
-                        yAxisId="weight"
-                        axisLine={false} 
-                        tickLine={false} 
-                        stroke="#64748b" 
-                        fontSize={11} 
-                        tickMargin={6}
-                        width={32}
-                        domain={yDomain}
-                        tickFormatter={(v) => `${v}`}
-                        allowDecimals={false}
-                        tickCount={6}
-                      />
-                      {currentWeight != null && (
-                        <ReferenceLine 
-                          yAxisId="weight"
-                          y={currentWeight} 
-                          stroke="#e8b84c" 
-                          strokeWidth={1.5} 
-                          strokeDasharray="4 4"
-                          strokeOpacity={0.8}
-                          label={({ viewBox }) => viewBox && (
-                            <text x={viewBox.x + 2} y={viewBox.y + 14} fill="#e8b84c" fontSize={11} textAnchor="start" fontWeight={500}>
-                              {currentWeight} lbs
-                            </text>
-                          )}
-                        />
-                      )}
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(24, 24, 28, 0.96)', 
-                          border: '1px solid rgba(255,255,255,0.1)', 
-                          borderRadius: '10px', 
-                          padding: '10px 14px',
-                          boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
-                        }} 
-                        labelStyle={{ color: '#94a3b8', fontSize: 12 }}
-                        formatter={(value, name) => { 
-                          if (value == null) return null; 
-                          if (name === 'Weight') return [value, 'Weight (lbs)'];
-                          if (name === '7-day average') return [value?.toFixed?.(1) ?? value, '7-day avg (lbs)'];
-                          return [value, name]; 
-                        }} 
-                        labelFormatter={(label) => label}
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload?.length) return null;
-                          const p = payload[0]?.payload;
-                          return (
-                            <div className="rounded-lg bg-[var(--bg-elevated)] border border-white/10 px-3 py-2 shadow-xl min-w-[160px]">
-                              <div className="text-gray-300 text-sm font-medium mb-1.5">{label}</div>
-                              {p?.weight != null && <div className="text-white text-sm">Weight: {p.weight} lbs</div>}
-                              {p?.weightTrend != null && <div className="text-gray-400 text-xs">7-day avg: {p.weightTrend.toFixed(1)} lbs</div>}
-                              {p?.injections?.length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-slate-600/50">
-                                  <div className="text-green-500 text-xs font-medium mb-1">Injections</div>
-                                  {p.injections.map((inj, i) => (
-                                    <div key={i} className="text-gray-200 text-xs">{inj.type} {inj.dose}{inj.unit}{(inj.route || inj.site) && <span className="text-gray-500"> ¬∑ {[inj.route, inj.site].filter(Boolean).join(' ')}</span>}</div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        }}
-                      />
-                      {visibleLines.weight && (
-                        <Area 
-                          yAxisId="weight" 
-                          type="monotone" 
-                          dataKey="weight" 
-                          fill="url(#weightFill)" 
-                          stroke="none" 
-                          isAnimationActive={true}
-                          connectNulls={false}
-                        />
-                      )}
-                      {visibleLines.weight && (
-                        <Line 
-                          yAxisId="weight" 
-                          type="monotone" 
-                          dataKey="weight" 
-                          stroke="#e8b84c" 
-                          strokeWidth={2.5} 
-                          dot={({ cx, cy, payload }) => {
-                            if (payload.weight == null) return null;
-                            if (!showAllDots && !payload.hasInjection) return null;
-                            const isInjectionDay = payload.hasInjection;
-                            const r = isInjectionDay ? 6 : 4;
-                            return (
-                              <circle 
-                                cx={cx} 
-                                cy={cy} 
-                                r={r} 
-                                fill="#0f172a" 
-                                stroke={isInjectionDay ? '#10b981' : '#e8b84c'} 
-                                strokeWidth={2}
-                              />
-                            );
-                          }}
-                          activeDot={{ r: 6, stroke: '#e8b84c', strokeWidth: 2, fill: '#0f172a' }}
-                          connectNulls={false}
-                          name="Weight"
-                        />
-                      )}
-                      {visibleLines.trend !== false && (
-                        <Line 
-                          yAxisId="weight" 
-                          type="monotone" 
-                          dataKey="weightTrend" 
-                          stroke="#64748b" 
-                          strokeWidth={1.5} 
-                          strokeDasharray="6 4" 
-                          dot={false} 
-                          connectNulls={false}
-                          name="7-day average"
-                        />
-                      )}
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="px-2 sm:px-3 pb-1">
-                  <div className="flex flex-col items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
-                    <div className="flex items-center gap-6">
-                      <button 
-                        onClick={() => setVisibleLines(prev => ({ ...prev, weight: !prev.weight }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.weight ? 'bg-accent/15 text-gold-400' : 'text-gray-500'}`}
-                      >
-                        <span className={`w-2.5 h-2.5 rounded-full ${visibleLines.weight ? 'bg-gold-400' : 'bg-slate-600'}`} />
-                        Weight
-                      </button>
-                      <button 
-                        onClick={() => setVisibleLines(prev => ({ ...prev, trend: !prev.trend }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.trend !== false ? 'bg-slate-500/15 text-gray-300' : 'text-gray-500'}`}
-                      >
-                        <span className={`inline-block w-5 h-0.5 rounded-full ${visibleLines.trend !== false ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                        7-day average
-                      </button>
-                    </div>
-                    <p className="text-gray-500 text-xs">Green ring = injection that day{!showAllDots && ' ¬∑ Dots only on injection days when zoomed out'}</p>
-                  </div>
-                </div>
-                </div>
-              </div>
-              );
-            })()}
-
-            {/* Estimated goal + Goal tracker side by side */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {stats.estimatedGoalDate && (
-                <div className="ui-card p-4 border-accent/25 bg-accent/10">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
-                    <div>
-                      <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
-                      <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {userProfile?.goalWeight && (() => {
-                const goal = parseFloat(userProfile.goalWeight);
-                const current = parseFloat(stats.current) || 0;
-                const hasWeight = current > 0;
-                const filtered = getFilteredData(weightEntries);
-                const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
-                const totalToLose = startWeight - goal;
-                const progress = totalToLose > 0 && hasWeight ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
-                return (
-                  <div className="ui-card p-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-400 text-sm">Goal</span>
-                      <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>{hasWeight ? `${stats.current} lbs now` : 'Add weight to see progress'}</span>
-                      <span>{hasWeight ? (stats.toGoal || '‚Äî') + ' to go' : '‚Äî'}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Week in review + protocol snapshot */}
-            {(() => {
-              const d = getWeeklyDigest();
-              return (
-                <div className="ui-card p-4 border-accent/20 bg-accent/5">
-                  <h3 className="text-gold-400 text-sm font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" />This week</h3>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-200 text-sm">
-                    <span><Scale className="h-3.5 w-3 inline mr-1 text-gray-400" />Weight {d.weightStr}</span>
-                    <span><Syringe className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.injStr} injections</span>
-                    <span><Droplets className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.hydrationStr} hydrated</span>
-                    {d.avgGlucose != null && <span className="text-green-500">Glucose avg {d.avgGlucose} mg/dL</span>}
-                    {d.avgGlucose == null && d.lastGlucose && <span className="text-green-500">Last glucose {d.lastGlucose.value} mg/dL</span>}
-                    {d.lastA1c && <span className="text-cyan-400">A1C {d.lastA1c.value}%</span>}
-                  </div>
-                  <p className="text-gray-500 text-[11px] mt-2 leading-relaxed border-t border-white/[0.06] pt-2">
-                    <span className="text-gray-400 font-medium">At a glance: </span>
-                    {d.journalInWeek} journal ¬∑ {d.labsInWeek} labs
-                    {d.sleepNights > 0 ? ` ¬∑ ~${d.avgSleepHours}h sleep avg (${d.sleepNights} night${d.sleepNights !== 1 ? 's' : ''})` : ''}
-                    {d.stepsDays > 0 ? ` ¬∑ ${d.stepsSum.toLocaleString()} steps logged (${d.stepsDays} day${d.stepsDays !== 1 ? 's' : ''})` : ''}
-                    {d.injWithFx > 0 ? ` ¬∑ ${d.injWithFx} injection${d.injWithFx !== 1 ? 's' : ''} with side effects noted` : ''}.
-                  </p>
-                </div>
-              );
-            })()}
-
-            {/* Hydration goal progress ‚Äî always show; default goal 64 oz if not set */}
-            {(() => {
-              const goal = Number(userProfile?.hydrationGoalOz) || 64;
-              const current = Math.round(hydrationToday);
-              const pct = goal > 0 ? Math.min(100, (current / goal) * 100) : 0;
-              return (
-                <div className="ui-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-400 text-sm flex items-center gap-1.5"><Droplet className="h-4 w-4 text-sky-400" />Hydration today</span>
-                    <span className="text-white font-medium">{current} / {goal} oz</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between mt-2 gap-2">
-                    {goal > 0 && (
-                      <div className="flex gap-1.5">
-                        <button type="button" onClick={() => addQuickWater(8)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
-                          +8 oz
-                        </button>
-                        <button type="button" onClick={() => addQuickWater(16)} className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-xs font-medium">
-                          +16 oz
-                        </button>
-                      </div>
-                    )}
-                    <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs ml-auto">
-                      Edit goal
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Logging streak */}
-            {(() => {
-              const streak = getLoggingStreak();
-              if (streak.daysLoggedLast7 === 0 && streak.weeksInRow === 0) return null;
-              return (
-                <div className="text-gray-400 text-xs">
-                  {streak.daysLoggedLast7 > 0 && <span>Logged weight {streak.daysLoggedLast7} of last 7 days</span>}
-                  {streak.weeksInRow > 0 && streak.daysLoggedLast7 > 0 && ' ¬∑ '}
-                  {streak.weeksInRow > 0 && <span>{streak.weeksInRow} week{streak.weeksInRow !== 1 ? 's' : ''} in a row</span>}
-                </div>
-              );
-            })()}
-
-            {/* In-app reminder: all doses due today or overdue in one box */}
-            {upcomingInjections.some(inj => inj.isDueToday || inj.isOverdue) && (() => {
-              const dueOrOverdue = upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue);
-              if (dueOrOverdue.length === 0) return null;
-              const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
-              return (
-                <button
-                  type="button"
-                  onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
-                  className="injection-reminder-card w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors animate-injection-reminder"
-                >
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0 injection-reminder-bell" />
-                    <div className="flex-1 min-w-0">
-                      <span className={`font-semibold text-sm block ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
-                        {dueOrOverdue.length === 1
-                          ? (dueOrOverdue[0].isOverdue
-                              ? `${dueOrOverdue[0].medication} ‚Äî ${Math.abs(dueOrOverdue[0].daysUntil)} day${Math.abs(dueOrOverdue[0].daysUntil) !== 1 ? 's' : ''} overdue`
-                              : `${dueOrOverdue[0].medication} due today`)
-                          : hasOverdue && dueOrOverdue.every(inj => inj.isOverdue)
-                            ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} ‚Äî overdue`
-                            : dueOrOverdue.every(inj => inj.isDueToday)
-                              ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} due today`
-                              : dueOrOverdue.map(inj => inj.isOverdue ? `${inj.medication} (${Math.abs(inj.daysUntil)}d overdue)` : `${inj.medication} (today)`).join(', ')}
-                      </span>
-                      <p className="text-gray-400 text-xs mt-0.5">Tap to log injection</p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })()}
-
-            {/* Dashboard phase line: current phase for all active meds */}
-            {getMedicationInsights().length > 0 && (() => {
-              const insights = getMedicationInsights().filter(i => i.phase);
-              if (insights.length === 0) return null;
-              return (
-                <div className="ui-card p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-gray-400 text-sm">Current phase</span>
-                    <button type="button" onClick={() => setActiveTab('insights')} className="text-gold-400 hover:text-gold-300 text-xs font-medium">View Insights</button>
-                  </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1.5">
-                    {insights.map(insight => (
-                      <span key={insight.medication} className="text-sm">
-                        <span className={`font-semibold ${insight.phaseColor}`}>{insight.phase}</span>
-                        <span className="text-gray-400"> for {insight.medication}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Your vials ‚Äî remaining volume on Summary */}
-            {vials.length > 0 && (
-              <div className="ui-hero-panel">
-                <div className="ui-hero-panel__wash" aria-hidden />
-                <div className="ui-hero-panel__top-bar" aria-hidden />
-                <div className="ui-hero-panel__body">
-                <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
-                <div className="space-y-2">
-                  {vials.map(v => {
-                    const remMg = v.remainingMg ?? v.totalMg;
-                    const totalMg = v.totalMg;
-                    const conc = v.concentration;
-                    const remMl = conc > 0 ? remMg / conc : null;
-                    const totalMl = conc > 0 ? totalMg / conc : null;
-                    const isLow = remMg <= 0;
-                    return (
-                      <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
-                        <span className="text-white font-medium">{v.medication}</span>
-                        <span className="text-gray-400">
-                          {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
-                          {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">¬∑ {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More ‚Üí Tools ‚Üí Vials</button>
-                </div>
-              </div>
-            )}
-
-            {/* Progress + comparison section in a responsive grid */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* On track? ‚Äî compare to typical GLP-1 loss */}
-              {getOnTrackInfo() && (
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-gold-400" />On track?</h3>
-                  {(() => {
-                    const info = getOnTrackInfo();
-                    const statusMsg = info.status === 'ahead' ? "You're ahead of typical loss ‚Äî great progress." : info.status === 'slower' ? "You're losing slower than average. Normal early on or at lower doses." : "Your loss is in line with typical results for your medication.";
-                    const statusColor = info.status === 'ahead' ? 'text-green-500' : info.status === 'slower' ? 'text-gold-400' : 'text-green-500';
-                    const milestones = getMilestones();
-                    return (
-                      <div className="space-y-2">
-                        <p className="text-gray-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
-                        <p className={`text-sm font-medium ${statusColor}`}>{statusMsg}</p>
-                        {info.daysOnMed && (
-                          <p className="text-gray-400 text-xs">
-                            On this medication for <span className="text-gray-200 font-medium">{info.daysOnMed} day{info.daysOnMed !== 1 ? 's' : ''}</span>.
-                          </p>
-                        )}
-                        {milestones.length > 0 && info.userLoss > 0 && (
-                          <div className="pt-1 border-t border-white/[0.06] mt-2">
-                            <p className="text-gray-400 text-[11px] mb-1 font-medium">At this pace:</p>
-                            <ul className="space-y-0.5 text-[11px]">
-                              {milestones.map((m, idx) => {
-                                const weeksTo = m.achieved || m.toGo <= 0 ? 0 : m.toGo / info.userLoss;
-                                const isAchieved = m.achieved || m.toGo <= 0;
-                                const etaText = isAchieved
-                                  ? 'reached'
-                                  : weeksTo < 1
-                                    ? `${Math.max(1, Math.round(weeksTo * 7))} day${Math.max(1, Math.round(weeksTo * 7)) !== 1 ? 's' : ''}`
-                                    : `${weeksTo.toFixed(1)} week${weeksTo >= 2 ? 's' : ''}`;
-                                return (
-                                  <li key={idx} className="flex items-center gap-2">
-                                    {isAchieved ? (
-                                      <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
-                                    ) : (
-                                      <span className="w-3 h-3 rounded-full border border-gray-500 flex-shrink-0" />
-                                    )}
-                                    <span className={`flex-1 ${isAchieved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                      {m.label}
-                                    </span>
-                                    <span className={`text-right ${isAchieved ? 'text-green-500' : 'text-gray-400'}`}>
-                                      {isAchieved ? 'reached' : `~${etaText}`}
-                                    </span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Milestones ‚Äî 5 lb down, 10 lb down, ... */}
-              {getMilestones().length > 0 && (
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-gold-400" />Milestones</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {getMilestones().map((m, i) => (
-                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.achieved ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-slate-700/50 text-gray-400 border border-white/[0.04]'}`}>
-                        {m.achieved ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-gray-500 flex-shrink-0" />}
-                        <span>{m.label}</span>
-                        {!m.achieved && m.toGo > 0 && <span className="text-gray-500 text-xs">‚Äî {m.toGo.toFixed(0)} lb to go</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Your loss vs typical ‚Äî cumulative weight loss chart (full width on md+) */}
-              {getYouVsTypicalChartData().length > 0 && (
-                <div className="ui-card overflow-hidden md:col-span-2">
-                  <div className="px-5 pt-5 pb-1">
-                    <h3 className="text-gray-300 text-sm font-medium mb-1">Your loss vs typical</h3>
-                    <p className="text-gray-500 text-xs mb-4">Cumulative lbs lost: you vs average for your medication at your dose (clinical trials).</p>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <ComposedChart data={getYouVsTypicalChartData()} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="0" stroke="#334155" vertical={false} strokeOpacity={0.4} />
-                        <XAxis dataKey="weekLabel" axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} interval="preserveStartEnd" minTickGap={24} />
-                        <YAxis axisLine={false} tickLine={false} stroke="#64748b" fontSize={11} tickMargin={8} width={32} domain={[0, 'auto']} tickFormatter={(v) => `${v}`} />
-                        <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.96)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '8px 12px' }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} formatter={(value) => [value != null ? value.toFixed(1) : '-', '']} labelFormatter={(label, payload) => payload?.[0]?.payload?.weekLabel ? `${payload[0].payload.weekLabel} ‚Äî You: ${(payload[0].payload.userLoss ?? 0).toFixed(1)} lb, Typical: ${(payload[0].payload.typicalLoss ?? 0).toFixed(1)} lb` : label} />
-                        <Line type="monotone" dataKey="userLoss" name="You" stroke="#e8b84c" strokeWidth={2.5} dot={{ fill: '#e8b84c', r: 3 }} connectNulls />
-                        <Line type="monotone" dataKey="typicalLoss" name="Typical" stroke="#64748b" strokeWidth={2} strokeDasharray="4 4" dot={{ fill: '#64748b', r: 2 }} connectNulls />
-                        <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => <span className="text-gray-300">{value}</span>} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* Upcoming Injections (full width on md+) */}
-              {upcomingInjections.length > 0 && (
-                <div className="ui-card p-4 md:col-span-2">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-white font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-gold-400" />Upcoming Injections</h3>
-                    <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('notifications'); }} className="text-gold-400 hover:text-gold-300 text-xs font-medium flex items-center gap-1">
-                      <Bell className="h-3.5 w-3" />Remind me
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {upcomingInjections.slice(0, 3).map((inj, idx) => {
-                      const suggestedSite = getSuggestedInjectionSite(inj.medication);
-                      return (
-                        <div key={idx} className="rounded-lg p-3 ui-card-inner space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(inj.medication)}20` }}>
-                                <Syringe className="h-4 w-4" style={{ color: getMedicationColor(inj.medication) }} />
-                              </div>
-                              <span className="text-white">{inj.medication}</span>
-                            </div>
-                            <div className={`text-sm font-medium ${inj.isOverdue ? 'text-red-400' : inj.isDueToday ? 'text-gold-400' : 'text-gray-400'}`}>
-                              {inj.isOverdue
-                                ? `${Math.abs(inj.daysUntil)} ${Math.abs(inj.daysUntil) === 1 ? 'day' : 'days'} overdue`
-                                : inj.isDueToday
-                                  ? 'Due today'
-                                  : inj.daysUntil === 1
-                                    ? 'Tomorrow'
-                                    : `In ${inj.daysUntil} days`}
-                            </div>
-                          </div>
-                          {suggestedSite && (
-                            <p className="text-gray-500 text-xs pl-11">Suggested site: <span className="text-gold-400">{suggestedSite}</span></p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Last Dose vs Recommended - GLP-1 Titration Tracking */}
-            {titrationPlans.filter(p => {
-              const med = MEDICATIONS.find(m => m.name === p.medication);
-              return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
-            }).length > 0 && (
-              <div className="ui-card p-4 border-accent/20 bg-accent/5">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-violet-400" />
-                  Dose Tracking
-                </h3>
-                {titrationPlans.filter(p => {
-                  const med = MEDICATIONS.find(m => m.name === p.medication);
-                  return med && (med.category === 'GLP-1' || med.category === 'GLP-1/GIP' || med.category === 'Triple Agonist');
-                }).map(plan => {
-                  const current = getCurrentTitrationDose(plan);
-                  if (!current) return null;
-                  
-                  // Get last actual injection
-                  const lastInjection = injectionEntries
-                    .filter(inj => inj.type === plan.medication)
-                    .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date))[0];
-                  
-                  if (!lastInjection) return null;
-                  
-                  // Compare last injection to recommended dose
-                  const lastDose = parseFloat(lastInjection.dose);
-                  const recommendedDose = parseFloat(current.dose);
-                  const isOnTrack = lastDose === recommendedDose;
-                  const isBehind = lastDose < recommendedDose;
-                  const isAhead = lastDose > recommendedDose;
-                  
-                  return (
-                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.06] bg-[var(--bg-card)]">
-                      <div className="text-white font-medium mb-3">{plan.medication}</div>
-                      
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        {/* Last Dose Taken */}
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-gray-400 text-xs mb-1">Last Dose Taken</div>
-                          <div className="text-2xl font-bold text-gold-400">
-                            {lastInjection.dose}{lastInjection.unit}
-                          </div>
-                          <div className="text-gray-500 text-xs mt-1">
-                            {new Date(parseLocalDate(lastInjection.date)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
-                        </div>
-                        
-                        {/* Recommended Dose */}
-                        <div className="bg-slate-700/50 rounded-lg p-3">
-                          <div className="text-gray-400 text-xs mb-1">Recommended Dose</div>
-                          <div className="text-2xl font-bold text-violet-400">
-                            {current.dose}{current.unit}
-                          </div>
-                          <div className="text-gray-500 text-xs mt-1">
-                            Step {current.step} of {plan.steps.length}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Status - Clickable when behind schedule */}
-                      {isBehind ? (
-                        <button
-                          onClick={() => {
-                            setActiveTab('more');
-                            setActiveMoreSection('tools');
-                            setActiveToolSection('titration');
-                          }}
-                          className="w-full rounded-lg p-3 text-center text-sm bg-accent/20 text-gold-400 hover:bg-accent/30 transition-colors border border-accent/30"
-                        >
-                          <div className="font-medium">Ready to increase?</div>
-                          <div className="text-xs mt-1">Plan next dose at {current.dose}{current.unit}</div>
-                          <div className="text-xs text-gold-400/70 mt-1">Tap to view titration plan ‚Üí</div>
-                        </button>
-                      ) : (
-                        <div className={`rounded-lg p-2 text-center text-sm ${
-                          isOnTrack ? 'bg-green-500/20 text-green-500' : 
-                          'bg-accent/20 text-gold-400'
-                        }`}>
-                          {isOnTrack && '‚úì On Track - Taking recommended dose'}
-                          {isAhead && `Ahead of schedule - Currently at ${lastDose}${lastInjection.unit}`}
-                        </div>
-                      )}
-                      
-                      {/* Next Step Preview */}
-                      {current.nextDose && !current.completed && (
-                        <div className="mt-2 text-xs text-gray-400 text-center">
-                          Next: {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Titration Progress */}
-            {titrationPlans.length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-violet-400" />Titration Progress</h3>
-                {titrationPlans.map(plan => {
-                  const current = getCurrentTitrationDose(plan);
-                  if (!current) return null;
-                  return (
-                    <div key={plan.id} className="rounded-xl p-3 mb-2 border border-white/[0.04] bg-slate-700/40">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-white font-medium">{plan.medication}</span>
-                        {current.completed && <span className="text-xs bg-green-500/20 text-green-500 px-2 py-1 rounded">Complete</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl font-bold" style={{ color: getMedicationColor(plan.medication) }}>{current.dose}{current.unit}</div>
-                        {current.nextDose && <span className="text-gray-400 text-sm">‚Üí {current.nextDose.dose}{current.nextDose.unit} in {current.weeksRemaining} weeks</span>}
-                      </div>
-                      <div className="mt-2 bg-slate-600 rounded-full h-2">
-                        <div className="h-2 rounded-full bg-accent" style={{ width: `${(current.step / plan.steps.length) * 100}%` }}></div>
-                      </div>
-                      <div className="text-gray-400 text-xs mt-1">Step {current.step} of {plan.steps.length}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-          </div>
-        )}
-
-        {/* INSIGHTS TAB */}
-        {activeTab === 'insights' && (
-          <div key="insights" className="space-y-4 tab-enter">
-            {/* Hero: simple headline */}
-            <div className="text-center pb-2">
-              <h2 className="text-xl font-bold text-white tracking-tight">Insights</h2>
-              <p className="text-gray-400 text-sm mt-1">Your medication levels at a glance</p>
-            </div>
-
-            {/* How levels work ‚Äî simple explanation */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-semibold text-sm mb-2">How levels work</h3>
-              <p className="text-gray-400 text-xs">
-                Levels can be &gt;100% when doses build up (steady state). SubQ vs IM affects how fast the curve rises, but your total weekly dose still drives the long‚Äëterm level.
-              </p>
-            </div>
-
-            {/* Level phases legend ‚Äî immediately under explanation */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-semibold text-sm mb-2">Level phases at a glance</h3>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 bg-slate-700/60 rounded-lg p-2.5 text-xs text-center">
-                  <div className="text-gray-400">Single dose</div>
-                  <div className="text-white font-medium">0‚Äì100%</div>
-                </div>
-                <div className="flex-1 bg-yellow-500/10 rounded-lg p-2.5 text-xs text-center">
-                  <div className="text-yellow-400">Building up</div>
-                  <div className="text-white font-medium">100‚Äì150%</div>
-                </div>
-                <div className="flex-1 bg-green-500/10 rounded-lg p-2.5 text-xs text-center">
-                  <div className="text-green-500">Steady state ‚úì</div>
-                  <div className="text-white font-medium">150‚Äì200%</div>
-                </div>
-              </div>
-            </div>
-            {(() => {
-              const cutoff = new Date();
-              cutoff.setDate(cutoff.getDate() - 30);
-              const recent = injectionEntries.filter((e) => parseLocalDate(e.date) >= cutoff);
-              const agg = {};
-              recent.forEach((inj) => {
-                (inj.sideEffects || []).forEach((fx) => {
-                  const sev = inj.sideEffectSeverity?.[fx] ?? 3;
-                  if (!agg[fx]) agg[fx] = { sum: 0, n: 0 };
-                  agg[fx].sum += sev;
-                  agg[fx].n += 1;
-                });
-              });
-              const rows = Object.entries(agg)
-                .map(([fx, v]) => ({ fx, avg: Math.round((v.sum / v.n) * 10) / 10, n: v.n }))
-                .sort((a, b) => b.avg - a.avg);
-              if (rows.length === 0) return null;
-              return (
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold text-sm mb-2">Side effect intensity (last 30 days)</h3>
-                  <p className="text-gray-500 text-xs mb-3">Averages of the 1‚Äì5 scores you logged with each injection.</p>
-                  <div className="space-y-2">
-                    {rows.map((r) => (
-                      <div key={r.fx} className="flex items-center gap-3 text-sm">
-                        <span className="text-gray-300 flex-1 min-w-0 truncate">{r.fx}</span>
-                        <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden max-w-[120px]">
-                          <div className="h-full rounded-full bg-orange-500/70" style={{ width: `${(r.avg / 5) * 100}%` }} />
-                        </div>
-                        <span className="text-orange-300 text-xs w-[4.5rem] text-right shrink-0">{r.avg}/5 ¬∑ {r.n}√ó</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            {/* Single unified graph: estimated medication levels from half-life (all peptides/hormones) */}
-            {getMedicationInsights().length > 0 && (() => {
-              const { data: unifiedData, medications: unifiedMeds } = getUnifiedMedicationLevelChartData();
-              if (unifiedData.length === 0) return null;
-              const visibleMeds = unifiedMeds.filter(med => !insightsChartHiddenMeds.has(med.name));
-              const dataMax = unifiedData.reduce((m, row) => {
-                visibleMeds.forEach(med => { const v = row[med.name]; if (v != null && v > m) m = v; });
-                return m;
-              }, 0);
-              const yMax = Math.max(200, Math.ceil((dataMax * 1.12) / 50) * 50);
-              const yTicks = [];
-              for (let t = 0; t <= yMax; t += (yMax <= 300 ? 50 : yMax <= 500 ? 100 : 200)) yTicks.push(t);
-              if (yTicks[yTicks.length - 1] < yMax) yTicks.push(yMax);
-              const toggleMedVisibility = (medName) => {
-                setInsightsChartHiddenMeds(prev => {
-                  const next = new Set(prev);
-                  if (next.has(medName)) next.delete(medName);
-                  else next.add(medName);
-                  return next;
-                });
-              };
-              return (
-                <div className="ui-hero-panel relative z-30 overflow-visible">
-                  <div className="ui-hero-panel__wash" aria-hidden />
-                  <div className="ui-hero-panel__top-bar" aria-hidden />
-                  <div className="relative p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                    <h3 className="text-white font-semibold text-sm">Estimated medication levels</h3>
-                    <div className="flex rounded-lg bg-white/[0.06] p-0.5">
-                      {[{ id: '1w', label: 'Week' }, { id: '1m', label: 'Month' }, { id: '3m', label: '3 mo' }, { id: 'all', label: 'All' }].map(({ id, label }) => (
-                        <button key={id} type="button" onClick={() => setInsightsChartRange(id)} className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${insightsChartRange === id ? 'bg-white/15 text-white font-medium' : 'text-gray-400 hover:text-gray-300'}`}>{label}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-gray-500 text-xs mb-2">Half-life model from logged doses. Hover for dose & phase ¬∑ tap a medication below to show/hide.</p>
-                  <div className="insights-level-chart overflow-visible relative">
-                  <ResponsiveContainer width="100%" height={280} className="!overflow-visible">
-                    <ComposedChart data={unifiedData} margin={{ top: 20, right: 12, left: 4, bottom: 24 }}>
-                      <defs>
-                        {visibleMeds.map(med => (
-                          <linearGradient key={med.name} id={`area-${med.name.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={med.color} stopOpacity={0.45} />
-                            <stop offset="100%" stopColor={med.color} stopOpacity={0.08} />
-                          </linearGradient>
-                        ))}
-                      </defs>
-                      <CartesianGrid stroke="#64748b" strokeOpacity={0.18} vertical={true} horizontal={true} strokeDasharray="2 4" />
-                      <ReferenceLine y={100} stroke="#94a3b8" strokeOpacity={0.35} strokeDasharray="4 4" />
-                      <XAxis
-                        dataKey="timestamp"
-                        type="number"
-                        domain={unifiedData.length ? [unifiedData[0].timestamp, unifiedData[unifiedData.length - 1].timestamp] : undefined}
-                        tickCount={14}
-                        stroke="#94a3b8"
-                        fontSize={11}
-                        tickMargin={8}
-                        tickLine={false}
-                        axisLine={{ stroke: '#334155', strokeOpacity: 0.5 }}
-                        tickFormatter={(ts) => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      />
-                      <YAxis stroke="#64748b" fontSize={10} tickFormatter={(v) => `${v}%`} domain={[0, yMax]} ticks={yTicks} width={36} tickLine={false} axisLine={false} />
-                      <Tooltip
-                        cursor={{ stroke: '#64748b', strokeWidth: 1, strokeOpacity: 0.5 }}
-                        wrapperStyle={{ zIndex: 10000 }}
-                        contentStyle={{ backgroundColor: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const row = payload[0]?.payload;
-                          if (!row) return null;
-                          const dateLabel = row.fullDate
-                            ? parseLocalDate(row.fullDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-                            : row.date;
-                          const injectionDoses = row.injectionDoses || {};
-                          const phaseByMed = row.phaseByMed || {};
-                          return (
-                            <div
-                              className="space-y-2"
-                              style={{
-                                backgroundColor: 'rgba(30, 41, 59, 0.97)',
-                                border: '1px solid rgba(148, 163, 184, 0.2)',
-                                borderRadius: '8px',
-                                padding: '10px 12px',
-                                minWidth: '160px',
-                                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                                backdropFilter: 'blur(12px)',
-                                color: '#e2e8f0'
-                              }}
-                            >
-                              <div className="text-slate-400 text-[11px] font-medium border-b border-slate-600/50 pb-1.5 mb-1.5">{dateLabel}</div>
-                              <div className="text-slate-500 text-[10px] mb-1.5">{row.isToday ? 'Same as cards below' : 'Level on this day'}</div>
-                              {unifiedMeds.filter(m => row[m.name] != null).map((med) => {
-                                const value = row[med.name];
-                                const doseInfo = injectionDoses[med.name];
-                                const levelNum = value != null ? parseFloat(value) : 0;
-                                const statusLabel = levelNum >= 150 ? 'Steady state' : levelNum >= 100 ? 'Building up' : 'Single dose range';
-                                const mgActive = row.remainingMgByMed && row.remainingMgByMed[med.name] != null && row.remainingMgByMed[med.name] > 0
-                                  ? row.remainingMgByMed[med.name].toFixed(1)
-                                  : null;
-                                return (
-                                  <div key={med.name} className="flex items-start justify-between gap-3 text-xs">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: med.color }} />
-                                      <span className="text-slate-200 truncate">{med.name}</span>
-                                    </div>
-                                    <div className="text-right flex-shrink-0">
-                                      <span className="font-medium text-white">{value != null ? `${value}%` : '‚Äî'}</span>
-                                      {doseInfo && <div className="text-emerald-400/90 text-[10px] mt-0.5">{doseInfo.dose}{doseInfo.unit}</div>}
-                                      {mgActive != null && <div className="text-amber-400/90 text-[10px] mt-0.5">{mgActive} mg est.</div>}
-                                      <div className="text-slate-500 text-[10px] mt-0.5">{statusLabel}</div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        }}
-                      />
-                      <Legend
-                        content={() => (
-                          <div className="mt-2 pt-2 border-t border-white/[0.06]">
-                            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                              <div className="min-w-0 flex-1 pb-1">
-                                <div className="flex flex-wrap gap-1">
-                                  {unifiedMeds.map((med) => {
-                                    const isHidden = insightsChartHiddenMeds.has(med.name);
-                                    return (
-                                      <button
-                                        key={med.name}
-                                        type="button"
-                                        onClick={() => toggleMedVisibility(med.name)}
-                                        title={med.name}
-                                        className="inline-flex items-center gap-1 max-w-[9.5rem] shrink-0 rounded-md border border-white/[0.06] bg-slate-900/50 px-1.5 py-0.5 text-[10px] leading-tight hover:bg-white/[0.06] transition-colors"
-                                      >
-                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: isHidden ? '#475569' : med.color }} />
-                                        <span className={`truncate ${isHidden ? 'text-gray-500 line-through' : 'text-gray-300'}`}>{med.name}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                              <div className="flex shrink-0 items-center gap-1 self-center text-[10px] text-gray-500 sm:self-auto">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400/90" />
-                                <span className="whitespace-nowrap">Injection day</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      />
-                      {visibleMeds.map(med => (
-                        <Area
-                          key={`area-${med.name}`}
-                          type="natural"
-                          dataKey={med.name}
-                          fill={`url(#area-${med.name.replace(/\s/g, '')})`}
-                          stroke="none"
-                          connectNulls={false}
-                          isAnimationActive={true}
-                        />
-                      ))}
-                      {visibleMeds.map(med => (
-                        <Line
-                          key={med.name}
-                          type="natural"
-                          dataKey={med.name}
-                          stroke={med.color}
-                          strokeWidth={2.5}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          connectNulls={false}
-                          isAnimationActive={true}
-                          dot={(props) => {
-                            const { cx, cy, payload, dataKey } = props;
-                            if (payload == null || payload[dataKey] == null) return null;
-                            const names = payload.injectionMedNames;
-                            const isInjectionDay = Array.isArray(names) && names.includes(dataKey);
-                            if (!isInjectionDay) return null;
-                            return (
-                              <g key={props.key}>
-                                <circle cx={cx} cy={cy} r={6} fill={med.color} fillOpacity={0.45} />
-                                <circle cx={cx} cy={cy} r={3} fill="rgba(255,255,255,0.95)" stroke={med.color} strokeWidth={1} />
-                                <circle cx={cx} cy={cy} r={5} fill="none" stroke="#eab308" strokeWidth={1.5} strokeOpacity={0.9} />
-                              </g>
-                            );
-                          }}
-                          activeDot={(props) => {
-                            const { cx, cy, payload, dataKey } = props;
-                            const isInjectionDay = Array.isArray(payload?.injectionMedNames) && payload.injectionMedNames.includes(dataKey);
-                            return (
-                              <g>
-                                <circle cx={cx} cy={cy} r={7} fill={med.color} fillOpacity={0.4} />
-                                <circle cx={cx} cy={cy} r={4} fill="white" stroke={med.color} strokeWidth={1.5} />
-                                {isInjectionDay && <circle cx={cx} cy={cy} r={6} fill="none" stroke="#eab308" strokeWidth={2} />}
-                              </g>
-                            );
-                          }}
-                        />
-                      ))}
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                  </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Weekly breakdown: dose & weight change */}
-            {(() => {
-              const { rows, meds } = getWeeklyDoseAndWeightSummary();
-              if (!rows.length) return null;
-              const visibleMeds = meds.filter((m) => !weeklyDoseWeightExcludedMeds.includes(m));
-              const totalWeightChange = rows.reduce((sum, row) => {
-                return row.weightChange != null ? sum + row.weightChange : sum;
-              }, 0);
-              const toggleWeeklyDoseMedExcluded = (medName) => {
-                setWeeklyDoseWeightExcludedMeds((prev) => {
-                  const next = prev.includes(medName) ? prev.filter((x) => x !== medName) : [...prev, medName];
-                  saveData('health-weekly-dose-weight-excluded-meds', next);
-                  return next;
-                });
-              };
-              return (
-                <div className="ui-card p-4 relative z-0">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap sm:justify-between mb-2">
-                    <div className="flex flex-wrap items-center gap-2 min-w-0">
-                      <h3 className="text-white font-semibold text-sm flex items-center gap-2 shrink-0">
-                        <Activity className="h-4 w-4 text-gold-400 shrink-0" />
-                        Weekly dose &amp; weight change
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const built = buildWeeklyDoseWeightPdf({
-                            rows,
-                            visibleMeds,
-                            weekStartsOnLabel: getWeekStartsOnLabel(weeklyDoseWeekStartsOn),
-                            totalWeightChange,
-                            appVersion: APP_VERSION,
-                          });
-                          if (!built) {
-                            alert('Nothing to export yet ‚Äî you need at least two weight entries and some injections.');
-                            return;
-                          }
-                          try {
-                            await savePdfBlob(built.blob, built.filename, {
-                              title: 'Weekly dose & weight',
-                              dialogTitle: 'Save weekly dose PDF',
-                            });
-                          } catch (e) {
-                            console.error(e);
-                            alert(`Could not save PDF: ${e?.message || String(e)}`);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-slate-800/80 px-2.5 py-1 text-[11px] font-medium text-gray-200 hover:bg-slate-700/90 hover:border-gold-500/30 transition-colors"
-                      >
-                        <FileDown className="h-3.5 w-3.5 text-gold-400/90" />
-                        Download PDF
-                      </button>
-                    </div>
-                    <div className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border self-start sm:self-auto ${
-                      totalWeightChange < 0
-                        ? 'border-green-400 text-green-300 bg-green-500/10'
-                        : totalWeightChange > 0
-                          ? 'border-red-400 text-red-300 bg-red-500/10'
-                          : 'border-gray-500 text-gray-300 bg-white/5'
-                    }`}>
-                      Total weight:{' '}
-                      {totalWeightChange === 0
-                        ? '0.0 lb'
-                        : `${totalWeightChange.toFixed(1)} lb`}
-                    </div>
-                  </div>
-                  <p className="text-gray-400 text-xs mb-3 leading-relaxed">
-                    <span className="hidden sm:inline">Weekly </span><strong className="text-gray-300">Total mg</strong> per med (from vial concentration when you log units or ml with a vial). Each week shows <strong className="text-gray-400">start weight</strong> (last weigh-in before that week, or first in the week) and <strong className="text-gray-400">end weight</strong> (last weigh-in in that week). Hide meds below to declutter.
-                  </p>
-                  <div className="flex flex-col gap-2 mb-3 text-xs text-gray-400 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
-                    <label htmlFor="weekly-dose-week-start" className="text-gray-500 shrink-0">
-                      Week starts on
-                    </label>
-                    <select
-                      id="weekly-dose-week-start"
-                      value={weeklyDoseWeekStartsOn}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (v >= 0 && v <= 6) {
-                          setWeeklyDoseWeekStartsOn(v);
-                          saveData('health-weekly-dose-week-starts-on', v);
-                        }
-                      }}
-                      className="bg-slate-700 text-white rounded-lg px-3 py-2 sm:py-1.5 border border-white/[0.08] text-xs w-full sm:w-auto sm:max-w-[14rem]"
-                    >
-                      <option value={1}>Monday (default)</option>
-                      <option value={3}>Wednesday (mid-week titration)</option>
-                      <option value={0}>Sunday</option>
-                      <option value={2}>Tuesday</option>
-                      <option value={4}>Thursday</option>
-                      <option value={5}>Friday</option>
-                      <option value={6}>Saturday</option>
-                    </select>
-                    <span className="text-gray-500 text-[11px] leading-snug sm:max-w-md">
-                      Each block is 7 days from that start; doses are summed in that window.
-                    </span>
-                  </div>
-                  {meds.length > 0 && (
-                    <div className="mb-3 pb-3 border-b border-white/10">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                        <span className="text-gray-500 text-[11px] uppercase tracking-wide">Show meds</span>
-                        {meds.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setWeeklyDoseWeightExcludedMeds([]);
-                              saveData('health-weekly-dose-weight-excluded-meds', []);
-                            }}
-                            className="text-[11px] font-medium text-accent hover:text-gold-400 ml-auto sm:ml-0"
-                          >
-                            Show all
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 pb-1">
-                        {meds.map((medName) => {
-                          const show = !weeklyDoseWeightExcludedMeds.includes(medName);
-                          const dot = MEDICATIONS.find((m) => m.name === medName)?.color || '#9ca3af';
-                          return (
-                            <label
-                              key={medName}
-                              className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-200 shrink-0 rounded-lg border border-white/[0.08] bg-slate-800/60 px-2 py-1.5 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0"
-                            >
-                              <input
-                                type="checkbox"
-                                className="rounded border-white/20 bg-slate-700 text-accent focus:ring-accent shrink-0"
-                                checked={show}
-                                onChange={() => toggleWeeklyDoseMedExcluded(medName)}
-                              />
-                              <span className="flex items-center gap-1.5 min-w-0 max-w-[11rem] sm:max-w-none">
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
-                                <span className="truncate" title={medName}>{medName}</span>
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {/* Cards ‚Äî phones & tablets (wide table only at xl to avoid horizontal scroll) */}
-                  <div className="xl:hidden space-y-2 max-h-[min(40rem,80vh)] overflow-y-auto pr-0.5">
-                    {rows.map((row, idx) => {
-                      const doseLines = visibleMeds.map((medName) => {
-                        const mg = row.perMed?.[medName]?.doseMg;
-                        return { medName, mg: mg != null && mg > 0 ? mg : null };
-                      }).filter((x) => x.mg != null);
-                      return (
-                        <div
-                          key={`mobile-${row.weekLabel}-${idx}`}
-                          className="rounded-xl border border-white/[0.08] bg-slate-950/40 p-3"
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="min-w-0">
-                              <span className="text-gray-500 text-[11px]">W{row.weekIndex}</span>
-                              <div className="text-sm text-gray-100 font-medium leading-snug">{row.weekLabel}</div>
-                            </div>
-                            <div
-                              className={`text-sm font-semibold tabular-nums shrink-0 text-right ${
-                                row.weightChange == null
-                                  ? 'text-gray-500'
-                                  : row.weightChange < 0
-                                    ? 'text-green-400'
-                                    : row.weightChange > 0
-                                      ? 'text-red-400'
-                                      : 'text-gray-200'
-                              }`}
-                            >
-                              <div className="text-[10px] font-normal text-gray-500 mb-0.5">Week Œî</div>
-                              {row.weightChange == null ? '‚Äî' : `${row.weightChange > 0 ? '+' : ''}${row.weightChange.toFixed(1)} lb`}
-                            </div>
-                          </div>
-                          {row.weekStartWeight != null && row.weekEndWeight != null ? (
-                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-gray-400 mb-2 pb-2 border-b border-white/[0.06]">
-                              <span>
-                                Start <span className="text-gray-200 tabular-nums font-medium">{row.weekStartWeight.toFixed(1)}</span> lb
-                              </span>
-                              <span className="text-gray-600">‚Üí</span>
-                              <span>
-                                End <span className="text-gray-200 tabular-nums font-medium">{row.weekEndWeight.toFixed(1)}</span> lb
-                              </span>
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-gray-500 mb-2 pb-2 border-b border-white/[0.06]">Log weight during this week to see start ‚Üí end.</p>
-                          )}
-                          {doseLines.length === 0 ? (
-                            <p className="text-[11px] text-gray-500">
-                              {visibleMeds.length === 0
-                                ? 'Turn on at least one med under Show meds to list weekly mg.'
-                                : 'No dose logged for visible meds this week.'}
-                            </p>
-                          ) : (
-                            <ul className="space-y-1.5 text-xs">
-                              {doseLines.map(({ medName, mg }) => (
-                                <li key={medName} className="flex justify-between gap-2 text-gray-300">
-                                  <span className="text-gray-400 min-w-0 truncate" title={medName}>{medName}</span>
-                                  <span className="tabular-nums shrink-0">{mg.toFixed(2)} mg/wk</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* xl+: wide table */}
-                  <div className="hidden xl:block peptalk-scroll-panel max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-white/[0.06] bg-slate-950/25">
-                    <table className="min-w-full text-xs">
-                      <thead className="sticky top-0 z-[1] bg-slate-900/95 backdrop-blur-sm border-b border-white/10 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
-                        <tr className="text-gray-400">
-                          <th className="py-2 pr-3 pl-2 text-left font-medium w-[1%] whitespace-nowrap">Week</th>
-                          {visibleMeds.map((medName) => (
-                            <th key={medName} className="py-2 px-2 text-right font-medium min-w-[5rem] max-w-[9rem]">
-                              <span className="block leading-tight line-clamp-2" title={medName}>{medName}</span>
-                              <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / wk</span>
-                            </th>
-                          ))}
-                          <th className="py-2 px-2 text-right font-medium whitespace-nowrap tabular-nums">Start lb</th>
-                          <th className="py-2 px-2 text-right font-medium whitespace-nowrap tabular-nums">End lb</th>
-                          <th className="py-2 pl-2 pr-3 text-right font-medium whitespace-nowrap">Œî lb</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((row, idx) => (
-                          <tr key={`${row.weekLabel}-${idx}`} className="border-b border-white/[0.04] last:border-b-0">
-                            <td className="py-2 pr-3 pl-2 text-gray-200 align-top">
-                              <span className="text-gray-500 mr-1 text-[11px]">W{row.weekIndex}</span>
-                              <span className="whitespace-nowrap">{row.weekLabel}</span>
-                            </td>
-                            {visibleMeds.map((medName) => {
-                              const mg = row.perMed?.[medName]?.doseMg;
-                              if (mg == null || mg <= 0) {
-                                return (
-                                  <td key={medName} className="py-2 px-2 text-right text-gray-500 align-top">
-                                    ‚Äî
-                                  </td>
-                                );
-                              }
-                              return (
-                                <td key={medName} className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
-                                  {mg.toFixed(2)}
-                                </td>
-                              );
-                            })}
-                            <td className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
-                              {row.weekStartWeight != null ? row.weekStartWeight.toFixed(1) : '‚Äî'}
-                            </td>
-                            <td className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
-                              {row.weekEndWeight != null ? row.weekEndWeight.toFixed(1) : '‚Äî'}
-                            </td>
-                            <td className={`py-2 pl-2 pr-3 text-right tabular-nums align-top ${row.weightChange == null ? 'text-gray-500' : row.weightChange < 0 ? 'text-green-400' : row.weightChange > 0 ? 'text-red-400' : 'text-gray-200'}`}>
-                              {row.weightChange == null ? '‚Äî' : row.weightChange.toFixed(1)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Side effects from logs */}
-            {getSideEffectsSummary().length > 0 && (
-              <div className="ui-card p-4">
-                <h3 className="text-white font-semibold mb-2 text-sm">From your logs</h3>
-                <p className="text-gray-400 text-xs mb-2">Most mentioned side effects</p>
-                <div className="flex flex-wrap gap-2">
-                  {getSideEffectsSummary().map(se => (
-                    <span key={se} className="text-xs bg-orange-500/20 text-orange-300 px-2.5 py-1 rounded-lg">{se}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Side effects by day in cycle ‚Äî reference only; shows all your logged meds */}
-            {(() => {
-              const loggedMeds = getLoggedMedications();
-              if (loggedMeds.length === 0) return null;
-              return (
-                <div className="ui-card overflow-hidden">
-                  <h3 className="text-white font-semibold mb-1 text-sm px-4 pt-4">Side effects by day in cycle</h3>
-                  <p className="text-gray-400 text-xs mb-3 px-4">Reference: what‚Äôs commonly reported by day. Tap a medication to expand.</p>
-                  <div className="divide-y divide-white/10">
-                    {loggedMeds.map(medName => {
-                      const med = MEDICATIONS.find(m => m.name === medName);
-                      const color = med?.color || '#6b7280';
-                      const byDay = TYPICAL_SIDE_EFFECTS_BY_DAY[medName];
-                      const hasData = byDay && Array.isArray(byDay) && byDay.length > 0;
-                      const isExpanded = insightsSideEffectsExpandedMed === medName;
-                      return (
-                        <div key={medName} className="overflow-hidden" style={{ borderLeftWidth: '4px', borderLeftColor: color }}>
-                          <button type="button" onClick={() => setInsightsSideEffectsExpandedMed(isExpanded ? null : medName)} className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/[0.03] transition-colors">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                              <span className="text-white font-medium text-sm truncate">{medName}</span>
-                            </div>
-                            <ChevronDown className={`h-4 w-4 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                          </button>
-                          {isExpanded && (
-                          <div className="px-4 pb-4 pt-0 border-t border-white/[0.04]">
-                            {hasData ? (
-                              <div className="space-y-2.5 mt-3">
-                                {byDay.map(({ day, effects }, i) => (
-                                  <div key={i}>
-                                    <div className="text-gray-500 text-[10px] font-medium uppercase tracking-wider mb-1">{day}</div>
-                                    <div className="flex flex-wrap gap-1">
-                                      {effects.map(ef => (
-                                        <span key={ef} className="text-gray-300 text-xs bg-slate-700/60 px-2 py-0.5 rounded">{ef}</span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-xs mt-3">No reference pattern for this compound yet. Log side effects when you inject to see your patterns in the cards above.</p>
-                            )}
-                          </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Side-effect intelligence ‚Äî correlate symptoms with dosing, suggest tips */}
-            {(() => {
-              const patterns = getSideEffectPatterns();
-              return patterns && patterns.length > 0 && (
-              <div className="ui-card p-4 border border-gold-500/20 bg-gold-500/5">
-                <h3 className="text-white font-semibold mb-2 text-sm flex items-center gap-2">Side-effect patterns</h3>
-                <p className="text-gray-400 text-xs mb-3">Correlated with your injection timing. Use this to adjust dosing.</p>
-                <div className="space-y-3">
-                  {patterns.slice(0, 5).map((p, i) => (
-                    <div key={i} className="bg-slate-800/50 rounded-lg p-3">
-                      <div className="text-gold-400 font-medium text-xs">{p.med} ¬∑ {p.sideEffect}</div>
-                      <p className="text-gray-300 text-xs mt-1">{p.suggestion}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-gray-500 text-xs mt-2">Tip: Try evening injections, split doses, or increase electrolytes to smooth peaks.</p>
-              </div>
-              );
-            })()}
-
-            {getMedicationInsights().length === 0 ? (
-              <div className="ui-card p-8 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
-                  <Activity className="h-7 w-7 text-gray-400" />
-                </div>
-                <h3 className="text-white font-semibold mb-1">No medication data yet</h3>
-                <p className="text-gray-400 text-sm mb-5">Log an injection to see levels and when to dose next.</p>
-                <button onClick={() => setActiveTab('injections')} className="ui-btn-primary px-5 py-2.5 text-sm">
-                  Log injection
-                </button>
-              </div>
-            ) : (
-              <>
-                {/* Active Medications Overview */}
-                {getMedicationInsights().map(insight => {
-                  const isExpanded = insightsExpandedMed === insight.medication;
-                  const levelNum = parseFloat(insight.currentLevel);
-                  const statusLabel = levelNum >= 150 ? 'Steady state' : levelNum >= 100 ? 'Building up' : 'Single dose range';
-                  const statusColor = levelNum >= 150 ? 'text-green-500' : levelNum >= 100 ? 'text-gold-400' : 'text-gray-400';
-                  return (
-                  <div key={insight.medication} className="ui-card overflow-hidden">
-                    {/* Compact header ‚Äî always visible */}
-                    <button type="button" onClick={() => setInsightsExpandedMed(isExpanded ? null : insight.medication)} className="w-full px-4 py-4 flex items-center gap-4 text-left hover:bg-white/[0.03] transition-colors">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${insight.color}22` }}>
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: insight.color }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-white truncate">{insight.medication}</div>
-                        <div className="text-gray-400 text-xs mt-0.5">{insight.hoursAgo < 24 ? `Last dose ${insight.hoursAgo}h ago` : `Last dose ${(insight.hoursAgo / 24).toFixed(1)} days ago`} ¬∑ {insight.lastDose}{insight.lastUnit}</div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="text-2xl font-bold text-white">{insight.currentLevel}%</div>
-                        <div className={`text-xs font-medium ${statusColor}`}>{statusLabel}</div>
-                      </div>
-                      <ChevronDown className={`h-5 w-5 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {/* Expanded content */}
-                    {isExpanded && (
-                    <div className="px-4 pb-4 pt-0 border-t border-white/[0.06] space-y-4">
-                    {/* Phase + next dose one-liner */}
-                    <div className="flex flex-wrap items-center gap-2 pt-3">
-                      <span className={`text-sm font-medium ${insight.phaseColor}`}>‚óè {insight.phase}</span>
-                      {insight.nextInjection && (
-                        <span className="text-gray-400 text-xs">Next: {new Date(insight.nextInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                      )}
-                    </div>
-
-                    {insight.effectProfile?.splitDoseTip && (
-                      <p className="text-gold-400 text-xs bg-accent/10 border border-accent/20 rounded-lg p-2.5">üí° {insight.effectProfile.splitDoseTip}</p>
-                    )}
-
-                    {/* Phase progress ‚Äî compact */}
-                    {insight.currentPhase && insight.timeline && Array.isArray(insight.timeline.phases) && (
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          {insight.timeline.phases.map((phase, idx) => (
-                            <div key={idx} className={`text-[10px] ${idx === insight.currentPhase.phaseIndex ? insight.currentPhase.color : 'text-gray-500'}`}>{phase.name}</div>
-                          ))}
-                        </div>
-                        <div className="relative h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                          <div className={`absolute h-full ${insight.currentPhase.bgColor || 'bg-slate-600'} transition-all`} style={{ width: `${insight.currentPhase.totalPhases > 0 ? ((insight.currentPhase.phaseIndex + 1) / insight.currentPhase.totalPhases) * 100 : 0}%` }} />
-                        </div>
-                        <p className="text-gray-400 text-xs mt-2">{insight.currentPhase.description}</p>
-                      </div>
-                    )}
-
-                    {/* Phase detail card ‚Äî overhauled */}
-                    {insight.currentPhase && (
-                      <div className="ui-card overflow-hidden">
-                        {/* Header: phase name + injection date highlight */}
-                        <div className={`${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border-b border-inherit px-4 py-3`}>
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl" aria-hidden>{insight.currentPhase.icon}</span>
-                              <h5 className={`${insight.currentPhase.color} font-semibold text-base`}>{insight.currentPhase.name}</h5>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="text-gray-400">Injection recorded</span>
-                              <span className="px-2 py-0.5 rounded-md bg-green-500/25 text-green-400 font-medium border border-green-500/40">
-                                {insight.lastInjection ? new Date(insight.lastInjection).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '‚Äî'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="p-4 space-y-4">
-                          <section>
-                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
-                              <Zap className="h-3.5 w-3 text-gold-400/80" />
-                              What&apos;s happening
-                            </h6>
-                            <ul className="space-y-1.5 pl-0.5">
-                              {(Array.isArray(insight.currentPhase.whatsHappening) ? insight.currentPhase.whatsHappening : []).map((item, i) => (
-                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
-                                  <span className="text-gold-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
-                                  <span>{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                          <section className="pt-3 border-t border-white/[0.06]">
-                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
-                              <Activity className="h-3.5 w-3 text-cyan-400/80" />
-                              What to expect
-                            </h6>
-                            <ul className="space-y-1.5 pl-0.5">
-                              {(Array.isArray(insight.currentPhase.whatToExpect) ? insight.currentPhase.whatToExpect : []).map((item, i) => (
-                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
-                                  <span className="text-cyan-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
-                                  <span>{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                          <section className="pt-3 border-t border-white/[0.06]">
-                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
-                              <CheckCircle className="h-3.5 w-3 text-green-500/80" />
-                              Tips for this phase
-                            </h6>
-                            <ul className="space-y-1.5 pl-0.5">
-                              {(Array.isArray(insight.currentPhase.tips) ? insight.currentPhase.tips : []).map((tip, i) => (
-                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
-                                  <span className="text-green-500/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
-                                  <span>{tip}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Next dose reminder ‚Äî one line */}
-                    {(() => {
-                      const medication = MEDICATIONS.find(m => m.name === insight.medication);
-                      if (!medication) return null;
-                      const hoursAgo = parseFloat(insight.hoursAgo);
-                      const expectedFrequencyHours = medication.defaultSchedule * 24;
-                      const hoursOverdue = hoursAgo - expectedFrequencyHours;
-                      const daysUntilTypical = (expectedFrequencyHours - hoursAgo) / 24;
-                      let urgencyColor = 'bg-green-500/10 border-green-500/20';
-                      let urgencyText = `Next dose in ~${Math.ceil(daysUntilTypical)} days`;
-                      if (hoursOverdue > 24) { urgencyColor = 'bg-red-500/10 border-red-500/30'; urgencyText = `Overdue by ${Math.ceil(hoursOverdue / 24)} day(s) ‚Äî inject soon`; }
-                      else if (hoursOverdue > 0 || insight.phase === 'Trough') { urgencyColor = 'bg-red-500/10 border-red-500/30'; urgencyText = 'Inject today'; }
-                      else if (daysUntilTypical <= 1) { urgencyColor = 'bg-yellow-500/10 border-yellow-500/30'; urgencyText = 'Inject tomorrow or within 24h'; }
-                      else if (daysUntilTypical <= 2) { urgencyColor = 'bg-cyan-500/10 border-cyan-500/30'; urgencyText = `Plan in ${Math.ceil(daysUntilTypical)} days`; }
-                      return (
-                        <div className={`${urgencyColor} border rounded-lg px-3 py-2 text-sm text-gray-200`}>{urgencyText}</div>
-                      );
-                    })()}
-
-                    {/* One-line insight */}
-                    <p className="text-gray-400 text-xs">
-                      {levelNum >= 150 ? 'Steady state ‚Äî optimal level.' : levelNum >= 100 ? 'Building up ‚Äî keep consistent dosing.' : levelNum < 50 ? 'Levels low ‚Äî plan next dose.' : 'Track side effects in Journal to spot patterns.'}
-                    </p>
-                    </div>
-                    )}
-                  </div>
-                    );
-                })}
-            </>
-            )}
-          </div>
-        )}
-
-        {/* WEIGHT TAB */}
-        {activeTab === 'weight' && (
-          <div key="weight" className="space-y-4 tab-enter">
-            <div className="ui-card p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400 text-sm">Height (for BMI)</span>
-                <span className="text-white text-sm">{userProfile?.height ?? 70} in</span>
-                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gold-400 hover:text-accent text-xs">
-                  Edit in Profile
-                </button>
-              </div>
-            </div>
-
-            <div className="ui-hero-panel">
-              <div className="ui-hero-panel__wash" aria-hidden />
-              <div className="ui-hero-panel__top-bar" aria-hidden />
-              <div className="ui-hero-panel__body">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="ui-card p-4">
-                    <div className="text-gray-400 text-sm mb-1">Current Weight</div>
-                    <div className="text-2xl font-bold text-white">{stats.current} <span className="text-sm text-gray-400">lbs</span></div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="text-gray-400 text-sm mb-1">BMI</div>
-                    <div className={`text-2xl font-bold ${bmiCategory.color}`}>{stats.bmi || '-'}</div>
-                    <div className={`text-xs ${bmiCategory.color}`}>{bmiCategory.label}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl p-4 border border-accent/20 bg-accent/5 backdrop-blur-sm">
-              <p className="text-gray-300 text-sm mb-2">For best results, use our Calorie / TDEE calculator to align your intake with your goals.</p>
-              <button onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-gold-400 hover:text-gold-400 text-sm font-medium flex items-center gap-2">
-                <Calculator className="h-4 w-4" /> Open Calorie & TDEE Calculator
-              </button>
-            </div>
-
-            {showAddForm && (
-              <div className="ui-card p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-white font-medium">{editingWeight ? 'Edit Entry' : 'Add Weight'}</h3>
-                  <button onClick={resetWeightForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Weight (lbs)</label>
-                    <input type="number" step="0.1" value={weight} onChange={(e) => setWeight(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="Enter weight" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Date</label>
-                    <input type="date" value={weightDate} onChange={(e) => setWeightDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                  </div>
-                  <button onClick={addOrUpdateWeight} className="w-full btn-primary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingWeight ? 'Update' : 'Add Entry'}</button>
-                </div>
-              </div>
-            )}
-
-            <div className="ui-card p-4">
-              <div className="flex justify-between items-center mb-4 gap-2">
-                <h3 className="text-white font-medium">History</h3>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={weightHistoryFilterDate}
-                    onChange={(e) => setWeightHistoryFilterDate(e.target.value)}
-                    className="bg-slate-800 text-gray-200 text-xs rounded-lg px-2 py-1.5"
-                    title="Filter by week (pick any day in the week)"
-                  />
-                  {weightHistoryFilterDate && (
-                    <button
-                      type="button"
-                      onClick={() => setWeightHistoryFilterDate('')}
-                      className="text-gray-500 hover:text-gray-300 text-xs"
-                    >
-                      Clear
-                    </button>
-                  )}
-                  {!showAddForm && (
-                    <button onClick={() => setShowAddForm(true)} className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg">
-                      <Plus className="h-5 w-5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {weightEntries.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <div className="relative mb-4">
-                    <div className="absolute inset-0 bg-green-500/10 blur-2xl rounded-full"></div>
-                    <Scale className="h-16 w-16 mx-auto text-green-500 relative animate-bounce" style={{ animationDuration: '3s' }} />
-                  </div>
-                  <h3 className="text-white font-medium mb-2">Track Your Progress</h3>
-                  <p className="text-gray-400 text-sm mb-4">Start logging your weight to see your journey unfold</p>
-                  <button 
-                    onClick={() => setShowAddForm(true)} 
-                    className="btn-primary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add First Entry
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {(() => {
-                    const sorted = sortWeightByDateDesc(weightEntries);
-                    if (!weightHistoryFilterDate) return sorted;
-                    const selected = parseLocalDate(weightHistoryFilterDate);
-                    if (!selected) return sorted;
-                    const startOfWeek = (d) => {
-                      const date = new Date(d);
-                      const day = date.getDay();
-                      const diff = day === 0 ? -6 : 1 - day;
-                      date.setDate(date.getDate() + diff);
-                      date.setHours(0, 0, 0, 0);
-                      return date;
-                    };
-                    const ws = startOfWeek(selected);
-                    const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
-                    return sorted.filter(entry => {
-                      const d = parseLocalDate(entry.date);
-                      return d && d >= ws && d <= we;
-                    });
-                  })().map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-pink-500/20 p-2 rounded-lg"><Scale className="h-5 w-5 text-pink-400" /></div>
-                        <div>
-                          <div className="text-white font-medium">{entry.weight} lbs</div>
-                          <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingWeight(entry); setWeight(entry.weight.toString()); setWeightDate(entry.date); setShowAddForm(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
-                        <button onClick={() => deleteWeight(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Fasting Window Tracker - Separate Section */}
-            <div className="bg-gradient-to-br from-accent/10 to-gold-600/10 border border-accent/30 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-accent/20 rounded-lg">
-                    <Clock className="h-5 w-5 text-gold-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium">Fasting Window Tracker</h3>
-                    <p className="text-gray-400 text-xs">Track your daily intermittent fasting</p>
-                  </div>
-                </div>
-                {!showFastingForm && (
-                  <button onClick={() => setShowFastingForm(true)} className="bg-accent hover:bg-gold-600 text-white p-2 rounded-lg">
-                    <Plus className="h-5 w-5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Fasting Stats Summary */}
-              {fastingEntries.length > 0 && (
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-[var(--bg-card)] rounded-lg p-3 text-center">
-                    <div className="text-gray-400 text-xs">Current Streak</div>
-                    <div className="text-2xl font-bold text-gold-400">
-                      {(() => {
-                        const sorted = [...fastingEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-                        let streak = 0;
-                        const today = new Date();
-                        for (let i = 0; i < sorted.length; i++) {
-                          const entryDate = parseLocalDate(sorted[i].date);
-                          const daysDiff = Math.floor((today - entryDate) / (1000 * 60 * 60 * 24));
-                          if (daysDiff === i) streak++;
-                          else break;
-                        }
-                        return streak;
-                      })()}
-                    </div>
-                    <div className="text-gray-500 text-xs">days</div>
-                  </div>
-                  <div className="bg-[var(--bg-card)] rounded-lg p-3 text-center">
-                    <div className="text-gray-400 text-xs">Avg Window</div>
-                    <div className="text-2xl font-bold text-gold-400">
-                      {fastingEntries.length > 0 ? Math.round(fastingEntries.reduce((sum, e) => sum + e.fastingHours, 0) / fastingEntries.length) : 0}
-                    </div>
-                    <div className="text-gray-500 text-xs">hours</div>
-                  </div>
-                  <div className="bg-[var(--bg-card)] rounded-lg p-3 text-center">
-                    <div className="text-gray-400 text-xs">Total Days</div>
-                    <div className="text-2xl font-bold text-gold-400">{fastingEntries.length}</div>
-                    <div className="text-gray-500 text-xs">logged</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Fasting Form */}
-              {showFastingForm && (
-                <div className="bg-[var(--bg-card)] rounded-xl p-4 mb-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-white font-medium">{editingFasting ? 'Edit Fasting' : 'Log Fasting Window'}</h4>
-                    <button onClick={resetFastingForm} className="text-gray-400 hover:text-white">
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Fasting Window</label>
-                      <div className="flex gap-2 items-center">
-                        <input 
-                          type="number" 
-                          step="1" 
-                          min="1" 
-                          max="23" 
-                          value={fastingHours} 
-                          onChange={(e) => setFastingHours(e.target.value)} 
-                          className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3 text-center text-2xl font-bold" 
-                          placeholder="14" 
-                        />
-                        <span className="text-gray-400 text-xl">/</span>
-                        <div className="flex-1 bg-slate-700/50 text-gray-400 rounded-lg px-4 py-3 text-center text-2xl font-bold">
-                          {fastingHours ? 24 - parseInt(fastingHours) : '10'}
-                        </div>
-                      </div>
-                      <p className="text-gray-500 text-xs mt-2">
-                        {fastingHours && parseInt(fastingHours) >= 1 && parseInt(fastingHours) <= 23 ? (
-                          <>Fast for {fastingHours} hours, eat for {24 - parseInt(fastingHours)} hours</>
-                        ) : (
-                          'Enter fasting hours (e.g., 14 for 14/10 fast, 16 for 16/8 fast)'
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Date</label>
-                      <input 
-                        type="date" 
-                        value={fastingDate} 
-                        onChange={(e) => setFastingDate(e.target.value)} 
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" 
-                      />
-                    </div>
-                    <button 
-                      onClick={addOrUpdateFasting} 
-                      className="w-full btn-amber text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all"
-                    >
-                      {editingFasting ? 'Update' : 'Log Fasting'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Fasting History */}
-              <div>
-                <h4 className="text-white font-medium mb-2 text-sm">Fasting History</h4>
-                {fastingEntries.length === 0 ? (
-                  <div className="text-center py-10 px-4">
-                    <div className="relative mb-4">
-                      <div className="absolute inset-0 bg-accent/10 blur-2xl rounded-full"></div>
-                      <Clock className="h-16 w-16 mx-auto text-gold-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
-                    </div>
-                    <h3 className="text-white font-medium mb-2">Start Fasting Tracker</h3>
-                    <p className="text-gray-400 text-sm mb-4">Log your intermittent fasting windows and build streaks!</p>
-                    <button 
-                      onClick={() => setShowFastingForm(true)} 
-                      className="btn-amber text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Log First Fast
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {[...fastingEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between bg-[var(--bg-card)] rounded-lg p-3 group">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-accent/20 p-2 rounded-lg">
-                            <Clock className="h-5 w-5 text-gold-400" />
-                          </div>
-                          <div>
-                            <div className="text-white font-medium flex items-center gap-2">
-                              <span className="text-2xl">{entry.fastingHours}</span>
-                              <span className="text-gray-400">/</span>
-                              <span className="text-gray-400 text-xl">{24 - entry.fastingHours}</span>
-                              <span className="text-xs bg-accent/20 text-gold-400 px-2 py-0.5 rounded ml-1">
-                                {entry.fastingHours}/{24 - entry.fastingHours}
-                              </span>
-                            </div>
-                            <div className="text-gray-400 text-sm">
-                              {parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => { 
-                              setEditingFasting(entry); 
-                              setFastingHours(entry.fastingHours.toString()); 
-                              setFastingDate(entry.date); 
-                              setShowFastingForm(true); 
-                            }} 
-                            className="p-2 text-gray-400 hover:text-white hover:bg-slate-700 rounded-lg"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => deleteFasting(entry.id)} 
-                            className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-700 rounded-lg"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* INJECTIONS TAB */}
-        {activeTab === 'injections' && (
-          <div key="injections" className="space-y-4 tab-enter">
-            <div className="grid grid-cols-4 gap-2">
-              {['GLP-1', 'Peptide', 'Hormone', 'Other'].map(cat => {
-                const count = injectionEntries.filter(e => {
-                  const med = MEDICATIONS.find(m => m.name === e.type);
-                  if (!med) return cat === 'Other';
-                  if (cat === 'GLP-1') return med.category === 'GLP-1' || med.category === 'GLP-1/GIP';
-                  if (cat === 'Peptide') return med.category === 'Peptide' || med.category === 'Triple Agonist';
-                  if (cat === 'Hormone') return med.category === 'Hormone';
-                  return med.category === 'Other';
-                }).length;
-                return <div key={cat} className="bg-[var(--bg-card)] rounded-xl p-2 text-center"><div className="text-lg font-bold text-white">{count}</div><div className="text-xs text-gray-400 truncate">{cat}</div></div>;
-              })}
-            </div>
-
-            {/* Your vials ‚Äî remaining volume on Injections page */}
-            {vials.length > 0 && (
-              <div className="ui-hero-panel">
-                <div className="ui-hero-panel__wash" aria-hidden />
-                <div className="ui-hero-panel__top-bar" aria-hidden />
-                <div className="ui-hero-panel__body">
-                <h3 className="text-white font-medium text-sm mb-2 flex items-center gap-2"><Syringe className="h-4 w-4 text-gold-400" />Your vials</h3>
-                <div className="space-y-2">
-                  {vials.map(v => {
-                    const remMg = v.remainingMg ?? v.totalMg;
-                    const totalMg = v.totalMg;
-                    const conc = v.concentration;
-                    const remMl = conc > 0 ? remMg / conc : null;
-                    const totalMl = conc > 0 ? totalMg / conc : null;
-                    const isLow = remMg <= 0;
-                    return (
-                      <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
-                        <span className="text-white font-medium">{v.medication}</span>
-                        <span className="text-gray-400">
-                          {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
-                          {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">¬∑ {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('vials'); }} className="text-gray-500 hover:text-gold-400 text-xs mt-2">Add or edit in More ‚Üí Tools ‚Üí Vials</button>
-                </div>
-              </div>
-            )}
-
-            {/* Injection site rotation + body map */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-medium text-sm mb-1 flex items-center gap-2">Injection site rotation</h3>
-              <p className="text-gray-400 text-xs mb-3">Last 30 days. Green = safe to use ¬∑ Yellow = moderate ¬∑ Red = rotate away.</p>
-              {/* Body map: all sites in a visual grid */}
-              <div className="mb-4 grid grid-cols-3 gap-1.5">
-                {getInjectionSiteCountsForMap().map((item) => (
-                  <div
-                    key={item.site}
-                    className={`rounded-lg p-2 text-center min-h-[48px] flex flex-col justify-center ${
-                      item.status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
-                      item.status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
-                      'bg-red-500/20 text-red-400 border border-red-500/40'
-                    }`}
-                    title={`${item.site}: ${item.count} injections`}
-                  >
-                    <span className="text-[10px] font-medium leading-tight block truncate">{item.site.replace(' (Left)', ' L').replace(' (Right)', ' R')}</span>
-                    <span className="text-xs opacity-80">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {getInjectionSiteCounts().map(({ site, count, status }) => (
-                  <div
-                    key={site}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                      status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
-                      status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
-                      'bg-red-500/20 text-red-400 border border-red-500/40'
-                    }`}
-                  >
-                    {site} <span className="opacity-80">({count})</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-gray-500 text-xs mt-2">Green = 0‚Äì2 ¬∑ Yellow = 3‚Äì5 ¬∑ Red = 6+</p>
-            </div>
-
-            {showAddForm && (
-              <div className="ui-hero-panel">
-                <div className="ui-hero-panel__wash" aria-hidden />
-                <div className="ui-hero-panel__top-bar" aria-hidden />
-                <div className="ui-hero-panel__body">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-white font-medium">{editingInjection ? 'Edit Injection' : 'Log Injection'}</h3>
-                  <button onClick={resetInjectionForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-4">
-                  <div className="relative">
-                    <label className="text-gray-400 text-sm block mb-1">Medication</label>
-                    <button onClick={() => setShowMedDropdown(!showMedDropdown)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 text-left flex items-center justify-between">
-                      <span style={{ color: getMedicationColor(injectionType) }}>{injectionType}</span>
-                      <ChevronDown className={`h-5 w-5 transition-transform ${showMedDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showMedDropdown && (
-                      <div className="absolute z-10 w-full mt-1 bg-slate-700 rounded-lg shadow-xl max-h-64 overflow-y-auto">
-                        <input type="text" placeholder="Search..." value={medSearchTerm} onChange={(e) => setMedSearchTerm(e.target.value)} className="w-full bg-slate-600 text-white px-4 py-2 rounded-t-lg" autoFocus />
-                        {Object.entries(groupedMedications).map(([category, meds]) => (
-                          <div key={category}>
-                            <div className="px-4 py-1 text-xs font-medium text-gray-400 bg-[var(--bg-card)]">{category}</div>
-                            {meds.map(med => <button key={med.name} onClick={() => { setInjectionType(med.name); setShowMedDropdown(false); setMedSearchTerm(''); }} className="w-full px-4 py-2 text-left hover:bg-slate-600 flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: med.color }}></div><span className="text-white">{med.name}</span></button>)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Dose</label>
-                    <div className="flex gap-2">
-                      <input type="number" step="0.01" value={injectionDose} onChange={(e) => setInjectionDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="Amount" />
-                      <select value={injectionUnit} onChange={(e) => setInjectionUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-3">
-                        <option value="mg">mg</option><option value="mcg">mcg</option><option value="ml">ml</option><option value="units">units</option><option value="IU">IU</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Date &amp; time</label>
-                    <div className="flex gap-2">
-                      <input type="date" value={injectionDate} onChange={(e) => setInjectionDate(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-3" />
-                      <input type="time" value={injectionTime} onChange={(e) => setInjectionTime(e.target.value)} className="w-[7rem] bg-slate-700 text-white rounded-lg px-3 py-3" />
-                    </div>
-                  </div>
-                  {(() => {
-                    const matchingVials = vials.filter(v => v.medication === injectionType);
-                    const availableVials = matchingVials.filter(v => (v.remainingMg ?? v.totalMg) > 0);
-                    const linkedVialWhenEditing = editingInjection?.vialId ? matchingVials.find(v => v.id === editingInjection.vialId) : null;
-                    const options = [...availableVials];
-                    if (linkedVialWhenEditing && !options.find(o => o.id === linkedVialWhenEditing.id))
-                      options.push(linkedVialWhenEditing);
-                    if (options.length === 0 && matchingVials.length === 0) {
-                      return (
-                        <p className="text-gray-500 text-xs">Add vials in More ‚Üí Tools ‚Üí Vials for this medication to track inventory.</p>
-                      );
-                    }
-                    if (options.length === 0) return null;
-                    return (
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Use from vial (optional)</label>
-                        <select value={selectedVialId != null ? String(selectedVialId) : ''} onChange={(e) => setSelectedVialId(e.target.value ? Number(e.target.value) : null)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3">
-                          <option value="">None</option>
-                          {options.map(v => {
-                            const rem = v.remainingMg ?? v.totalMg;
-                            return (
-                              <option key={v.id} value={v.id}>
-                                {rem.toFixed(1)} mg left{v.expiry ? ` ¬∑ Exp ${v.expiry}` : ''}{rem <= 0 ? ' (empty)' : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
-                        {selectedVialId && injectionDose && (() => {
-                          const v = vials.find(x => x.id === selectedVialId);
-                          const remaining = v ? (v.remainingMg ?? v.totalMg) : 0;
-                          const deduct = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
-                          const after = Math.max(0, remaining - deduct);
-                          const conc = getVialConcentrationMgPerMl(v);
-                          const u = (injectionUnit || '').toLowerCase();
-                          let breakdown = null;
-                          if (deduct > 0) {
-                            if (injectionType === 'Retatrutide' && u === 'units') {
-                              breakdown = `${injectionDose} units √∑ ${RETATRUTIDE_UNITS_PER_MG} = ${deduct.toFixed(2)} mg (Retatrutide pen dial)`;
-                            } else if (conc > 0) {
-                              if (u === 'units') {
-                                const ml = parseFloat(injectionDose) / 100;
-                                breakdown = `${injectionDose} units = ${ml.toFixed(3)} mL (U-100) √ó ${conc.toFixed(2)} mg/mL ‚âà ${deduct.toFixed(2)} mg`;
-                              } else if (u === 'ml') {
-                                breakdown = `${injectionDose} mL √ó ${conc.toFixed(2)} mg/mL ‚âà ${deduct.toFixed(2)} mg`;
-                              }
-                            }
-                          }
-                          return (
-                            <div className="text-gray-500 text-xs mt-1 space-y-0.5">
-                              {breakdown && <p className="text-gray-400">{breakdown}</p>}
-                              {conc <= 0 && (u === 'units' || u === 'ml') && injectionType !== 'Retatrutide' && (
-                                <p className="text-amber-400/90">Set vial total (mg) + BAC (ml) or concentration so units convert to mg.</p>
-                              )}
-                              <p>After this dose: {after.toFixed(1)} mg remaining in vial</p>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })()}
-                  {(() => {
-                    const target = parseFloat(trialTargetMg);
-                    const hasTarget = !isNaN(target) && target > 0;
-                    const vPick = selectedVialId ? vials.find((x) => x.id === selectedVialId) : vials.find((x) => x.medication === injectionType && getVialConcentrationMgPerMl(x) > 0);
-                    const conc = vPick ? getVialConcentrationMgPerMl(vPick) : 0;
-                    let unitsOut = null;
-                    let mlOut = null;
-                    let hint = null;
-                    if (hasTarget) {
-                      if (injectionType === 'Retatrutide') {
-                        unitsOut = target * RETATRUTIDE_UNITS_PER_MG;
-                        hint = 'Retatrutide pen: 10 units = 1 mg on the dial.';
-                      } else if (conc > 0) {
-                        mlOut = target / conc;
-                        unitsOut = mlOut * 100;
-                        hint = `U-100 syringe: ${conc.toFixed(2)} mg/mL from vial${vPick && selectedVialId !== vPick.id ? ' (first vial with concentration for this med)' : ''}.`;
-                      } else {
-                        hint = 'Add this medication under Tools ‚Üí Vials with total mg + BAC (or mg/mL) so concentration is known.';
-                      }
-                    }
-                    return (
-                      <div className="rounded-xl border border-accent/25 bg-accent/5 p-3 space-y-2">
-                        <label className="text-gray-300 text-sm font-medium block">Trial / protocol target (mg per dose)</label>
-                        <p className="text-gray-500 text-xs">From study notes‚Äîsee suggested syringe units (or mL) for your current vial.</p>
-                        <div className="flex flex-wrap gap-2 items-end">
-                          <div className="flex-1 min-w-[8rem]">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={trialTargetMg}
-                              onChange={(e) => setTrialTargetMg(e.target.value)}
-                              className="w-full bg-slate-700 text-white rounded-lg px-3 py-2.5"
-                              placeholder="e.g. 1"
-                            />
-                          </div>
-                          {hasTarget && unitsOut != null && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInjectionDose(unitsOut.toFixed(1));
-                                setInjectionUnit('units');
-                              }}
-                              className="px-3 py-2.5 rounded-lg text-sm font-medium bg-accent text-gray-900 hover:brightness-105"
-                            >
-                              Apply units to dose
-                            </button>
-                          )}
-                          {hasTarget && mlOut != null && mlOut > 0 && injectionType !== 'Retatrutide' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInjectionDose(mlOut.toFixed(3));
-                                setInjectionUnit('ml');
-                              }}
-                              className="px-3 py-2.5 rounded-lg text-sm font-medium bg-white/10 text-gray-200 hover:bg-white/15"
-                            >
-                              Apply mL to dose
-                            </button>
-                          )}
-                        </div>
-                        {hasTarget && unitsOut != null && (
-                          <p className="text-gold-400/95 text-sm">
-                            ‚âà <strong>{unitsOut.toFixed(1)}</strong> units
-                            {mlOut != null && mlOut > 0 && injectionType !== 'Retatrutide' && (
-                              <span className="text-gray-400 font-normal"> ¬∑ {mlOut.toFixed(3)} mL</span>
-                            )}
-                          </p>
-                        )}
-                        {hasTarget && hint && (
-                          <p className={`text-xs ${conc <= 0 && injectionType !== 'Retatrutide' ? 'text-amber-400/90' : 'text-gray-500'}`}>{hint}</p>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-2">Route <span className="text-gold-400">*</span></label>
-                    <div className="flex gap-2">
-                      {INJECTION_ROUTES.map((route) => (
-                        <button key={route} type="button" onClick={() => setInjectionRoute(route)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${injectionRoute === route ? 'bg-accent text-gray-900' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{route === 'SubQ' ? 'SubQ (subcutaneous)' : 'IM (intramuscular)'}</button>
-                      ))}
-                    </div>
-                    <p className="text-gray-500 text-xs mt-1">IM absorbs faster ‚Üí earlier peak; level curve reflects route.</p>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-2">Body location</label>
-                    {!editingInjection && (() => {
-                      const suggested = getSuggestedInjectionSite(injectionType);
-                      if (suggested && suggested !== injectionSite) {
-                        return (
-                          <div className="flex items-center justify-between gap-2 mb-2 p-2 rounded-lg bg-accent/10 border border-accent/20">
-                            <span className="text-gray-300 text-xs">Rotate: try <strong className="text-gold-400">{suggested}</strong></span>
-                            <button type="button" onClick={() => setInjectionSite(suggested)} className="text-xs font-medium text-accent hover:text-gold-400 whitespace-nowrap">Use suggested</button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                    <div className="grid grid-cols-3 gap-2">
-                      {BODY_LOCATIONS.map(loc => <button key={loc} type="button" onClick={() => setInjectionSite(loc)} className={`p-2 rounded-lg text-xs transition-all ${injectionSite === loc ? 'bg-accent text-gray-900' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{loc}</button>)}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-2">Side effects (tap to toggle, then set intensity 1‚Äì5)</label>
-                    <div className="flex flex-wrap gap-2">
-                      {SIDE_EFFECTS.map(effect => <button key={effect} type="button" onClick={() => toggleSideEffect(effect)} className={`px-3 py-1 rounded-full text-xs transition-all ${selectedSideEffects.includes(effect) ? 'bg-orange-500 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{effect}</button>)}
-                    </div>
-                    {selectedSideEffects.length > 0 && (
-                      <div className="mt-3 space-y-2 rounded-lg bg-black/20 border border-white/[0.06] p-3">
-                        {selectedSideEffects.map((effect) => (
-                          <div key={effect} className="flex items-center gap-2 flex-wrap">
-                            <span className="text-gray-400 text-xs w-32 shrink-0">{effect}</span>
-                            <input
-                              type="range"
-                              min={1}
-                              max={5}
-                              value={sideEffectSeverity[effect] ?? 3}
-                              onChange={(e) => setSideEffectSeverity((s) => ({ ...s, [effect]: parseInt(e.target.value, 10) }))}
-                              className="flex-1 min-w-[100px] h-2 accent-orange-500"
-                            />
-                            <span className="text-gray-300 text-xs w-10">{sideEffectSeverity[effect] ?? 3}/5</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Notes</label>
-                    <textarea value={injectionNotes} onChange={(e) => setInjectionNotes(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 resize-none" rows={2} placeholder="Optional notes..." />
-                  </div>
-                  <button onClick={addOrUpdateInjection} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">{editingInjection ? 'Update' : 'Log Injection'}</button>
-                </div>
-                </div>
-              </div>
-            )}
-
-            <div className="ui-card p-4">
-              <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
-              <h3 className="text-white font-medium">History</h3>
-                <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={injectionHistoryFilterDate}
-                  onChange={(e) => setInjectionHistoryFilterDate(e.target.value)}
-                  className="bg-slate-800 text-gray-200 text-xs rounded-lg px-2 py-1.5"
-                  title="Filter by week (pick any day in the week)"
-                />
-                {injectionHistoryFilterDate && (
-                  <button
-                    type="button"
-                    onClick={() => setInjectionHistoryFilterDate('')}
-                    className="text-gray-500 hover:text-gray-300 text-xs"
-                  >
-                    Clear
-                  </button>
-                )}
-                  <button
-                    type="button"
-                    onClick={() => setInjectionHistorySort(prev => prev === 'byMed' ? 'byDate' : 'byMed')}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 hover:text-white text-xs font-medium transition-colors"
-                    title={injectionHistorySort === 'byMed' ? 'Switch to sort by date' : 'Switch to group by medication'}
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                    {injectionHistorySort === 'byMed' ? 'By medication' : 'By date'}
-                  </button>
-                  {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
-                </div>
-              </div>
-              {injectionEntries.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
-              ) : (
-                <div className={`space-y-3 overflow-y-auto ${injectionHistorySort === 'byMed' ? 'max-h-[32rem]' : 'max-h-[32rem]'}`}>
-                  {injectionHistorySort === 'byDate' ? (
-                    (() => {
-                      const sorted = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-                      if (!injectionHistoryFilterDate) return sorted;
-                      const selected = parseLocalDate(injectionHistoryFilterDate);
-                      if (!selected) return sorted;
-                      const startOfWeek = (d) => {
-                        const date = new Date(d);
-                        const day = date.getDay();
-                        const diff = day === 0 ? -6 : 1 - day;
-                        date.setDate(date.getDate() + diff);
-                        date.setHours(0, 0, 0, 0);
-                        return date;
-                      };
-                      const ws = startOfWeek(selected);
-                      const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
-                      return sorted.filter(entry => {
-                        const d = parseLocalDate(entry.date);
-                        return d && d >= ws && d <= we;
-                      });
-                    })().map((entry) => {
-                        const color = getMedicationColor(entry.type);
-                        return (
-                          <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-start gap-2 min-w-0 flex-1">
-                                <div className="p-1.5 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: `${color}20` }}><Syringe className="h-4 w-4" style={{ color }} /></div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                                    <span className="text-white font-medium">{entry.type}</span>
-                                    <span className="text-gray-400">{entry.dose} {entry.unit}</span>
-                                  </div>
-                                  <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">¬∑ {[entry.route, entry.site].filter(Boolean).join(' ¬∑ ')}</span>}</div>
-                                  {entry.sideEffects?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                      {entry.sideEffects.map((effect) => (
-                                        <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">
-                                          {effect}{entry.sideEffectSeverity?.[effect] != null ? ` (${entry.sideEffectSeverity[effect]}/5)` : ''}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
-                                </div>
-                              </div>
-                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
-                                <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                  ) : (
-                    (() => {
-                      const byMed = injectionEntries.reduce((acc, entry) => {
-                        const t = entry.type || 'Other';
-                        if (!acc[t]) acc[t] = [];
-                        acc[t].push(entry);
-                        return acc;
-                      }, {});
-                      const medOrder = [...new Set(injectionEntries.map(e => e.type || 'Other'))].sort((a, b) => a.localeCompare(b));
-                      return medOrder.map(medName => {
-                        const entries = (byMed[medName] || []).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-                        const color = getMedicationColor(medName);
-                        return (
-                          <div key={medName}>
-                            <div className="flex items-center gap-2 mb-1.5 sticky top-0 z-10 py-1 bg-[var(--bg-base)]/95 backdrop-blur">
-                              <div className="p-1.5 rounded-md" style={{ backgroundColor: `${color}25` }}><Syringe className="h-3.5 w-3.5" style={{ color }} /></div>
-                              <span className="text-xs font-semibold text-white">{medName}</span>
-                              <span className="text-[11px] text-gray-500">({entries.length})</span>
-                            </div>
-                            <div className="space-y-1.5 pl-1">
-                              {entries.map((entry) => (
-                                <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-start gap-2 min-w-0 flex-1">
-                                      <div className="p-1.5 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: `${color}20` }}><Syringe className="h-4 w-4" style={{ color }} /></div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="text-xs text-gray-300">{entry.dose} {entry.unit}</div>
-                                        <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">¬∑ {[entry.route, entry.site].filter(Boolean).join(' ¬∑ ')}</span>}</div>
-                                        {entry.sideEffects?.length > 0 && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {entry.sideEffects.map((effect) => (
-                                              <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">
-                                                {effect}{entry.sideEffectSeverity?.[effect] != null ? ` (${entry.sideEffectSeverity[effect]}/5)` : ''}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                        {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
-                                      </div>
-                                    </div>
-                                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
-                                      <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* JOURNAL TAB ‚Äî promoted from More for quick access to feelings & side effects */}
-        {activeTab === 'journal' && (
-          <div key="journal" className="space-y-4 tab-enter">
-            {showAddForm && (
-              <div className="ui-hero-panel">
-                <div className="ui-hero-panel__wash" aria-hidden />
-                <div className="ui-hero-panel__top-bar" aria-hidden />
-                <div className="ui-hero-panel__body">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-white font-medium">{editingJournal ? 'Edit Entry' : 'New Journal Entry'}</h3>
-                  <button onClick={resetJournalForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Date</label>
-                    <input type="date" value={journalDate} onChange={(e) => setJournalDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-2">How are you feeling?</label>
-                    <div className="flex gap-2">
-                      {[
-                        { value: 'happy', icon: Smile, color: 'text-green-500', label: 'Great' },
-                        { value: 'neutral', icon: Meh, color: 'text-gray-400', label: 'Okay' },
-                        { value: 'sad', icon: Frown, color: 'text-gold-400', label: 'Rough' }
-                      ].map(mood => (
-                        <button key={mood.value} onClick={() => setJournalMood(mood.value)}
-                          className={`flex-1 py-3 rounded-lg transition-all ${journalMood === mood.value ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-650'}`}>
-                          <mood.icon className={`h-6 w-6 mx-auto ${mood.color}`} />
-                          <div className="text-xs text-gray-400 mt-1">{mood.label}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Energy Level: {journalEnergy}/10</label>
-                    <input type="range" min="1" max="10" value={journalEnergy} onChange={(e) => setJournalEnergy(parseInt(e.target.value))}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Hunger Level: {journalHunger}/10</label>
-                    <input type="range" min="1" max="10" value={journalHunger} onChange={(e) => setJournalHunger(parseInt(e.target.value))}
-                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Notes & Observations</label>
-                    <textarea value={journalContent} onChange={(e) => setJournalContent(e.target.value)}
-                      className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 min-h-32" placeholder="How did you feel today? Any side effects? Non-scale victories?" />
-                  </div>
-                  <button onClick={addOrUpdateJournal} className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all">
-                    {editingJournal ? 'Update Entry' : 'Save Entry'}
-                  </button>
-                </div>
-                </div>
-              </div>
-            )}
-
-            <div className="ui-card p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium flex items-center gap-2"><BookOpen className="h-4 w-4 text-violet-400" />Journal Entries</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
-              </div>
-              {journalEntries.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <div className="relative mb-4">
-                    <div className="absolute inset-0 bg-violet-500/10 blur-2xl rounded-full"></div>
-                    <BookOpen className="h-16 w-16 mx-auto text-violet-400 relative" style={{ animation: 'float 3s ease-in-out infinite' }} />
-                  </div>
-                  <h3 className="text-white font-medium mb-2">Start Your Journal</h3>
-                  <p className="text-gray-400 text-sm mb-4">Track feelings, side effects, and victories</p>
-                  <button
-                    onClick={() => setShowAddForm(true)}
-                    className="btn-secondary text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Write First Entry
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {[...journalEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map((entry) => (
-                    <div key={entry.id} className="bg-slate-700/50 rounded-lg p-4 group">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-2">
-                          {entry.mood === 'happy' && <Smile className="h-5 w-5 text-green-500" />}
-                          {entry.mood === 'neutral' && <Meh className="h-5 w-5 text-gray-400" />}
-                          {entry.mood === 'sad' && <Frown className="h-5 w-5 text-gold-400" />}
-                          <span className="text-white font-medium">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditingJournal(entry); setJournalDate(entry.date); setJournalContent(entry.content); setJournalMood(entry.mood); setJournalEnergy(entry.energy); setJournalHunger(entry.hunger); setShowAddForm(true); }}
-                            className="p-2 text-gray-400 hover:text-white hover:bg-slate-600 rounded-lg"><Edit2 className="h-4 w-4" /></button>
-                          <button onClick={() => deleteJournal(entry.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 mb-2 text-sm">
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <Zap className="h-4 w-4" />
-                          <span>Energy: {entry.energy}/10</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-gray-400">
-                          <Activity className="h-4 w-4" />
-                          <span>Hunger: {entry.hunger}/10</span>
-                        </div>
-                      </div>
-                      <p className="text-white whitespace-pre-wrap">{entry.content}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* GOALS ‚Äî goal-first peptide education (curated); not medical advice */}
-        {activeTab === 'goals' && (
-          <div key="goals" className="space-y-4 tab-enter">
-            <div className="text-center pb-1">
-              <h2 className="text-xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
-                <Sparkles className="h-6 w-6 text-accent" />
-                Goals &amp; peptides
-              </h2>
-              <p className="text-gray-400 text-sm mt-1">Pick an outcome ‚Äî see what people often discuss and what stacks come up together</p>
-            </div>
-            {!goalGuideCategoryId && (
-              <div className="ui-hero-panel ui-hero-panel--sticky z-20">
-                <div className="ui-hero-panel__wash" aria-hidden />
-                <div className="ui-hero-panel__top-bar" aria-hidden />
-                <div className="ui-hero-panel__body">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <h3 className="text-white font-bold text-sm sm:text-base tracking-tight flex items-center gap-2">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 border border-accent/35 shadow-inner">
-                        <Layers className="h-4 w-4 text-gold-400" />
-                      </span>
-                      Your current stack
-                    </h3>
-                    {goalUserStack.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => persistGoalUserStack([])}
-                        className="text-[11px] font-semibold uppercase tracking-wide text-amber-200/70 hover:text-red-400 transition-colors"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-amber-100/55 text-[11px] sm:text-xs mb-3 leading-relaxed border-l-2 border-accent/40 pl-3">
-                    Your personal combo list (not a prescription). Add from the guides below ‚Äî <span className="text-amber-100/75">tap a medication name</span> to read what it does. This card stays pinned while you scroll.
-                  </p>
-                  {goalUserStack.length === 0 ? (
-                    <p className="text-gray-400 text-xs sm:text-sm rounded-xl bg-black/25 border border-white/[0.06] px-3 py-3">
-                      Nothing here yet. Open any goal below and tap <span className="text-gold-400 font-medium">Add to stack</span>.
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {goalUserStack.map((name) => (
-                        <div
-                          key={name}
-                          className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1.5 rounded-xl bg-black/35 border border-accent/25 text-xs text-gray-100 max-w-full shadow-sm"
-                        >
-                          <span className="w-2 h-2 rounded-full shrink-0 ring-2 ring-accent/30" style={{ backgroundColor: goalStackMedColor(name) }} />
-                          <button
-                            type="button"
-                            onClick={() => setGoalStackInfoMed(name)}
-                            className="appearance-none truncate font-medium text-left min-w-0 flex-1 bg-transparent border-0 cursor-pointer text-gray-100 hover:text-gold-400 hover:underline decoration-gold-400/40 underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/45 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 rounded-md -my-0.5 py-0.5 -ml-0.5 pl-0.5 pr-1 transition-colors"
-                            title={`${name} ‚Äî tap for guide info`}
-                            aria-label={`What ${name} does ‚Äî open details`}
-                          >
-                            {name}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeFromGoalUserStack(name)}
-                            className="appearance-none p-1 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 shrink-0 border-0 bg-transparent cursor-pointer"
-                            title="Remove from stack"
-                            aria-label={`Remove ${name} from stack`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {goalUserStack.length > 0 && (() => {
-                    const timing = getStackTimingContent(goalUserStack);
-                    return (
-                      <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-950/20 px-3 py-3 space-y-2">
-                        <h4 className="text-amber-200/90 text-xs font-semibold flex items-center gap-2"><Clock className="h-3.5 w-3.5 shrink-0" />Stack timing &amp; spacing (educational only)</h4>
-                        {timing.pairWarnings.map((w, i) => (
-                          <p key={i} className="text-amber-200/85 text-[11px] leading-relaxed border-l-2 border-amber-500/50 pl-2">{w}</p>
-                        ))}
-                        <ul className="text-gray-400 text-[11px] space-y-1 list-disc list-inside">
-                          {[...timing.general, ...timing.perMed].slice(0, 10).map((t, i) => (
-                            <li key={i}>{t}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            )}
-            <div className="ui-card p-4 border-amber-500/25 bg-amber-500/5">
-              <p className="text-amber-200/90 text-xs leading-relaxed">{GOAL_GUIDE_DISCLAIMER}</p>
-            </div>
-            {!goalGuideCategoryId ? (
-              <>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={goalGuideSearch}
-                    onChange={(e) => setGoalGuideSearch(e.target.value)}
-                    placeholder="Search goals or medications‚Ä¶"
-                    className="w-full bg-slate-800/80 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-accent/40"
-                    autoComplete="off"
-                  />
-                </div>
-                {filteredGoalCategories.length === 0 ? (
-                  <p className="text-center text-gray-500 text-sm py-10">
-                    No goals match &quot;{goalGuideSearch.trim()}&quot;. Try another word or clear search.
-                  </p>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {filteredGoalCategories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => setGoalGuideCategoryId(cat.id)}
-                        className="ui-card p-4 text-left hover:border-accent/40 transition-colors group"
-                      >
-                        <h3 className="text-white font-semibold text-sm group-hover:text-gold-400 transition-colors">{cat.title}</h3>
-                        <p className="text-gray-500 text-xs mt-2 leading-relaxed">{cat.description}</p>
-                        <span className="inline-flex items-center gap-1 text-accent text-xs font-medium mt-3">
-                          View suggestions
-                          <ChevronDown className="h-3 w-3 -rotate-90" />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold text-sm flex items-center gap-2 mb-1">
-                    <Sparkles className="h-4 w-4 text-violet-400" />
-                    Suggested additions
-                  </h3>
-                  <p className="text-gray-500 text-xs mb-3 leading-relaxed">
-                    Peptides and meds our guides associate with your stack. Tap info for full context, or add to extend your stack plan.
-                  </p>
-                  {stackSuggestionList.length === 0 ? (
-                    <p className="text-gray-600 text-xs">
-                      {goalUserStack.length === 0
-                        ? 'Add at least one item to your stack to see pairing ideas from the guide.'
-                        : 'No extra pairings are listed in the guide for this exact combo ‚Äî you can still explore other goal categories above.'}
-                    </p>
-                  ) : (
-                    <ul className="space-y-4">
-                      {stackSuggestionList.map((sug) => (
-                        <li key={sug.medicationName} className="pb-4 border-b border-white/[0.06] last:border-0 last:pb-0">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: goalStackMedColor(sug.medicationName) }} />
-                              <span className="text-white text-sm font-medium">{sug.medicationName}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => setGoalStackInfoMed(sug.medicationName)}
-                                className="px-2 py-1 rounded-lg text-[11px] font-medium bg-white/[0.06] text-gray-300 border border-white/10 hover:border-accent/30 hover:text-gold-400"
-                              >
-                                What it does
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => addToGoalUserStack(sug.medicationName)}
-                                disabled={goalUserStack.includes(sug.medicationName)}
-                                className="px-2 py-1 rounded-lg text-[11px] font-medium bg-accent/20 text-gold-400 border border-accent/35 hover:bg-accent/30 disabled:opacity-40 disabled:pointer-events-none"
-                              >
-                                {goalUserStack.includes(sug.medicationName) ? 'In stack' : 'Add to stack'}
-                              </button>
-                            </div>
-                          </div>
-                          <ul className="mt-2 space-y-1 text-[11px] text-gray-500 leading-relaxed list-disc pl-4 marker:text-gray-600">
-                            {sug.reasons.slice(0, 4).map((r, ri) => (
-                              <li key={ri}>{r}</li>
-                            ))}
-                            {sug.reasons.length > 4 && (
-                              <li className="list-none text-gray-600 italic">+{sug.reasons.length - 4} more reasons in info‚Ä¶</li>
-                            )}
-                          </ul>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </>
-            ) : (() => {
-              const cat = GOAL_CATEGORIES.find((c) => c.id === goalGuideCategoryId);
-              const medColor = (name) => MEDICATIONS.find((m) => m.name === name)?.color || '#94a3b8';
-              if (!cat) {
-                return (
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => setGoalGuideCategoryId(null)}
-                      className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      All goals
-                    </button>
-                    <p className="text-gray-500 text-sm">That goal isn&apos;t available.</p>
-                  </div>
-                );
-              }
-              return (
-                <div className="space-y-4">
-                  <button
-                    type="button"
-                    onClick={() => setGoalGuideCategoryId(null)}
-                    className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    All goals
-                  </button>
-                  <div className="ui-card p-4">
-                    <h3 className="text-white font-semibold text-lg">{cat.title}</h3>
-                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{cat.description}</p>
-                  </div>
-                  {(GOAL_TRACK_ACTIONS[cat.id] || []).length > 0 && (
-                    <div className="ui-card p-4">
-                      <p className="text-gray-500 text-[11px] font-semibold uppercase tracking-wide mb-2">Track in PepTalk</p>
-                      <div className="flex flex-wrap gap-2">
-                        {GOAL_TRACK_ACTIONS[cat.id].map((action) => (
-                          <button
-                            key={`${action.tab}-${action.label}`}
-                            type="button"
-                            onClick={() => handleGoalTrackAction(action)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.06] text-gray-200 border border-white/[0.08] hover:bg-accent/15 hover:text-gold-400 hover:border-accent/30 transition-colors"
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {cat.clinicianTips?.length > 0 && (
-                    <details className="ui-card p-4 group" open>
-                      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-white [&::-webkit-details-marker]:hidden">
-                        <Stethoscope className="h-4 w-4 text-cyan-400 shrink-0" />
-                        Questions for your clinician
-                        <ChevronDown className="h-4 w-4 text-gray-500 ml-auto shrink-0 transition-transform group-open:rotate-180" />
-                      </summary>
-                      <ul className="mt-3 space-y-2 text-xs text-gray-400 leading-relaxed list-disc pl-4 marker:text-cyan-500/80">
-                        {cat.clinicianTips.map((tip, ti) => (
-                          <li key={ti}>{tip}</li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                  <div className="space-y-3">
-                    {cat.items.map((item) => (
-                      <div key={item.medicationName} className="ui-card p-4 border-white/[0.06]">
-                        <div className="flex flex-wrap items-start gap-3">
-                          <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: medColor(item.medicationName) }} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <h4 className="text-white font-medium text-sm">{item.medicationName}</h4>
-                              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                {goalUserStack.includes(item.medicationName) && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-300/90">
-                                    <Layers className="h-3 w-3" />
-                                    In your stack
-                                  </span>
-                                )}
-                                {userHasLoggedMedication(item.medicationName) && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400/90">
-                                    <CheckCircle className="h-3 w-3" />
-                                    In your logs
-                                  </span>
-                                )}
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => setGoalStackInfoMed(item.medicationName)}
-                                    className="p-1.5 rounded-lg text-gray-400 border border-white/10 hover:text-gold-400 hover:border-accent/30"
-                                    title="What it does"
-                                  >
-                                    <Info className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => addToGoalUserStack(item.medicationName)}
-                                    disabled={goalUserStack.includes(item.medicationName)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-accent/15 text-gold-400 border border-accent/25 hover:bg-accent/25 transition-colors disabled:opacity-45 disabled:pointer-events-none"
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                    {goalUserStack.includes(item.medicationName) ? 'In stack' : 'Add to stack'}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                            <p className="text-gray-400 text-xs mt-2 leading-relaxed">{item.explain}</p>
-                            {item.stacksWellWith?.length > 0 && (
-                              <div className="mt-4 pt-3 border-t border-white/[0.06]">
-                                <p className="text-gold-400/90 text-[11px] font-semibold uppercase tracking-wide mb-2">Often discussed together</p>
-                                <ul className="space-y-2.5">
-                                  {item.stacksWellWith.map((s) => (
-                                    <li key={`${item.medicationName}-${s.medicationName}`} className="flex gap-2 text-xs">
-                                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: medColor(s.medicationName) }} />
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <span className="text-gray-200 font-medium">{s.medicationName}</span>
-                                          <div className="flex items-center gap-1 shrink-0">
-                                            <button
-                                              type="button"
-                                              onClick={() => setGoalStackInfoMed(s.medicationName)}
-                                              className="p-1 rounded text-gray-500 hover:text-gold-400"
-                                              title="What it does"
-                                            >
-                                              <Info className="h-3 w-3" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => addToGoalUserStack(s.medicationName)}
-                                              disabled={goalUserStack.includes(s.medicationName)}
-                                              className="text-[10px] font-medium text-accent hover:text-gold-400 disabled:opacity-40 disabled:pointer-events-none"
-                                            >
-                                              {goalUserStack.includes(s.medicationName) ? 'In stack' : 'Add to stack'}
-                                            </button>
-                                          </div>
-                                        </div>
-                                        <p className="text-gray-500 mt-0.5 leading-relaxed">{s.why}</p>
-                                        {userHasLoggedMedication(s.medicationName) && (
-                                          <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400/80 mt-1">
-                                            <CheckCircle className="h-2.5 w-2.5" />
-                                            Logged before
-                                          </span>
-                                        )}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            {goalStackInfoMed && (() => {
-              const hits = getMedicationEducation(goalStackInfoMed).sort((a, b) => {
-                if (a.role === b.role) return 0;
-                return a.role === 'primary' ? -1 : 1;
-              });
-              return (
-                <div
-                  className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4 bg-black/65 backdrop-blur-sm"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="goal-stack-info-title"
-                  onClick={() => setGoalStackInfoMed(null)}
-                >
-                  <div
-                    className="bg-[var(--bg-elevated)] rounded-2xl border border-white/10 max-w-lg w-full max-h-[min(88vh,640px)] overflow-hidden shadow-2xl flex flex-col"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-start justify-between gap-3 p-4 border-b border-white/[0.06]">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: goalStackMedColor(goalStackInfoMed) }} />
-                        <h3 id="goal-stack-info-title" className="text-white font-semibold text-base truncate">
-                          {goalStackInfoMed}
-                        </h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setGoalStackInfoMed(null)}
-                        className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/10"
-                        aria-label="Close"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-                    <div className="p-4 overflow-y-auto flex-1 space-y-4">
-                      {hits.length === 0 ? (
-                        <p className="text-gray-500 text-sm leading-relaxed">
-                          No guide blurb for this exact name. You can still log it from the Injections tab if it&apos;s in your med list.
-                        </p>
-                      ) : (
-                        hits.map((h, hi) => (
-                          <div key={`${h.goalId}-${hi}-${h.role}`} className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-3">
-                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                                {h.role === 'primary' ? 'Main entry' : 'Stack note'}
-                              </span>
-                              <span className="text-xs text-gray-400">{h.goalTitle}</span>
-                            </div>
-                            <p className="text-gray-300 text-xs leading-relaxed">{h.explain}</p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setGoalGuideCategoryId(h.goalId);
-                                setGoalStackInfoMed(null);
-                              }}
-                              className="mt-2 text-[11px] font-medium text-accent hover:text-gold-400"
-                            >
-                              Open &quot;{h.goalTitle}&quot; guide ‚Üí
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-white/[0.06] flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => addToGoalUserStack(goalStackInfoMed)}
-                        disabled={goalUserStack.includes(goalStackInfoMed)}
-                        className="flex-1 min-w-[8rem] py-2.5 rounded-xl text-sm font-medium bg-accent/20 text-gold-400 border border-accent/35 hover:bg-accent/30 disabled:opacity-40 disabled:pointer-events-none"
-                      >
-                        {goalUserStack.includes(goalStackInfoMed) ? 'Already in stack' : 'Add to stack'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGoalStackInfoMed(null)}
-                        className="px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white border border-white/10"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {/* MORE TAB */}
-        {activeTab === 'more' && (
-          <div key="more" className="space-y-4 tab-enter">
-            <div className="menu-3d flex flex-wrap gap-2 rounded-xl p-2 overflow-x-auto overflow-y-hidden bg-[var(--bg-elevated)] backdrop-blur-sm scroll-smooth" style={{ scrollbarWidth: 'thin' }}>
-              {[
-                { id: 'profile', icon: User, label: 'Profile' },
-                { id: 'body', icon: Ruler, label: 'Body' },
-                { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
-                { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
-                { id: 'tools', icon: Wrench, label: 'Tools' },
-                { id: 'glucose', icon: Droplet, label: 'Glucose' },
-                { id: 'labs', icon: Activity, label: 'Labs' },
-                { id: 'wellness', icon: Moon, label: 'Wellness' },
-                { id: 'help', icon: HelpCircle, label: 'Help' }
-              ].map(section => (
-                <button
-                  key={section.id}
-                  ref={el => { moreSectionRefs.current[section.id] = el; }}
-                  onClick={() => setActiveMoreSection(section.id)}
-                  className={`menu-3d-item flex-1 min-w-[4.5rem] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-                >
-                  <section.icon className="h-4 w-4 flex-shrink-0" />{section.label}
-                </button>
-              ))}
-            </div>
-            {activeMoreSection === 'profile' && (
-              <div className="space-y-4">
-                <div className="ui-card p-4 border border-cyan-500/20">
-                  <h3 className="text-white font-medium mb-2 flex items-center gap-2"><Cloud className="h-5 w-5 text-cyan-400" />Account &amp; cloud backup</h3>
-                  <p className="text-gray-400 text-xs mb-4">
-                    Sign in to save your data to Supabase. If you lose your phone, sign in on a new device to restore. Data is still stored locally on this device.
-                  </p>
-                  {supabaseConfigured && user && (
-                    <p className="text-gray-500 text-xs mb-3 -mt-2">
-                      Backup runs in the background after you save. Offline? Everything stays on this device until you&apos;re online again.
-                      {lastCloudSyncAt && (
-                        <span className="block mt-1 text-gray-500">
-                          Last cloud sync:{' '}
-                          <span className="text-gray-300">{new Date(lastCloudSyncAt).toLocaleString()}</span>
-                        </span>
-                      )}
-                    </p>
-                  )}
-                  {!supabaseConfigured && (
-                    <div className="text-amber-400/90 text-xs mb-3 space-y-2">
-                      <p>
-                        Cloud sign-in is not configured for this deployment. Use one of the following:
-                      </p>
-                      <ul className="list-disc pl-4 text-gray-400 space-y-1">
-                        <li>
-                          <strong className="text-amber-200/90">Web (GitHub Pages, static host):</strong> copy{' '}
-                          <code className="text-gray-300">public/supabase-config.example.json</code> to{' '}
-                          <code className="text-gray-300">public/supabase-config.json</code>, fill in{' '}
-                          <code className="text-gray-300">url</code> and <code className="text-gray-300">anonKey</code> from your Supabase project settings, then rebuild and redeploy. The file is served next to the app (anon key is public by design; use RLS in Supabase).
-                        </li>
-                        <li>
-                          <strong className="text-amber-200/90">Local dev or CI build:</strong> set{' '}
-                          <code className="text-gray-300">VITE_SUPABASE_URL</code> and{' '}
-                          <code className="text-gray-300">VITE_SUPABASE_ANON_KEY</code> in <code className="text-gray-300">.env</code> and run <code className="text-gray-300">npm run build</code>.
-                        </li>
-                      </ul>
-                    </div>
-                  )}
-                  {supabaseConfigured && supabaseAuthLoading && (
-                    <p className="text-gray-500 text-xs mb-2">Checking session‚Ä¶</p>
-                  )}
-                  {supabaseConfigured && !user && !supabaseAuthLoading && cloudOptOut && (
-                    <p className="text-cyan-200/85 text-xs mb-3">
-                      You&apos;re using PepTalk on this device only. Sign in below to enable cloud backup, or use &quot;Show full-screen sign-in&quot; if you prefer the dedicated sign-in page.
-                    </p>
-                  )}
-                  {supabaseConfigured && !user && !supabaseAuthLoading && (
-                    <form
-                      className="space-y-3"
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        setCloudAuthMessage('');
-                        setCloudBusy(true);
-                        const { error } = await supabaseSignIn(cloudEmail, cloudPassword);
-                        setCloudBusy(false);
-                        if (error) setCloudAuthMessage(formatCloudError(error));
-                        else {
-                          onCloudSignInSuccess();
-                          setCloudPassword('');
-                          setCloudAuthMessage('Signed in. Syncing‚Ä¶');
-                        }
-                      }}
-                    >
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Email</label>
-                        <input type="email" autoComplete="email" value={cloudEmail} onChange={(e) => setCloudEmail(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="you@example.com" />
-                      </div>
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Password</label>
-                        <input type="password" autoComplete="current-password" value={cloudPassword} onChange={(e) => setCloudPassword(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢" />
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="submit" disabled={cloudBusy} className="flex-1 min-w-[8rem] ui-btn-primary py-2.5 disabled:opacity-50">Sign in</button>
-                        <button
-                          type="button"
-                          disabled={cloudBusy}
-                          className="flex-1 min-w-[8rem] py-2.5 rounded-lg font-medium bg-white/10 text-gray-200 hover:bg-white/15 disabled:opacity-50"
-                          onClick={async () => {
-                            setCloudAuthMessage('');
-                            setCloudBusy(true);
-                            const { error } = await supabaseSignUp(cloudEmail, cloudPassword);
-                            setCloudBusy(false);
-                            if (error) setCloudAuthMessage(formatCloudError(error));
-                            else setCloudAuthMessage('Check your email to confirm your account (if required by your Supabase project).');
-                          }}
-                        >
-                          Sign up
-                        </button>
-                      </div>
-                      {cloudAuthMessage && <p className="text-gray-400 text-xs">{cloudAuthMessage}</p>}
-                    </form>
-                  )}
-                  {supabaseConfigured && !user && !supabaseAuthLoading && cloudOptOut && (
-                    <button
-                      type="button"
-                      onClick={clearCloudOptOut}
-                      className="mt-3 w-full py-2 rounded-lg text-xs font-medium bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
-                    >
-                      Show full-screen sign-in
-                    </button>
-                  )}
-                  {supabaseConfigured && user && (
-                    <div className="space-y-3">
-                      <p className="text-gray-300 text-sm">Signed in as <strong className="text-white">{user.email}</strong></p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="px-4 py-2.5 rounded-lg font-medium bg-cyan-600 hover:bg-cyan-500 text-white text-sm disabled:opacity-50"
-                          disabled={cloudBusy}
-                          onClick={async () => {
-                            setCloudBusy(true);
-                            setCloudAuthMessage('');
-                            const r = await supabaseSyncNow();
-                            setCloudBusy(false);
-                            if (r?.ok) {
-                              setCloudAuthMessage('Backup saved to cloud.');
-                              setBackgroundSyncError('');
-                            } else if (r?.code === 'no_session' || r?.code === 'not_configured') {
-                              setCloudAuthMessage('');
-                            } else {
-                              setCloudAuthMessage(r?.message ? `Sync failed: ${r.message}` : 'Sync failed.');
-                            }
-                          }}
-                        >
-                          {cloudBusy ? 'Syncing‚Ä¶' : 'Sync now'}
-                        </button>
-                        <button
-                          type="button"
-                          className="px-4 py-2.5 rounded-lg font-medium bg-white/10 text-gray-200 hover:bg-white/15 text-sm"
-                          onClick={async () => {
-                            setCloudAuthMessage('');
-                            await supabaseSignOut();
-                          }}
-                        >
-                          Sign out
-                        </button>
-                      </div>
-                      {cloudAuthMessage && <p className="text-gray-400 text-xs">{cloudAuthMessage}</p>}
-                    </div>
-                  )}
-                </div>
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><User className="h-5 w-5 text-gold-400" />Profile & goals</h3>
-                  <p className="text-gray-400 text-xs mb-4">Set your goal weight, height (for BMI), and daily hydration goal. These drive progress and reminders.</p>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Goal weight (lbs)</label>
-                      <input type="number" min="0" step="1" value={userProfile?.goalWeight ?? 200} onChange={(e) => { const p = { ...userProfile, goalWeight: parseFloat(e.target.value) || 200 }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" />
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Height (inches)</label>
-                      <input type="number" min="0" step="0.5" value={userProfile?.height ?? 70} onChange={(e) => { const p = { ...userProfile, height: parseFloat(e.target.value) || 70 }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" />
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Daily hydration goal (oz)</label>
-                      <input type="number" min="0" step="8" value={userProfile?.hydrationGoalOz ?? 64} onChange={(e) => { const v = e.target.value === '' ? 64 : parseInt(e.target.value, 10); const p = { ...userProfile, hydrationGoalOz: isNaN(v) ? 64 : v }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" placeholder="64" />
-                      <p className="text-gray-500 text-xs mt-1">0 = hide hydration progress bar</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {activeMoreSection === 'body' && (
-          <div className="space-y-4">
-            {/* Measurement Stats */}
-            {Object.keys(measurementStats).length > 0 && (
-              <div className="grid grid-cols-2 gap-3">
-                {Object.entries(measurementStats).map(([type, data]) => (
-                  <div key={type} className="ui-card p-3">
-                    <div className="text-gray-400 text-xs">{type}</div>
-                    <div className="text-xl font-bold text-white">{data.current}"</div>
-                    <div className={`text-xs ${parseFloat(data.change) < 0 ? 'text-green-500' : parseFloat(data.change) > 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                      {parseFloat(data.change) > 0 ? '+' : ''}{data.change}"
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Body Measurements Chart */}
-            {measurementEntries.length > 0 && getMeasurementChartData().length > 0 && (
-              <div className="bg-[var(--bg-card)] rounded-xl p-4">
-                <h3 className="text-white font-medium mb-3">Measurement Progress</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={getMeasurementChartData()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
-                    <YAxis stroke="#94a3b8" fontSize={10} unit='"' />
-                    <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 28, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(12px)' }} />
-                    <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    {MEASUREMENT_TYPES.map((type, idx) => {
-                      const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#e8b84c', '#10b981', '#3b82f6', '#ef4444', '#a855f7', '#14b8a6', '#f97316'];
-                      return <Line key={type} type="monotone" dataKey={type} stroke={colors[idx % colors.length]} strokeWidth={2} dot={{ r: 4 }} connectNulls name={type} />;
-                    })}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Add Measurement Form */}
-            {showAddForm && (
-              <div className="ui-card p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-white font-medium">Add Measurement</h3>
-                  <button onClick={resetMeasurementForm} className="text-gray-400 hover:text-white"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-2">Body Part</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {MEASUREMENT_TYPES.map(type => <button key={type} onClick={() => setMeasurementType(type)} className={`p-2 rounded-lg text-sm transition-all ${measurementType === type ? 'bg-cyan-500 text-white' : 'bg-white/10 text-gray-300 hover:bg-white/15'}`}>{type}</button>)}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Measurement (inches)</label>
-                    <input type="number" step="0.25" value={measurementValue} onChange={(e) => setMeasurementValue(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 34.5" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-sm block mb-1">Date</label>
-                    <input type="date" value={measurementDate} onChange={(e) => setMeasurementDate(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                  </div>
-                  <button onClick={addMeasurement} className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-medium py-3 rounded-lg">Add Measurement</button>
-                </div>
-              </div>
-            )}
-
-            {/* Progress Photos */}
-            <div className="ui-card p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium flex items-center gap-2"><Camera className="h-4 w-4 text-gold-400" />Progress Photos</h3>
-                <button onClick={() => photoInputRef.current?.click()} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>
-                <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-              </div>
-              {progressPhotos.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <div className="relative mb-4">
-                    <div className="absolute inset-0 bg-pink-500/10 blur-2xl rounded-full"></div>
-                    <Camera className="h-16 w-16 mx-auto text-pink-400 relative" style={{ animation: 'pulse-glow 2s ease-in-out infinite' }} />
-                  </div>
-                  <h3 className="text-white font-medium mb-2">Document Your Journey</h3>
-                  <p className="text-gray-400 text-sm mb-4">Visual progress is the best motivation!</p>
-                  <button 
-                    onClick={() => document.querySelector('input[type="file"]').click()} 
-                    className="bg-gradient-to-r from-pink-500 to-rose-600 shadow-lg shadow-pink-500/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all text-white font-medium px-6 py-2 rounded-lg inline-flex items-center gap-2"
-                  >
-                    <Camera className="h-4 w-4" />
-                    Add First Photo
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {progressPhotos.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map(photo => (
-                    <div key={photo.id} className="relative group">
-                      <img src={photo.data} alt="Progress" className="w-full h-24 object-cover rounded-lg" />
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg">{parseLocalDate(photo.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                      <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-3 w-3 text-white" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Measurement History */}
-            <div className="ui-card p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-medium">Measurement History</h3>
-                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white p-2 rounded-lg"><Plus className="h-5 w-5" /></button>}
-              </div>
-              {measurementEntries.length === 0 ? (
-                <div className="text-center py-8 text-gray-400"><Ruler className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No measurements yet</p></div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {measurementEntries.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 group">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-accent/20 p-2 rounded-lg border border-accent/20"><Ruler className="h-5 w-5 text-gold-400" /></div>
-                        <div>
-                          <div className="text-white font-medium">{entry.type}: {entry.value}"</div>
-                          <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                        </div>
-                      </div>
-                      <button onClick={() => deleteMeasurement(entry.id)} className="p-2 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-            )}
-            {activeMoreSection === 'daily' && (
-          <div className="space-y-4">
-            <div className="ui-card p-4">
-              <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-gold-400" /><UtensilsCrossed className="h-4 w-4 text-gold-400" />Daily ‚Äî Hydration, Protein & Nutrition</h3>
-              <p className="text-gray-500 text-xs mb-3">Hydration and protein today are calculated from your meal entries below. Add optional extra water if you don‚Äôt log drinks as meals.</p>
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <label className="text-gray-400 text-xs">Daily hydration goal (oz)</label>
-                <input type="number" min="0" step="8" value={userProfile?.hydrationGoalOz ?? ''} onChange={(e) => { const v = e.target.value === '' ? 0 : parseInt(e.target.value, 10); const p = { ...userProfile, hydrationGoalOz: isNaN(v) ? 0 : v }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-16 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="64" />
-                <span className="text-gray-500 text-xs">0 = hide</span>
-              </div>
-              {(userProfile?.hydrationGoalOz ?? 0) > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-gray-400 text-sm">Today</span>
-                    <span className="text-white font-medium">{Math.round(hydrationToday)} / {userProfile.hydrationGoalOz} oz</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full rounded-full bg-sky-500/90 transition-all duration-500" style={{ width: `${Math.min(100, (hydrationToday / (userProfile.hydrationGoalOz || 1)) * 100)}%` }} />
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <label className="text-gray-400 text-xs">Extra water (oz)</label>
-                <input type="number" min="0" step="1" value={extraHydrationOz} onChange={(e) => setExtraHydrationOz(e.target.value)} className="w-20 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                <button onClick={saveExtraHydration} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium px-3 py-2 rounded-lg">Save</button>
-                <button onClick={() => { setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-gold-400 hover:text-gold-400 text-sm font-medium flex items-center gap-1">
-                  <Calculator className="h-4 w-4" /> TDEE calculator
-                </button>
-              </div>
-              <p className="text-gray-400 text-sm mb-4">Today: <span className="text-sky-400">{hydrationToday} oz</span> hydration ¬∑ <span className="text-gold-400">{proteinToday} g</span> protein</p>
-
-              <div className="border-t border-white/[0.06] pt-4 mt-4">
-                <h4 className="text-gray-300 text-sm font-medium mb-2 flex items-center gap-2"><UtensilsCrossed className="h-4 w-4" />Meals & calories</h4>
-                <p className="text-gray-500 text-xs mb-3">Add meals or snacks; hydration and protein today update from these entries. Use &quot;Estimate macros&quot; for quick add from a short description.</p>
-                <div className="flex gap-2 mb-3">
-                  <input type="text" value={mealDescription} onChange={(e) => setMealDescription(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="e.g. 2 eggs, chicken salad, water 16 oz" />
-                  <button type="button" onClick={applyMealEstimate} className="bg-accent/80 hover:bg-accent text-gray-900 text-sm font-medium px-3 py-2 rounded-lg whitespace-nowrap">Estimate macros</button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div className="col-span-2">
-                    <label className="text-gray-400 text-xs block mb-1">Label (e.g. Breakfast)</label>
-                    <input type="text" value={nutritionLabel} onChange={(e) => setNutritionLabel(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="Breakfast, Lunch, Snack‚Ä¶" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-xs block mb-1">Calories</label>
-                    <input type="number" min="0" step="1" value={nutritionCalories} onChange={(e) => setNutritionCalories(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-xs block mb-1">Protein (g)</label>
-                    <input type="number" min="0" step="1" value={nutritionProtein} onChange={(e) => setNutritionProtein(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-xs block mb-1">Carbs (g)</label>
-                    <input type="number" min="0" step="1" value={nutritionCarbs} onChange={(e) => setNutritionCarbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-xs block mb-1">Fat (g)</label>
-                    <input type="number" min="0" step="1" value={nutritionFat} onChange={(e) => setNutritionFat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-xs block mb-1">Water (oz) ‚Äî for drinks</label>
-                    <input type="number" min="0" step="1" value={nutritionHydrationOz} onChange={(e) => setNutritionHydrationOz(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm" placeholder="0" />
-                  </div>
-                </div>
-                <button onClick={addNutritionEntry} className="w-full bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium py-2 rounded-lg mb-4">Add entry</button>
-
-                {(todayDaily?.meals?.length ?? 0) > 0 && (
-                  <>
-                    <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                      {(todayDaily?.meals ?? []).map((meal) => (
-                        <div key={meal.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2 text-sm group">
-                          <div>
-                            <span className="text-white font-medium">{meal.label}</span>
-                            <span className="text-gray-400 ml-2">{meal.calories} cal</span>
-                            {(meal.protein > 0 || meal.carbs > 0 || meal.fat > 0) && (
-                              <span className="text-gray-500 text-xs ml-2">P {meal.protein}g ¬∑ C {meal.carbs}g ¬∑ F {meal.fat}g</span>
-                            )}
-                            {(meal.hydrationOz ?? 0) > 0 && (
-                              <span className="text-sky-400 text-xs ml-2">{meal.hydrationOz} oz</span>
-                            )}
-                          </div>
-                          <button type="button" onClick={() => deleteNutritionEntry(meal.id)} className="p-1.5 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="rounded-lg bg-slate-700/60 px-3 py-2 text-sm border border-white/[0.04]">
-                      <span className="text-gray-400">Today&apos;s totals: </span>
-                      <span className="text-white font-medium">{(todayDaily?.meals ?? []).reduce((s, m) => s + (m.calories || 0), 0)} cal</span>
-                      <span className="text-gray-400 mx-2">¬∑</span>
-                      <span className="text-gold-400">P {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.protein || 0), 0)}g</span>
-                      <span className="text-gray-400 mx-2">¬∑</span>
-                      <span className="text-green-500">C {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.carbs || 0), 0)}g</span>
-                      <span className="text-gray-400 mx-2">¬∑</span>
-                      <span className="text-violet-400">F {(todayDaily?.meals ?? []).reduce((s, m) => s + (m.fat || 0), 0)}g</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-            </div>
-          </div>
-            )}
-            {activeMoreSection === 'tools' && (
-          <div className="space-y-4">
-            {/* Tool Section Selector - 3D */}
-            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
-              {[
-                { id: 'calculator', label: 'Calculators' }, 
-                { id: 'schedule', label: 'Schedules' }, 
-                { id: 'titration', label: 'Titration' }, 
-                { id: 'notifications', label: 'Notifications' }, 
-                { id: 'vials', label: 'Vials' },
-                { id: 'data', label: 'Data' }
-              ].map(section => (
-                <button key={section.id} onClick={() => setActiveToolSection(section.id)}
-                  className={`menu-3d-item flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
-                  {section.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Calculators Section */}
-            {activeToolSection === 'calculator' && (
-              <>
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Activity className="h-5 w-5 text-green-500" />Reconstitution Calculator</h3>
-                  <div className="mb-3">
-                    <label className="text-gray-400 text-sm block mb-1">Calculate</label>
-                    <select value={reconMode} onChange={(e) => { setReconMode(e.target.value); setReconResult(null); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
-                      <option value="vial_bac">Vial + Bac water ‚Üí Concentration & dose per draw</option>
-                      <option value="vial_dose">Vial + Desired dose ‚Üí Bac water to add</option>
-                    </select>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Vial (peptide in vial)</label>
-                      <div className="flex gap-2">
-                        <input type="number" step="0.1" value={reconPeptideAmount} onChange={(e) => setReconPeptideAmount(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 5" title="Total peptide in the vial" />
-                        <select value={reconPeptideUnit} onChange={(e) => setReconPeptideUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
-                      </div>
-                    </div>
-                    {reconMode === 'vial_bac' && (
-                      <>
-                        <div>
-                          <label className="text-gray-400 text-sm block mb-1">BAC Water (mL)</label>
-                          <input type="number" step="0.1" value={reconWaterAmount} onChange={(e) => setReconWaterAmount(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 2" title="Bacteriostatic water volume added to the vial" />
-                        </div>
-                        <div>
-                          <label className="text-gray-400 text-sm block mb-1">Desired dose per injection (optional)</label>
-                          <div className="flex gap-2">
-                            <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 250" />
-                            <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mcg">mcg</option><option value="mg">mg</option></select>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {reconMode === 'vial_dose' && (
-                      <>
-                        <div>
-                          <label className="text-gray-400 text-sm block mb-1">Desired dose per injection</label>
-                          <div className="flex gap-2">
-                            <input type="number" step="0.01" value={reconDesiredDose} onChange={(e) => setReconDesiredDose(e.target.value)} className="flex-1 bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 1" />
-                            <select value={reconDesiredUnit} onChange={(e) => setReconDesiredUnit(e.target.value)} className="bg-slate-700 text-white rounded-lg px-3 py-2"><option value="mg">mg</option><option value="mcg">mcg</option></select>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-gray-400 text-sm block mb-1">Volume per dose (mL)</label>
-                          <input type="number" step="0.01" min="0.1" value={reconVolumePerDose} onChange={(e) => setReconVolumePerDose(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="0.5" title="How much volume you want to draw per injection" />
-                        </div>
-                      </>
-                    )}
-                    <button onClick={calculateReconstitution} className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-lg">Calculate</button>
-                    {reconResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center space-y-2">
-                        {reconResult.mode === 'vial_bac' && (
-                          <>
-                            <div className="text-gray-400 text-xs">Concentration: {reconResult.concentration} mg/mL ({reconResult.concentrationMcg} mcg/mL)</div>
-                            {reconResult.mlPerDose != null && reconResult.desiredDose && (
-                              <>
-                                <div className="text-gray-300 text-sm mt-1">For {reconResult.desiredDose} dose:</div>
-                                <div className="text-2xl font-bold text-green-500">{reconResult.mlPerDose} mL</div>
-                                <div className="text-gray-400 text-sm">or</div>
-                                <div className="text-xl font-bold text-violet-400">{reconResult.unitsPerDose} units</div>
-                              </>
-                            )}
-                          </>
-                        )}
-                        {reconResult.mode === 'vial_dose' && (
-                          <>
-                            <div className="text-gray-300 text-sm">Add bac water</div>
-                            <div className="text-2xl font-bold text-green-500">{reconResult.bacMl} mL</div>
-                            <div className="text-gray-400 text-xs mt-1">Then {reconResult.mlPerDose} mL = 1 dose ({reconResult.unitsPerDose} units) ¬∑ {reconResult.concentration} mg/mL</div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Activity className="h-5 w-5 text-gold-400" />Calorie / TDEE Calculator</h3>
-                  <p className="text-gray-400 text-sm mb-3">Estimates BMR and total daily energy expenditure.</p>
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Age</label>
-                        <input type="number" min="15" max="120" value={tdeeAge} onChange={(e) => setTdeeAge(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="30" />
-                      </div>
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Gender</label>
-                        <select value={tdeeGender} onChange={(e) => setTdeeGender(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
-                          <option value="male">Male</option>
-                          <option value="female">Female</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Weight (lbs)</label>
-                      <input type="number" step="0.1" value={tdeeWeightLbs} onChange={(e) => setTdeeWeightLbs(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 180" />
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Height (inches)</label>
-                      <input type="number" step="0.1" value={tdeeHeightIn} onChange={(e) => setTdeeHeightIn(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2" placeholder="e.g., 70" />
-                    </div>
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Activity level</label>
-                      <select value={tdeeActivity} onChange={(e) => setTdeeActivity(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2">
-                        <option value="sedentary">Sedentary (little/no exercise)</option>
-                        <option value="light">Light (1‚Äì3 days/week)</option>
-                        <option value="moderate">Moderate (3‚Äì5 days/week)</option>
-                        <option value="active">Active (6‚Äì7 days/week)</option>
-                        <option value="very">Very active (intense daily)</option>
-                      </select>
-                    </div>
-                    <button onClick={calculateTDEE} className="w-full bg-accent hover:bg-gold-600 text-gray-900 font-medium py-2 rounded-lg">Calculate TDEE</button>
-                    {tdeeResult && (
-                      <div className="bg-slate-700/50 rounded-lg p-4 text-center space-y-1">
-                        <div className="text-gray-400 text-xs">BMR (basal metabolic rate)</div>
-                        <div className="text-xl font-bold text-gold-400">{tdeeResult.bmr} cal/day</div>
-                        <div className="text-gray-400 text-xs mt-2">TDEE (maintenance)</div>
-                        <div className="text-2xl font-bold text-green-500">{tdeeResult.tdee} cal/day</div>
-                        <div className="text-gray-500 text-xs mt-1">Deficit -500 ‚âà {tdeeResult.tdee - 500} cal for ~1 lb/wk loss</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Schedules Section */}
-            {activeToolSection === 'schedule' && (
-              <div className="space-y-4">
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Bell className="h-5 w-5 text-gold-400" />Add Injection Schedule</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Medication</label>
-                      <select
-                        value={scheduleMed}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setScheduleMed(v);
-                          const med = MEDICATIONS.find((m) => m.name === v);
-                          if (med) setScheduleFrequency(med.defaultSchedule);
-                          if (MON_FRI_SCHEDULE_HINT_MEDS.has(v)) {
-                            setScheduleType('specific_days');
-                            setSelectedDays([1, 2, 3, 4, 5]);
-                          }
-                        }}
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3"
-                      >
-                        {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
-                      </select>
-                      {MEDICATION_EFFECT_PROFILES[scheduleMed]?.splitDoseTip && (
-                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
-                          <p className="text-gray-300 text-xs mb-2">{MEDICATION_EFFECT_PROFILES[scheduleMed].splitDoseTip}</p>
-                          <button
-                            type="button"
-                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 4]); setScheduleFrequency(3); }}
-                            className="text-xs font-medium text-gold-400 hover:text-gold-400"
-                          >
-                            Use twice weekly (split dose) ‚Üí Mon & Thu
-                          </button>
-                        </div>
-                      )}
-                      {MON_FRI_SCHEDULE_HINT_MEDS.has(scheduleMed) && (
-                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
-                          <p className="text-gray-300 text-xs mb-2">Many protocols use weekdays on, weekend off (5 days on / 2 off).</p>
-                          <button
-                            type="button"
-                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 2, 3, 4, 5]); }}
-                            className="text-xs font-medium text-gold-400 hover:text-gold-400"
-                          >
-                            Set Mon‚ÄìFri (off Sat‚ÄìSun)
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Start Date</label>
-                      <input type="date" value={scheduleStartDate} onChange={(e) => setScheduleStartDate(e.target.value)} 
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                    </div>
-                    
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Schedule Type</label>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => setScheduleType('recurring')}
-                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'recurring' ? 'bg-accent text-white' : 'bg-slate-700 text-gray-400'}`}
-                        >
-                          Every X Days
-                        </button>
-                        <button 
-                          onClick={() => setScheduleType('specific_days')}
-                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'specific_days' ? 'bg-accent text-white' : 'bg-slate-700 text-gray-400'}`}
-                        >
-                          Specific Days
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {scheduleType === 'recurring' && (
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Frequency (days)</label>
-                        <input type="number" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(parseInt(e.target.value))} 
-                          className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 7" />
-                        <p className="text-gray-500 text-xs mt-1">Inject every {scheduleFrequency} day{scheduleFrequency > 1 ? 's' : ''}</p>
-                      </div>
-                    )}
-                    
-                    {scheduleType === 'specific_days' && (
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-2">Select Days of Week</label>
-                        <div className="grid grid-cols-7 gap-2">
-                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                if (selectedDays.includes(idx)) {
-                                  setSelectedDays(selectedDays.filter(d => d !== idx));
-                                } else {
-                                  setSelectedDays([...selectedDays, idx].sort());
-                                }
-                              }}
-                              className={`py-2 px-1 rounded-lg text-xs transition-all ${
-                                selectedDays.includes(idx) 
-                                  ? 'bg-accent text-white font-medium' 
-                                  : 'bg-slate-700 text-gray-400'
-                              }`}
-                            >
-                              {day}
-                            </button>
-                          ))}
-                        </div>
-                        {selectedDays.length > 0 && (
-                          <p className="text-gray-400 text-xs mt-2">
-                            Selected: {selectedDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    
-                    <button onClick={addSchedule} className="w-full bg-accent hover:bg-gold-600 text-white font-medium py-3 rounded-lg">
-                      Save Schedule
-                    </button>
-                  </div>
-                </div>
-
-                {/* Stack Timeline: which compounds are active by month */}
-                {getStackTimelineMonths().length > 0 && (
-                  <div className="ui-card p-4 mb-4">
-                    <h3 className="text-white font-medium mb-2 flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4 text-gold-400" />
-                      Your stack timeline
-                    </h3>
-                    <p className="text-gray-400 text-xs mb-3">When each compound joined your stack (set Start date on each schedule).</p>
-                    <div className="space-y-2">
-                      {getStackTimelineMonths().map((m) => (
-                        <div key={m.label} className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="text-gray-500 font-medium w-16 shrink-0">{m.label}</span>
-                          <span className="text-gray-300">
-                            {m.added.length > 0 && m.active.length > 0 && (
-                              <>
-                                {m.added.length === m.active.length ? m.active.map(med => (
-                                  <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs" style={{ backgroundColor: `${getMedicationColor(med)}22`, color: getMedicationColor(med) }}>{med}</span>
-                                )) : (
-                                  <>
-                                    {m.active.filter(x => !m.added.includes(x)).map(med => (
-                                      <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs bg-slate-600/50 text-gray-300">{med}</span>
-                                    ))}
-                                    {m.added.map(med => (
-                                      <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs border border-green-500/50 bg-green-500/10 text-green-400">+ {med}</span>
-                                    ))}
-                                  </>
-                                )}
-                              </>
-                            )}
-                            {m.added.length === 0 && m.active.length > 0 && m.active.map(med => (
-                              <span key={med} className="inline-flex items-center px-2 py-0.5 rounded mr-1 mb-1 text-xs bg-slate-600/50 text-gray-300">{med}</span>
-                            ))}
-                            {m.active.length === 0 && <span className="text-gray-500">‚Äî</span>}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {schedules.length > 0 && (
-                  <div className="ui-card p-4">
-                    <h3 className="text-white font-medium mb-3">Active Schedules</h3>
-                    <div className="space-y-2">
-                      {schedules.map(schedule => (
-                        <div key={schedule.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(schedule.medication)}20` }}>
-                              <Syringe className="h-4 w-4" style={{ color: getMedicationColor(schedule.medication) }} />
-                            </div>
-                            <div>
-                              <div className="text-white font-medium">{schedule.medication}</div>
-                              <div className="text-gray-400 text-sm">
-                                {schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0 
-                                  ? `${schedule.specificDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`
-                                  : `Every ${schedule.frequencyDays} days`}
-                              </div>
-                              {schedule.startDate && (
-                                <div className="text-gray-500 text-xs">Started: {new Date(schedule.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                              )}
-                            </div>
-                          </div>
-                          <button onClick={() => deleteSchedule(schedule.id)} className="p-2 text-gray-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Titration Section */}
-            {activeToolSection === 'titration' && (
-              <div className="space-y-4">
-                {/* Titration Guidance */}
-                <div className="rounded-2xl p-4 border border-accent/20 bg-gradient-to-br from-accent/10 to-gold-600/5 backdrop-blur-sm">
-                  <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-violet-400" />
+Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ◊Ω9ﬂÑËµ©h∫⁄n∂XßzÕZ[\‹ùôXX›»\ŸT›]K\ŸQYôôX›\ŸTôYã\ŸSY[[»Húõ€H	‹ôXX›	Œ¬ö[\‹ù»ÿ\X⁄]‹àHúõ€H	–ÿ\X⁄]‹ãÿ€‹ôIŒ¬ö[\‹ù»€€\‹ŸY⁄\ù[ôP⁄\ù[ôK\ôXK^\ÀP^\Àÿ\ù\⁄X[ë‹öY€€\ô\‹€ú⁄]ôP€€ùZ[ô\ãYŸ[ôôYô\ô[òŸP\ôXKôYô\ô[òŸS[ôHHúõ€H	‹ôX⁄\ù…Œ¬ö[\‹ù»ÿÿ[Kﬁ\ö[ôŸK\Àô[ô[ô—›€ãô[ô[ô’\ÿ[[ô\ãò\⁄ãY]ãX›]ö]Kÿ[›[]‹ã^[›]\⁄õÿ\ô‹ô[ò⁄⁄]úõ€ë›€ãô[ù[\ãÿ[Y\òK\ôŸ]€ÿ⁄À⁄X⁄–⁄\ò€K[\ù⁄\ò€Kõ€⁄”‹[ã€Z[KYZúõ›€ãò\ÿ[[ô\ë^\Àõ‹]ÀôYYãö[Q›€ã[‹ôR‹ö^õ€ù[õ‹K][ú⁄[–‹õ‹‹ŸYõ‹]\Ÿ\ã\úõ›’\›€ã€›Y⁄YöSŸôã›€õÿY‹\ö€\À⁄]úõ€ìYù›]‹ÿ€‹KŸX\ò⁄^Y\úÀ[ôõÀ[€€ã[⁄\ò€Kö[U^ò\ê⁄\ù»Húõ€H	€X⁄YK\ôXX›	Œ¬ö[\‹ù»\ŸT›\Xò\ŸP]]Húõ€H	Àãÿ€€ù^‘›\Xò\ŸP]]€€ù^öúﬁ	Œ¬ö[\‹ù»⁄X⁄—õ‹ê\\]K\€Z\‹’\]Tõ€\‹[ë›€õÿY\õHúõ€H	Àã€Xãÿ\\]P⁄X⁄Àöú…Œ¬ö[\‹ù»õ‹õX]€›Y\úõ‹ãÿ⁄Y[P€›Yﬁ[ò»Húõ€H	Àã€Xãÿ€›Yﬁ[òÀöú…Œ¬ö[\‹ù»QQP–US”ó—QëëP’‘ì—íSTÀQQP–US”ó‘T—W’SQSSëTÀTP–S‘“QW—QëëP’◊–ñW—VHHúõ€H	Àã€YYXÿ][€í[ú⁄Y⁄…Œ¬ö[\‹ù»”–S––UQ”‘íQTÀ”–S—’RQW—T–”RSQTã”–S’êP“◊–P’S”îÀŸ]›X⁄‘›YŸŸ\›[€úÀŸ]YYXÿ][€ëYXÿ][€àHúõ€H	ÀãŸ€ÿ[\YQ›ZYKöú…Œ¬ö[\‹ù»Ÿ]›X⁄’[Z[ô–€€ù[ùHúõ€H	Àã€Xã‹›X⁄’[Z[ô—›ZYKöú…Œ¬ö[\‹ù»T’S◊—êTHHúõ€H	Àã€Xã‹\[—ò\Köú…Œ¬ö[\‹ù»›€õÿY€[öX⁄X[î›[[X\ûTàHúõ€H	Àã€Xãÿ€[öX⁄X[îãöú…Œ¬ö[\‹ù»›€õÿY‹ò\Xÿ[›[[X\ûTàHúõ€H	Àã€XãŸ‹ò\Xÿ[›[[X\ûTãöú…Œ¬ö[\‹ù»ùZ[ŸYZ€Q‹ŸUŸZY⁄ãŸ]ŸYZ‘›\ù”€ìXô[Húõ€H	Àã€Xã›ŸYZ€Q‹ŸUŸZY⁄ãöú…Œ¬ö[\‹ù»ÿ]ôTêõÿàHúõ€H	Àã€Xã‹ÿ]ôTêõÿãöú…Œ¬ö[\‹ù‹ò\Xÿ[›[[X\ûS[Ÿ[úõ€H	Àã—‹ò\Xÿ[›[[X\ûS[Ÿ[öúﬁ	Œ¬ö[\‹ù»€€\]T€Y\›\ú»Húõ€H	Àã€Xã‹€Y\][Àöú…Œ¬ö[\‹ù»€€\ô\‹“[XYŸQö[U—]U\õHúõ€H	Àã€Xã⁄[XYŸP€€\ô\‹Àöú…Œ¬Çò€€ú›T’ëTî“S”àH	ÃKçç…Œ¬ÇãÀ»€€\ôZ[ú⁄]ôH\YK€YYXÿ][€à\›⁄]\õXX€⁄⁄[ô]X»]H
+[ìYôH[à›\úŒ»\ŸYõ‹à]ô[›\ùôH	à\ŸHXô[ Bò€€ú›QQP–US”î»H¬à»ò[YNà	‘Ÿ[XY€]YIÀÿ]Y€‹ûNà	—”LIÀ€€‹éà	»ÃLéNIÀYò][ÿ⁄Y[NàÀ[ìYôNàMéXZ“›\úŒàYôôX›\ò][€éàMéKà»ò[YNà	‘ûXô[›\»
+‹ò[Ÿ[XY€]YJIÀÿ]Y€‹ûNà	—”LIÀ€€‹éà	»ÃLéNIÀYò][ÿ⁄Y[NàK[ìYôNàMéXZ“›\úŒàYôôX›\ò][€éàçKà»ò[YNà	’\ûô\]YIÀÿ]Y€‹ûNà	—”LK—“T	À€€‹éà	»ÃMéMâÀYò][ÿ⁄Y[NàÀ[ìYôNàLåXZ“›\úŒàYôôX›\ò][€éàMéKà»ò[YNà	”\òY€]YIÀÿ]Y€‹ûNà	—”LIÀ€€‹éà	»ÃNMçéIÀYò][ÿ⁄Y[NàK[ìYôNàLÀXZ“›\úŒàLãYôôX›\ò][€éàçKà»ò[YNà	—[Y€]YIÀÿ]Y€‹ûNà	—”LIÀ€€‹éà	»ÃM	ÀYò][ÿ⁄Y[NàÀ[ìYôNàLåXZ“›\úŒàYôôX›\ò][€éàMéKàÀ»ô]]ù]YHôYö[Y[éàX[ù[ö]»à\ôHL[ö]»HHY»
+KôÀàL[ö]»HHY Kõ›KLL[ú›[[àﬁ\ö[ôŸHõ€[YKÇà»ò[YNà	‘ô]]ù]YIÀÿ]Y€‹ûNà	’ö\HY€€ö\›	À€€‹éà	»ŒçXŸçâÀYò][ÿ⁄Y[NàÀ[ìYôNàMXZ“›\úŒàYôôX›\ò][€éàMéKà»ò[YNà	’\›‹›\õ€ôHﬁ\[€ò]IÀÿ]Y€‹ûNà	“‹õ[€ôIÀ€€‹éà	»ÃÿéôçâÀYò][ÿ⁄Y[NàÀ[ìYôNàNLãXZ“›\úŒàYôôX›\ò][€éàMéôP€€ú›]]YàùYK\‹›[YY€€òŸ[ùò][€ìY‘\ì[àåKà»ò[YNà	’\›‹›\õ€ôH[ò[ù]IÀÿ]Y€‹ûNà	“‹õ[€ôIÀ€€‹éà	»ÃçMåŸXâÀYò][ÿ⁄Y[NàÀ[ìYôNàLXZ“›\úŒàYôôX›\ò][€éàMéôP€€ú›]]YàùYK\‹›[YY€€òŸ[ùò][€ìY‘\ì[àåKà»ò[YNà	“—…Àÿ]Y€‹ûNà	“‹õ[€ôIÀ€€‹éà	»ÕåÕçôåIÀYò][ÿ⁄Y[NàÀ[ìYôNàMãXZ“›\úŒàLãYôôX›\ò][€éàÃàKà»ò[YNà	–îÀLMM…Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸNé…ÀYò][ÿ⁄Y[NàK[ìYôNàXZ“›\úŒàãYôôX›\ò][€éàçKà»ò[YNà	’ãML	Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸMÕÃâÀYò][ÿ⁄Y[NàÀ[ìYôNàãXZ“›\úŒàãYôôX›\ò][€éàÃàKà»ò[YNà	“\[[‹ô[[âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»Ÿòòôåç	ÀYò][ÿ⁄Y[NàK[ìYôNàãXZ“›\úŒàKYôôX›\ò][€éàKà»ò[YNà	–“êÀLLéMIÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸéMÃÃMâÀYò][ÿ⁄Y[NàK[ìYôNàMéXZ“›\úŒàLãYôôX›\ò][€éàMéKà»ò[YNà	’\ÿ[[‹ô[[âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸXMN…ÀYò][ÿ⁄Y[NàK[ìYôNàåÕKXZ“›\úŒàåMKYôôX›\ò][€éà»Kà»ò[YNà	‘Ÿ\õ[‹ô[[âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸòéLåÿ…ÀYò][ÿ⁄Y[NàK[ìYôNàåLãXZ“›\úŒàçKYôôX›\ò][€éàHKà»ò[YNà	”RÀMçÕ…Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÿÃçL…ÀYò][ÿ⁄Y[NàK[ìYôNàçXZ“›\úŒàãYôôX›\ò][€éàçKà»ò[YNà	–S—NMå	Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸXÕNIÀYò][ÿ⁄Y[NàK[ìYôNàçKXZ“›\úŒàçKYôôX›\ò][€éà»Kà»ò[YNà	”S’ÀP…Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÃåòÕMYIÀYò][ÿ⁄Y[NàÀ[ìYôNàXZ“›\úŒàãYôôX›\ò][€éàçKà»ò[YNà	”Y[[õ›[àRIÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸåçÕÕ…ÀYò][ÿ⁄Y[NàÀ[ìYôNàÃÀXZ“›\úŒàLãYôôX›\ò][€éàMéKà»ò[YNà	‘LMIÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÿôLNY	ÀYò][ÿ⁄Y[Nà[ìYôNàÀXZ“›\úŒàKYôôX›\ò][€éàKà»ò[YNà	—[ò€€Z\[ôH
+[ò€ IÀÿ]Y€‹ûNà	‘—TìIÀ€€‹éà	»ÕÿÃÿYY	ÀYò][ÿ⁄Y[NàK[ìYôNàLXZ“›\úŒàçYôôX›\ò][€éàçKà»ò[YNà	“”’…Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÃLXåâÀYò][ÿ⁄Y[NàK[ìYôNàXZ“›\úŒàãYôôX›\ò][€éàçKà»ò[YNà	“⁄\‹‹\[âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÿNMYç…ÀYò][ÿ⁄Y[NàÀ[ìYôNàXZ“›\úŒàãYôôX›\ò][€éàçKà»ò[YNà	—€€òY‹ô[[âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŒLÃÃŸXIÀYò][ÿ⁄Y[Nàã[ìYôNàåÀXZ“›\úŒàçKYôôX›\ò][€éàKà»ò[YNà	’\ÿK“\Hõ[ô
+[YÀÕ[Y IÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸçNYLâÀYò][ÿ⁄Y[NàK[ìYôNàãXZ“›\úŒàçKYôôX›\ò][€éààKàÀ»ô[Z^Y“êÀLLéMH⁄]›]P»
+»\[[‹ô[[à
+öX[›[Y»H›[HŸàõ›»KôÀàL
+ÃLY»
+»àSêP»8°§àH8¢bååXŸ»XX⁄8†%\ÿ[[‹ô[[àNH\»HŸ\\ò]HöX[
+Bà»ò[YNà	–“êÀ“\Hõ[ô
+LYÀÃLY IÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸXMN…ÀYò][ÿ⁄Y[NàK[ìYôNàãXZ“›\úŒàKYôôX›\ò][€éàKà»ò[YNà	’\ÿK“\K–“ê»õ[ô
+õYÀÃ€YÀÃ€Y IÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÿçLÃIÀYò][ÿ⁄Y[NàK[ìYôNàãXZ“›\úŒàçKYôôX›\ò][€éàKà»ò[YNà	–îÀ’àõ[ô
+[YÀÕ[Y IÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÿÿNL	ÀYò][ÿ⁄Y[NàÀ[ìYôNàÀXZ“›\úŒàãYôôX›\ò][€éàKà»ò[YNà	—úòY€Y[ùMÕãLNLIÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»Ãòçô	ÀYò][ÿ⁄Y[NàK[ìYôNàãXZ“›\úŒàKYôôX›\ò][€éàLàKà»ò[YNà	—“ÀP›IÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÃXMYNIÀYò][ÿ⁄Y[NàK[ìYôNàKXZ“›\úŒàçKYôôX›\ò][€éàçKà»ò[YNà	‘Ÿ[X^	Àÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÕåÕçôåIÀYò][ÿ⁄Y[NàK[ìYôNàçKXZ“›\úŒàçKYôôX›\ò][€éàKà»ò[YNà	—\][€âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÕçÕâÀYò][ÿ⁄Y[NàÀ[ìYôNàKXZ“›\úŒàKYôôX›\ò][€éàçKà»ò[YNà	–îÀLMM»
+‹ò[
+IÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ŸXXåÃ	ÀYò][ÿ⁄Y[NàK[ìYôNàXZ“›\úŒàãYôôX›\ò][€éàçKà»ò[YNà	–[ò[[‹ô[[âÀÿ]Y€‹ûNà	‘\YIÀ€€‹éà	»ÿÿNL	ÀYò][ÿ⁄Y[NàK[ìYôNàãXZ“›\úŒàKYôôX›\ò][€éàKà»ò[YNà	”›\âÀÿ]Y€‹ûNà	”›\âÀ€€‹éà	»ÕòçÃé	ÀYò][ÿ⁄Y[NàÀ[ìYôNàMéXZ“›\úŒàçYôôX›\ò][€éàMéBóN¬Çã äàô]]ù]YH[àX[à[ö]»0Ì»\»HY»
+L[ö]»HHY Kàõ›KLL
+L[ö]»HHS
+Kà
+ã¬ò€€ú›ëUUïUQW’SíU◊‘Tó”Q»HL¬Çã äàÿ⁄Y[HX⁄Ÿ\éàŸôô\à[€∏†$—úöH»ŸYZŸ[ô[Ÿôà⁄‹ù›]
+€€[[€à“\ŸX‹ô]Y€Ÿ›YH	à€€YHZ[H\YHõ›ÿ€€ Kà
+ã¬ò€€ú›S”ó—îíW‘–“QSW“Sï”QQ»Hô]»Ÿ]
+¬à	“”’…Àà	’\ÿK“\Hõ[ô
+[YÀÕ[Y IÀà	–“êÀ“\Hõ[ô
+LYÀÃLY IÀà	’\ÿK“\K–“ê»õ[ô
+õYÀÃ€YÀÃ€Y IÀóJN¬ÇãÀ»YôôX›õŸö[\»õ‹àYôô\ô[ùYYXÿ][€àÿ]Y€‹öY\¬ò€€ú›QëëP’‘ì—íST»H¬à	—”LIŒà¬àYôôX›Œà…–\]]H›\ô\‹⁄[€âÀ	”ò]\ŸXHö\⁄…À	–õ€Ÿ›Yÿ\à€€ùõ€	À	’ŸZY⁄‹‹…◊Kà⁄YQYôôX›Œà…”ò]\ŸXIÀ	—ò]Y›YIÀ	–€€ú›\][€âÀ	“XYX⁄I◊KàXZ—YôôX›Œà	—^\»KL»‹›Z[öôX›[€âÀà›XYT›]Nà	ÕMHŸYZ‹»Ÿà€€ú⁄\›[ù‹⁄[ô…¬àKà	—”LK—“T	Œà¬àYôôX›Œà…–\]]H›\ô\‹⁄[€âÀ	“[ú›[[àŸ[ú⁄]]ö]IÀ	—ò]ù\õö[ô…À	’ŸZY⁄‹‹…◊Kà⁄YQYôôX›Œà…”ò]\ŸXIÀ	—X\úöXIÀ	—ò]Y›YIÀ	“[öôX›[€à⁄]HôXX›[€ú…◊KàXZ—YôôX›Œà	—^\»KL»‹›Z[öôX›[€âÀà›XYT›]Nà	ÕMHŸYZ‹»Ÿà€€ú⁄\›[ù‹⁄[ô…¬àKà	’ö\HY€€ö\›	Œà¬àYôôX›Œà…–\]]H€€ùõ€	À	”Y]Xõ€X»õ€‹›	À	—ò]‹‹…À	—[ô\ôﬁH[ò‹ôX\ŸI◊Kà⁄YQYôôX›Œà…”ò]\ŸXIÀ	“[ò‹ôX\ŸYX\ùò]IÀ	—ò]Y›YI◊KàXZ—YôôX›Œà	—^\»KL»‹›Z[öôX›[€âÀà›XYT›]Nà	ÕMàŸYZ‹»Ÿà€€ú⁄\›[ù‹⁄[ô…¬àKà	“‹õ[€ôIŒà¬àYôôX›Œà…”]\ÿ€H‹õ››	À	—[ô\ôﬁIÀ	”[€Ÿ[ö[òŸ[Y[ù	À	”XöY…◊Kà⁄YQYôôX›Œà…“[öôX›[€à⁄]HZ[âÀ	–X€ôIÀ	”[€Ÿ⁄[ôŸ\…◊KàXZ—YôôX›Œà	—^\»ãL»‹›Z[öôX›[€âÀà›XYT›]Nà	ÕŸYZ‹»Ÿà€€ú⁄\›[ù‹⁄[ô…¬àKà	‘\YIŒà¬àYôôX›Œà…“X[[ô…À	‘ôX€›ô\ûIÀ	—‹õ››‹õ[€ôHô[X\ŸI◊Kà⁄YQYôôX›Œà…“[öôX›[€à⁄]HôXX›[€ú…À	’ÿ]\àô][ù[€â◊KàXZ—YôôX›Œà	“›\ú»»^\»‹›Z[öôX›[€âÀà›XYT›]Nà	’ò\öY\»ûH\YI¬àKà	‘—TìIŒà¬àYôôX›Œà…”—î“›[][][€âÀ	”ò]\ò[\›‹›\õ€ôH›\‹ù	À	—\›õŸŸ[àôXŸ\‹à[Ÿ[][€âÀ	—ô\ù[]H›\‹ù	◊Kà⁄YQYôôX›Œà…’ö\›X[\›\òò[òŸ\…À	”[€Ÿ⁄[ôŸ\…À	“›õ\⁄\…À	“XYX⁄I◊KàXZ—YôôX›Œà	—^\»x†$ÃàŸàZ[H‹⁄[ôŒ»›XYH›]H[àx†$ÃàŸYZ‹…Àà›XYT›]Nà	Ãx†$ÃàŸYZ‹»Ÿà€€ú⁄\›[ùZ[H‹⁄[ô…¬àBüN¬ÇãÀ»\Xÿ[ŸYZ€HŸZY⁄‹‹»
+ã›ŸYZ Húõ€HöX[»8†%õ‹àì€àòX⁄œ»à€€\\ö\€€à
+\õﬁ[X]JBò€€ú›TP–S’—QR”W”‘‘»H¬à	‘Ÿ[XY€]YIŒàçã	’ŸY€›ûIŒàçã	”ﬁô[\X…ŒàçKà	‘ûXô[›\»
+‹ò[Ÿ[XY€]YJIŒàçà	’\ûô\]YIŒàçÀ	”[›[öò\õ…ŒàçÀ	÷ô\õ›[ô	ŒàçÀà	”\òY€]YIŒàç	—[Y€]YIŒàçà	‘ô]]ù]YIŒàéüN¬ÇãÀ»‹ŸK\‹X⁄YöX»\Xÿ[ã›ŸYZ»úõ€HöX[»8†%‹ŸHHY»\à»^\»
+ŸYZ€H›[
+BãÀ»»›ŸYZ€SYÀò]WKããàH€‹ùY\ÿŸ[ô[ô»ûHŸYZ€SY¬ò€€ú›TP–S’—QR”W”‘‘◊–ñW—‘—HH¬à	‘Ÿ[XY€]YIŒà÷ÃåçKåóKÃçKåÕWKÃKçWKÃãççóWKà	’ŸY€›ûIŒà÷ÃåçKåóKÃçKåÕWKÃKçWKÃãççóWKà	”ﬁô[\X…Œà÷ÃåçKåóKÃçKåÕWKÃKçWKÃãçWWKà	‘ûXô[›\»
+‹ò[Ÿ[XY€]YJIŒà÷ÃÀå◊KÕÀåÕWKÃMçWKà	’\ûô\]YIŒà÷ÃãçKå◊KÕKçWKÕÀçKçóKÃLççWKÃMKç◊WKà	”[›[öò\õ…Œà÷ÃãçKå◊KÕKçWKÕÀçKçóKÃLççWKÃMKç◊WKà	÷ô\õ›[ô	Œà÷ÃãçKå◊KÕKçWKÕÀçKçóKÃLççWKÃMKç◊WKà	”\òY€]YIŒà÷ÃçãåóKÃKåãå◊KÃKéåÕWKÃãççKÃÀçWKà	—[Y€]YIŒà÷ÃçÕKåçWKÃKçKåÕWKÃÀçKÕçKçWKà	‘ô]]ù]YIŒà÷ÃçKçKÃKçWKÃãççWKÕçÕWKÕãçŒKŒéKÃLãéWWBüN¬Çôù[ò›[€àŸ]\Xÿ[ŸYZ€S‹‹—õ‹ë‹ŸJYYò[YK‹ŸSY H¬à€€ú›ûQ‹ŸHHTP–S’—QR”W”‘‘◊–ñW—‘—V€YYò[YWN¬àYà
+ûQ‹ŸH	âàûQ‹ŸKõ[ô›à	âà‹ŸSY»OHù[	âàZ\”òSä‹ŸSY JH¬à]ò]HHûQ‹ŸVÃVÃWN¬àõ‹à
+€€ú›Ÿ‹ŸKóHŸàûQ‹ŸJH¬àYà
+‹ŸSY»èH‹ŸJHò]HHé¬àBàô]\õàò]N¬àBàô]\õàTP–S’—QR”W”‘‘÷€YYò[YWHœ»TP–S’—QR”W”‘‘÷…‘Ÿ[XY€]YI◊Hœ»çN¬üBÇãÀ»⁄[\HYX[\›[X]‹éà€€[[€àõ€Ÿ»
+ÿ[õ›Z[ãÿ\òúÀò]\àŸ\ùö[ôŒ»‹[€ò[Yò][€ìﬁäBò€€ú›””SS”ó—ì”—»H¬à	ŸYŸ…Œà»ÿ[àÃõ›Z[éàãÿ\òúŒàçKò]àHKà	ŸYŸ‹…Œà»ÿ[àÃõ›Z[éàãÿ\òúŒàçKò]àHKà	›ÿ\›	Œà»ÿ[àõ›Z[éàÀÿ\òúŒàMò]àHKà	ÿúôXY	Œà»ÿ[àõ›Z[éàÀÿ\òúŒàMò]àHKà	ÿ⁄X⁄Ÿ[àúôX\›	Œà»ÿ[àMçKõ›Z[éàÃKÿ\òúŒàò]àKà	ÿ⁄X⁄Ÿ[àY⁄	Œà»ÿ[àåKõ›Z[éàçãÿ\òúŒàò]àLHKà	ÿ⁄X⁄Ÿ[âŒà»ÿ[àMçKõ›Z[éàÃKÿ\òúŒàò]àKà	›\öŸ^IŒà»ÿ[àLÕKõ›Z[éàÃÿ\òúŒàò]àHKà	‹ÿ[[€âŒà»ÿ[àåõ›Z[éàåÿ\òúŒàò]àL»Kà	›[\XIŒà»ÿ[àLLõ›Z[éàåÀÿ\òúŒàò]ààKà	‹⁄ö[\	Œà»ÿ[àLõ›Z[éàçÿ\òúŒàçKò]àå»Kà	›[òIŒà»ÿ[àLÃõ›Z[éàéÿ\òúŒàò]àHKà	Ÿ‹õ›[ôôYYâŒà»ÿ[àåMKõ›Z[éàçÿ\òúŒàò]àL»Kà	‹›XZ…Œà»ÿ[àçÃõ›Z[éàçãÿ\òúŒàò]àM»Kà	ÿòX€€âŒà»ÿ[àKõ›Z[éàÀÿ\òúŒàò]à»Kà	‹‹ö»⁄‹	Œà»ÿ[àçLõ›Z[éàçãÿ\òúŒàò]àMHKà	Ÿ‹ôYZ»[Ÿ›\ù	Œà»ÿ[àLõ›Z[éàMÀÿ\òúŒàãò]àç»Kà	ﬁ[Ÿ›\ù	Œà»ÿ[àLõ›Z[éàLÿ\òúŒàMKò]ààKà	ÿ€›YŸH⁄Y\ŸIŒà»ÿ[àLåõ›Z[éàMÿ\òúŒàãò]àHKà	‹õ›Z[à⁄ZŸIŒà»ÿ[àLåõ›Z[éàçÿ\òúŒàÀò]àHKà	‹õ›Z[àò\âŒà»ÿ[àåõ›Z[éàåÿ\òúŒàåãò]ààKà	€ÿ]YX[	Œà»ÿ[àMLõ›Z[éàKÿ\òúŒàçÀò]à»Kà	€ÿ]…Œà»ÿ[àMLõ›Z[éàKÿ\òúŒàçÀò]à»Kà	‹öXŸIŒà»ÿ[àåKõ›Z[éàÿ\òúŒàKò]àçKà	‹]Z[õÿIŒà»ÿ[àååõ›Z[éàÿ\òúŒàŒKò]àKà	‹\›IŒà»ÿ[àååõ›Z[éàÿ\òúŒàÀò]àHKà	‹›ŸY]›]…Œà»ÿ[àLÀõ›Z[éàãÿ\òúŒàçò]àKà	‹›]…Œà»ÿ[àMåõ›Z[éàãÿ\òúŒàÕÀò]àKà	ÿúõÿÿ€€IŒà»ÿ[àMKõ›Z[éàÿ\òúŒàLKò]àçàKà	‹‹[òX⁄	Œà»ÿ[àåÀõ›Z[éàÀÿ\òúŒàò]àçKà	⁄ÿ[IŒà»ÿ[àÕKõ›Z[éàÀÿ\òúŒàò]àHKà	ÿ\‹\òY›\…Œà»ÿ[àåõ›Z[éàãÿ\òúŒàò]àKà	Ÿ‹ôY[àôX[ú…Œà»ÿ[àÕKõ›Z[éàãÿ\òúŒàò]àKà	ÿÿ\úõ›…Œà»ÿ[àçKõ›Z[éàKÿ\òúŒàãò]àKà	ÿÿ][Yõ›Ÿ\âŒà»ÿ[àçKõ›Z[éàãÿ\òúŒàKò]àKà	‹ÿ[Y	Œà»ÿ[àLõ›Z[éàÀÿ\òúŒàò]àHKà	ÿ⁄X⁄Ÿ[àÿ[Y	Œà»ÿ[àÕLõ›Z[éàÃÿ\òúŒàLãò]àåKà	ÿÿY\ÿ\àÿ[Y	Œà»ÿ[àÕåõ›Z[éàLãÿ\òúŒàNò]àéKà	ÿ]õÿÿY…Œà»ÿ[àçõ›Z[éàÀÿ\òúŒàLÀò]àåàKà	ÿò[ò[òIŒà»ÿ[àLKõ›Z[éàKÿ\òúŒàçÀò]àçKà	ÿ\IŒà»ÿ[àMKõ›Z[éàçKÿ\òúŒàçKò]àå»Kà	€‹ò[ôŸIŒà»ÿ[àåãõ›Z[éàKÿ\òúŒàMKò]àåàKà	ÿô\úöY\…Œà»ÿ[àLõ›Z[éàKÿ\òúŒàLãò]àå»Kà	‹›ò]ÿô\úöY\…Œà»ÿ[àLõ›Z[éàKÿ\òúŒàLãò]àå»Kà	ÿõYXô\úöY\…Œà»ÿ[àKõ›Z[éàKÿ\òúŒàåKò]àçHKà	Ÿ‹ò\YúùZ]	Œà»ÿ[àLãõ›Z[éàKÿ\òúŒàLÀò]àåàKà	‹X\âŒà»ÿ[àLõ›Z[éàKÿ\òúŒàçÀò]àåàKà	€ù]…Œà»ÿ[àMÃõ›Z[éàãÿ\òúŒàãò]àMHKà	ÿ[[€ô…Œà»ÿ[àMÃõ›Z[éàãÿ\òúŒàãò]àMHKà	‹X[ù]ù]\âŒà»ÿ[àNLõ›Z[éàÿ\òúŒàÀò]àMàKà	⁄[[]\…Œà»ÿ[àÃõ›Z[éàãÿ\òúŒàãò]àHKà	ÿ⁄Y\ŸIŒà»ÿ[àLLõ›Z[éàÀÿ\òúŒàKò]àHKà	€Z[…Œà»ÿ[àMLõ›Z[éàÿ\òúŒàLãò]àKà	ÿ[[€ôZ[…Œà»ÿ[àõ›Z[éàKÿ\òúŒàãò]à»Kà	‹€[€›YIŒà»ÿ[àåõ›Z[éàKÿ\òúŒàÕKò]àHKà	‹€›\	Œà»ÿ[àLåõ›Z[éàãÿ\òúŒàMKò]àKà	ÿ⁄X⁄Ÿ[à€›\	Œà»ÿ[àLõ›Z[éàÿ\òúŒàò]à»Kà	ÿù\ôŸ\âŒà»ÿ[àÕLõ›Z[éàåÿ\òúŒàÃò]àNKà	‹^ûòIŒà»ÿ[àéKõ›Z[éàLãÿ\òúŒàÕãò]àLKà	‹ÿ[ô⁄X⁄	Œà»ÿ[àÕLõ›Z[éàNÿ\òúŒàò]àLàKà	›X€…Œà»ÿ[àMÃõ›Z[éàÿ\òúŒàLÀò]àLKà	ÿù\úö]…Œà»ÿ[àLõ›Z[éàåãÿ\òúŒàMKò]àåàKà	ÿ€ŸôôYIŒà»ÿ[àãõ›Z[éàÿ\òúŒàò]àYò][€ìﬁéàKà	›ÿ]\âŒà»ÿ[àõ›Z[éàÿ\òúŒàò]àYò][€ìﬁéàKà	›XIŒà»ÿ[àãõ›Z[éàÿ\òúŒàò]àYò][€ìﬁéàKà	‹€ŸIŒà»ÿ[àMõ›Z[éàÿ\òúŒàŒKò]àYò][€ìﬁéàLàKà	⁄ùZXŸIŒà»ÿ[àLLõ›Z[éàKÿ\òúŒàçãò]àYò][€ìﬁéàKà	Ÿ[ô\ôﬁHö[ö…Œà»ÿ[àLLõ›Z[éàÿ\òúŒàéò]àYò][€ìﬁéàBüN¬Çôù[ò›[€à\›[X]SYX[úõ€Q\ÿ‹ö\[€ä\ÿ H¬à€€ú›^H
+\ÿ»	… Kù”›Ÿ\êÿ\ŸJ
+Kùö[J
+N¬àYà
+]^
+Hô]\õàù[¬à€€ú›\”ﬁàH◊
+◊ õﬁã⁄Kù\›
+^
+N¬à]][HN¬à]ô\›H^¬àYà
+Z\”ﬁäH¬à€€ú›ù[SX]⁄H^õX]⁄
+◊ä
+ Œóó
+ O W  ä I N¬àYà
+ù[SX]⁄
+H¬à][H\úŸQõÿ]
+ù[SX]⁄ÃWJN¬àô\›Hù[SX]⁄ÃóKùö[J
+N¬àBàBà€€ú›ﬁìX]⁄Hô\›õX]⁄
+ 
+ W õﬁã⁄JN¬à€€ú›ﬁàHﬁìX]⁄»\úŸR[ù
+ﬁìX]⁄ÃWKL
+Hàù[¬à€€ú›⁄]›]ﬁàHﬁàOHù[»ô\›úô\XŸJ◊
+◊ õﬁó ãŸ⁄K	»	 Kúô\XŸJ◊ ÀŸÀ	»	 Kùö[J
+Hàô\›¬à€€ú›Ÿ^HHÿöôX›öŸ^\ ””SS”ó—ì”— Kôö[ô
+»Oà⁄]›]ﬁàOOH»⁄]›]ﬁãö[ò€Y\  JN¬à€€ú›õ€ŸHŸ^H»””SS”ó—ì”—÷⁄Ÿ^WHàù[¬àYà
+Yõ€Ÿ
+Hô]\õàù[¬à€€ú›Yò][€ìﬁàH
+ﬁàOHù[	âà
+Ÿ^HOOH	›ÿ]\â»Ÿ^HOOH	ÿ€ŸôôYI»Ÿ^HOOH	›XI JH»ﬁàà
+õ€ŸöYò][€ìﬁàœ»
+H
+à][¬àô]\õà¬àXô[à\ÿÀùö[J
+Kú€XŸJ
+Kàÿ[‹öY\ŒàX]úõ›[ô
+
+õ€Ÿòÿ[
+H
+à][
+Kàõ›Z[éàX]úõ›[ô
+
+õ€Ÿúõ›Z[à
+H
+à][
+Kàÿ\òúŒàX]úõ›[ô
+
+õ€Ÿòÿ\òú»
+H
+à][
+Kàò]àX]úõ›[ô
+
+õ€Ÿôò]
+H
+à][
+KàYò][€ìﬁéàYò][€ìﬁà»X]úõ›[ô
+Yò][€ìﬁäHààN¬üBÇãÀ»\ŸH[Y[[ô\»õ‹àXX⁄YYXÿ][€àÿ]Y€‹ûH
+ZŸH€\ö[ Bò€€ú›T—W’SQSSëT»H¬à	—”LIŒà¬à\Ÿ\Œà¬à¬àò[YNà	–Xú€‹ú[€âÀà›\úŒàÃçKàX€€éà	¯´!ªÓ#…Àà€€‹éà	›^XõYKM	Ààô–€€‹éà	ÿôÀXõYKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXõYKMLÃÃ	Àà\ÿ‹ö\[€éà	”YYXÿ][€à[ù\ö[ô»[›\àõ€Ÿ›ôX[IÀà⁄]“\[ö[ôŒà¬à	‘›Xò›][ô[›\»Xú€‹ú[€àôY⁄[õö[ô…Àà	”YYXÿ][€àôXX⁄[ô»⁄\ò›[][€âÀà	“[ö]X[ôXŸ\‹àö[ô[ô»›\ù[ô…¬àKà⁄]—^X›à¬à	”Z[ö[X[YôôX›»Y]	Àà	‘€€YH[‹HôY[€Y⁄\]]HôYX›[€âÀà	‘⁄YHYôôX›»[õZŸ[I¬àKà\Œà¬à	‘›^HYò]Y	Àà	—X]õ‹õX[HŸ^IÀà	”õ›H[öôX›[€à⁄]Hõ‹àõ›][€â¬àBàKà¬àò[YNà	‘ö\⁄[ô»YôôX›	Àà›\úŒàÃçKàX€€éà	¸'‰‚	Àà€€‹éà	›^^Y[›ÀM	Ààô–€€‹éà	ÿôÀ^Y[›ÀMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã^Y[›ÀMLÃÃ	Àà\ÿ‹ö\[€éà	—YôôX›»ùZ[[ô»\»]ô[»[ò‹ôX\ŸIÀà⁄]“\[ö[ôŒà¬à	—”LHôXŸ\‹ú»X›]ò][ô…Àà	—ÿ\›öX»[\Z[ô»€›⁄[ô…Àà	–\]]H⁄Y€ò[»X‹ôX\⁄[ô…¬àKà⁄]—^X›à¬à	–\]]HôYX›[€àôX€€Z[ô»õ›XŸXXõIÀà	—ôY[[ô»ù[\à€à\‹»õ€Ÿ	Àà	”ò]\ŸXHX^HôY⁄[à
+\›X[HZ[
+I¬àKà\Œà¬à	—X]€X[\à‹ù[€ú…Àà	–⁄€‹ŸHõ[ôõ€Ÿ»Yàò]\ŸX]Y	Àà	‘⁄\ÿ]\àõ›Y⁄›]^I¬àBàKà¬àò[YNà	‘XZ»YôôX›	Àà›\úŒàÕMóKàX€€éà	¸'„´…Àà€€‹éà	›^Y‹ôY[ãML	Ààô–€€‹éà	ÿôÀY‹ôY[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãY‹ôY[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”X^[][HYYXÿ][€à€€òŸ[ùò][€à[ôYôôX›]ô[ô\‹…Àà⁄]“\[ö[ôŒà¬à	‘XZ»õ€Ÿ€€òŸ[ùò][€àôXX⁄Y	Àà	”X^[][H\]]H›\ô\‹⁄[€âÀà	‘›õ€ôŸ\›\ò\]]X»YôôX›…¬àKà⁄]—^X›à¬à	‘⁄Y€öYöXÿ[ùôYX›[€à[à[ôŸ\âÀà	»ëõ€Ÿõ⁄\ŸHà]Z[ö[][IÀà	“Y⁄\›ò]\ŸXHö\⁄»
+Yàÿÿ›\ú I¬àKà\Œà¬à	—õÿ›\»€àõ›Z[à[ùZŸIÀà	‘€X[úô\]Y[ùYX[»€‹ö»ô\›	Àà	—⁄[ôŸ\à‹àõ[ôõ€Ÿ»õ‹àò]\ŸXIÀà	’\»\»ö[YHŸZY⁄‹‹»⁄[ô›…¬àBàKà¬àò[YNà	–‹ùZ\ŸH\ŸIÀà›\úŒàŒMãMKàX€€éà	¯¶®IÀà€€‹éà	›^XﬁX[ãM	Ààô–€€‹éà	ÿôÀXﬁX[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXﬁX[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”‹[X[\ò\]]X»⁄[ô›»⁄]›XõHYôôX›…Àà⁄]“\[ö[ôŒà¬à	‘›XõHYYXÿ][€à]ô[…Àà	–€€ú⁄\›[ù\]]H€€ùõ€	Àà	—ò]ﬁY][€à[]ò]Y	¬àKà⁄]—^X›à¬à	‘›XYK€€Yõ‹ùXõH\]]H›\ô\‹⁄[€âÀà	‘⁄YHYôôX›»Z[ö[X[‹àô\€€ôY	Àà	–ô\››ô\ò[ôY[[ô»ŸàHŸYZ…¬àKà\Œà¬à	—^\ò⁄\ŸH[‹›YôôX›]ôHõ›…Àà	”XZ[ùZ[à€€ú⁄\›[ùX][ô»ÿ⁄Y[IÀà	—[öõﬁHH›XõH[ô\ôﬁIÀà	’òX⁄»[›\àŸZY⁄Hô\›[YH»ŸYH‹‹…¬àBàKà¬àò[YNà	—X€[ö[ô…Àà›\úŒàÃMMéKàX€€éà	¸'‰‚IÀà€€‹éà	›^[‹ò[ôŸKM	Ààô–€€‹éà	ÿôÀ[‹ò[ôŸKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã[‹ò[ôŸKMLÃÃ	Àà\ÿ‹ö\[€éà	”YYXÿ][€à]ô[»õ‹[ôÀYôôX›»òY[ô…Àà⁄]“\[ö[ôŒà¬à	–õ€Ÿ€€òŸ[ùò][€àX‹ôX\⁄[ô…Àà	‘ôXŸ\‹àX›]ö]HôYX⁄[ô…Àà	—YôôX›»‹òYX[Hÿ[ö[ô…¬àKà⁄]—^X›à¬à	–\]]H€›€Hô]\õö[ô…Àà	—õ€Ÿ›Y⁄»[‹ôHúô\]Y[ù	Àà	‘›[]ôH\]]H€€ùõ€ù]\‹…¬àKà\Œà¬à	‘ô\\ôHõ‹àô^[öôX›[€âÀà	‘›^HZ[ôù[Ÿà‹ù[€ú…Àà	”õ‹õX[»ôY[[ô‹öY\âÀà	”ô^‹ŸH€€Z[ô»€€€â¬àBàKà¬àò[YNà	’õ›Y⁄	Àà›\úŒàÃMéNNWKàX€€éà	¸'‰¢IÀà€€‹éà	›^\ôYM	Ààô–€€‹éà	ÿôÀ\ôYMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã\ôYMLÃÃ	Àà\ÿ‹ö\[€éà	’[YHõ‹àô^[öôX›[€âÀà⁄]“\[ö[ôŒà¬à	”YYXÿ][€à[‹›H€X\ôY	Àà	–ò\Ÿ[[ôH\]]Hô]\õö[ô…Àà	‘ôXYHõ‹àô^‹ŸI¬àKà⁄]—^X›à¬à	“[ôŸ\à⁄[Z[\à»ôK[YYXÿ][€âÀà	—õ€Ÿõ⁄\ŸHX^Hô]\õâÀà	—YôôX›»Z[ö[X[	¬àKà\Œà¬à	“[öôX›[›\àô^‹ŸHŸ^IÀà	‘[à[›\à[öôX›[€à[Z[ô…Àà	–ﬁX€H›\ù»›ô\à€[‹úõ›…Àà	–€€ú⁄Y\à[öôX›[€à⁄]Hõ›][€â¬àBàBàBàKà	—”LK—“T	Œà¬à\Ÿ\Œà¬à¬àò[YNà	–Xú€‹ú[€âÀà›\úŒàÃçKàX€€éà	¯´!ªÓ#…Àà€€‹éà	›^XõYKM	Ààô–€€‹éà	ÿôÀXõYKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXõYKMLÃÃ	Àà\ÿ‹ö\[€éà	—X[Y€€ö\›[ù\ö[ô»ﬁ\›[IÀà⁄]“\[ö[ôŒà¬à	—”LH[ô“TôXŸ\‹ú»ôZ[ô»X›]ò]Y	Àà	”YYXÿ][€àXú€‹òö[ô»úõ€H[öôX›[€à⁄]IÀà	“[ö]X[Y]Xõ€X»⁄[ôŸ\»›\ù[ô…¬àKà⁄]—^X›à¬à	”Z[ö[X[YôôX›»[àö\ú››\ú…Àà	‘€€YH[ô\ôﬁH⁄[ôŸ\»‹‹⁄XõIÀà	‘⁄YHYôôX›»ò\ôH\»X\õI¬àKà\Œà¬à	—X]Hò[[òŸYYX[Ÿ^IÀà	‘›^HŸ[Yò]Y	Àà	”õ‹õX[X›]ö]Hö[ôI¬àBàKà¬àò[YNà	‘ö\⁄[ô»YôôX›	Àà›\úŒàÃçKàX€€éà	¸'‰‚	Àà€€‹éà	›^^Y[›ÀM	Ààô–€€‹éà	ÿôÀ^Y[›ÀMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã^Y[›ÀMLÃÃ	Àà\ÿ‹ö\[€éà	—X[X›[€àò[\[ô»\	Àà⁄]“\[ö[ôŒà¬à	—”LHôYX⁄[ô»\]]IÀà	—“T[\õ›ö[ô»[ú›[[àŸ[ú⁄]]ö]IÀà	”Y]Xõ€X»ò]H[ò‹ôX\⁄[ô…¬àKà⁄]—^X›à¬à	–\]]HôYX›[€à›\ù[ô…Àà	‘‹‹⁄XõH[ô\ôﬁH[ò‹ôX\ŸIÀà	”Z[“HYôôX›»X^HôY⁄[â¬àKà\Œà¬à	”õ›XŸH›»[›HôY[⁄]õ€Ÿ	Àà	‘€X[\à‹ù[€ú»€‹ö»ô]\âÀà	‘›^HYò]Y	¬àBàKà¬àò[YNà	‘XZ»YôôX›	Àà›\úŒàÕMóKàX€€éà	¸'„´…Àà€€‹éà	›^Y‹ôY[ãML	Ààô–€€‹éà	ÿôÀY‹ôY[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãY‹ôY[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”X^[][HX[XY€€ö\›YôôX›	Àà⁄]“\[ö[ôŒà¬à	‘XZ»€€òŸ[ùò][€àX⁄Y]ôY	Àà	–õ›”LH[ô“TX^[X[HX›]ôIÀà	‘›õ€ôŸ\›\]]H›\ô\‹⁄[€âÀà	”X^[][HY]Xõ€X»YôôX›…¬àKà⁄]—^X›à¬à	‘⁄Y€öYöXÿ[ù[ôŸ\àôYX›[€âÀà	—[ö[òŸYò]ù\õö[ô…Àà	‘‹‹⁄XõHò]\ŸXH‹à“HYôôX›…Àà	‘›XYH[ô\ôﬁH]ô[…¬àKà\Œà¬à	“Y⁄õ›Z[àYX[»‹ö]Xÿ[	Àà	—X]€›€H[ôZ[ôù[IÀà	–ô\›ŸZY⁄‹‹»⁄[ô›»H›^HX›]ôIÀà	”X[òYŸH[ûH“Hﬁ[\€\…¬àBàKà¬àò[YNà	–‹ùZ\ŸH\ŸIÀà›\úŒàŒMãMKàX€€éà	¯¶®IÀà€€‹éà	›^XﬁX[ãM	Ààô–€€‹éà	ÿôÀXﬁX[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXﬁX[ãMLÃÃ	Àà\ÿ‹ö\[€éà	‘›ŸY]‹›H›XõH›Ÿ\ôù[YôôX›…Àà⁄]“\[ö[ôŒà¬à	”‹[X[\ò\]]X»ò[ôŸIÀà	‘›\›Z[ôY\]]H€€ùõ€	Àà	–€€ú⁄\›[ùY]Xõ€X»õ€‹›	Àà	–ô\›[ú›[[àŸ[ú⁄]]ö]I¬àKà⁄]—^X›à¬à	–€€Yõ‹ùXõH\]]H›\ô\‹⁄[€âÀà	‘›XõH[ô\ôﬁH[^IÀà	‘⁄YHYôôX›»\›X[HZ[ö[X[	Àà	—ôY[[›\àô\›\»\ŸI¬àKà\Œà¬à	—‹ôX][YHõ‹à^\ò⁄\ŸIÀà	–õŸH€€\‹⁄][€à⁄[ôŸ\»[‹›ö\⁄XõIÀà	”XZ[ùZ[àõ›Z[à€ÿ[…Àà	—[öõﬁHH€[€›YôôX›…¬àBàKà¬àò[YNà	—X€[ö[ô…Àà›\úŒàÃMMéKàX€€éà	¸'‰‚IÀà€€‹éà	›^[‹ò[ôŸKM	Ààô–€€‹éà	ÿôÀ[‹ò[ôŸKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã[‹ò[ôŸKMLÃÃ	Àà\ÿ‹ö\[€éà	—YôôX›»‹òYX[HòY[ô…Àà⁄]“\[ö[ôŒà¬à	”YYXÿ][€à]ô[»õ‹[ô…Àà	–\]]H€€ùõ€\‹Ÿ[ö[ô…Àà	‘›[\ò\]]X»ù]ôYXŸY	¬àKà⁄]—^X›à¬à	“[ôŸ\à€›€Hô]\õö[ô…Àà	‘›[]ôH€€ùõ€ù\›\‹…Àà	—[ô\ôﬁHô[XZ[ú»€€Ÿ	¬àKà\Œà¬à	‘›^HZ[ôù[Ÿà‹ù[€ú…Àà	‘[àõ‹àô^[öôX›[€âÀà	”õ‹õX[»õ›XŸH⁄[ôŸ\…¬àBàKà¬àò[YNà	’õ›Y⁄	Àà›\úŒàÃMéNNWKàX€€éà	¸'‰¢IÀà€€‹éà	›^\ôYM	Ààô–€€‹éà	ÿôÀ\ôYMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã\ôYMLÃÃ	Àà\ÿ‹ö\[€éà	”ô^[öôX›[€àYIÀà⁄]“\[ö[ôŒà¬à	”›»YYXÿ][€à]ô[…Àà	–ò\Ÿ[[ôHô]\õö[ô…Àà	’[YH»ôKY‹ŸI¬àKà⁄]—^X›à¬à	–\]]H[‹ôHõ‹õX[	Àà	‘ôXYHõ‹àô^‹ŸIÀà	—YôôX›»[‹›H€€ôI¬àKà\Œà¬à	“[öôX›Ÿ^Hõ‹àô\›ô\›[…Àà	–€€ú⁄\›[ù[Z[ô»X]\ú…Àà	‘õ›]H[öôX›[€à⁄]\…¬àBàBàBàKà	’ö\HY€€ö\›	Œà¬à\Ÿ\Œà¬à¬àò[YNà	–Xú€‹ú[€âÀà›\úŒàÃçKàX€€éà	¯´!ªÓ#…Àà€€‹éà	›^XõYKM	Ààô–€€‹éà	ÿôÀXõYKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXõYKMLÃÃ	Àà\ÿ‹ö\[€éà	’ö\KXX›[€àYYXÿ][€àÿY[ô…Àà⁄]“\[ö[ôŒà¬à	—”LK“T[ô€XÿY€€àôXŸ\‹ú»X›]ò][ô…Àà	–€€\^Y]Xõ€X»⁄[ôŸ\»[ö]X][ô…Àà	”YYXÿ][€à[ù\ö[ô»⁄\ò›[][€â¬àKà⁄]—^X›à¬à	”Z[ö[X[YôôX›»ö\ú››\ú…Àà	‘‹‹⁄XõH[ô\ôﬁH⁄[ôŸ\…Àà	‘⁄YHYôôX›»[õZŸ[HY]	¬àKà\Œà¬à	—X]õ‹õX[HŸ^IÀà	‘›^HYò]Y	Àà	”[€ö]‹à›»[›HôY[	¬àBàKà¬àò[YNà	‘ö\⁄[ô»YôôX›	Àà›\úŒàÃçKàX€€éà	¸'‰‚	Àà€€‹éà	›^^Y[›ÀM	Ààô–€€‹éà	ÿôÀ^Y[›ÀMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã^Y[›ÀMLÃÃ	Àà\ÿ‹ö\[€éà	’ö\HôXŸ\‹àX›]ò][€àùZ[[ô…Àà⁄]“\[ö[ôŒà¬à	–[ôYHôXŸ\‹ú»ôX€€Z[ô»X›]ôIÀà	–\]]H›\ô\‹⁄[€à›\ù[ô…Àà	”Y]Xõ€X»ò]H[ò‹ôX\⁄[ô…Àà	—[ô\ôﬁH^[ô]\ôHö\⁄[ô…¬àKà⁄]—^X›à¬à	”õ›XŸXXõH\]]HôYX›[€âÀà	‘‹‹⁄XõH[ô\ôﬁHõ€‹›	Àà	”Z[“HYôôX›»X^H›\ù	¬àKà\Œà¬à	‘ôYXŸH‹ù[€à⁄^ô\…Àà	“Y⁄õ›Z[àö[‹ö]IÀà	”õ‹õX[X›]ö]H[ò€›\òYŸY	¬àBàKà¬àò[YNà	‘XZ»›Ÿ\âÀà›\úŒàÕMóKàX€€éà	¸'Â)IÀà€€‹éà	›^Y‹ôY[ãML	Ààô–€€‹éà	ÿôÀY‹ôY[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãY‹ôY[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”X^[][Hö\KXY€€ö\›YôôX›	Àà⁄]“\[ö[ôŒà¬à	‘XZ»õ€Ÿ]ô[»X⁄Y]ôY	Àà	–[ôYH]ÿ^\»X^[X[HX›]ôIÀà	‘›õ€ôŸ\›\]]H›\ô\‹⁄[€âÀà	”X^[][Hò]ù\õö[ô…Àà	“Y⁄\›[ô\ôﬁH^[ô]\ôI¬àKà⁄]—^X›à¬à	—ò[X]X»[ôŸ\àôYX›[€âÀà	“[ò‹ôX\ŸYX\ùò]H‹‹⁄XõIÀà	—[ö[òŸY\õ[ŸŸ[ô\⁄\…Àà	‘›õ€ôŸ\›YôôX›»ŸàHŸYZ…¬àKà\Œà¬à	”[€ö]‹àX\ùò]HYà€€òŸ\õôY	Àà	‘ö[‹ö]^ôHõ›Z[à[ùZŸIÀà	‘ö[YHò]‹‹»⁄[ô›…Àà	‘›^HŸ[Yò]Y	Àà	”\›[à»[›\àõŸI¬àBàKà¬àò[YNà	–‹ùZ\ŸH\ŸIÀà›\úŒàŒMãMKàX€€éà	¯¶®IÀà€€‹éà	›^XﬁX[ãM	Ààô–€€‹éà	ÿôÀXﬁX[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXﬁX[ãMLÃÃ	Àà\ÿ‹ö\[€éà	‘›\›Z[ôYö\HX›[€âÀà⁄]“\[ö[ôŒà¬à	‘›XõH\ò\]]X»]ô[…Àà	–€€ú⁄\›[ù][K\]ÿ^HYôôX›…Àà	”‹[X[Y]Xõ€X»›]I¬àKà⁄]—^X›à¬à	—^Ÿ[[ù\]]H€€ùõ€	Àà	‘›XYH[]ò]Y[ô\ôﬁIÀà	‘⁄YHYôôX›»\›X[HZ[ö[X[	Àà	–ô\››ô\ò[ôY[[ô…¬àKà\Œà¬à	—‹ôX][YHõ‹à[ù[úŸH€‹ö€›]…Àà	–õŸHôX€€\‹⁄][€à[‹›YôôX›]ôIÀà	”XZ[ùZ[àYò][€à[ô[X›õ€]\…Àà	—[öõﬁHH›Ÿ\ôù[YôôX›…¬àBàKà¬àò[YNà	—X€[ö[ô…Àà›\úŒàÃMMéKàX€€éà	¸'‰‚IÀà€€‹éà	›^[‹ò[ôŸKM	Ààô–€€‹éà	ÿôÀ[‹ò[ôŸKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã[‹ò[ôŸKMLÃÃ	Àà\ÿ‹ö\[€éà	—YôôX›»\\ö[ô»ŸôâÀà⁄]“\[ö[ôŒà¬à	”YYXÿ][€à]ô[»õ‹[ô…Àà	‘ôXŸ\‹àX›]ö]HX‹ôX\⁄[ô…Àà	—YôôX›»‹òYX[HòY[ô…¬àKà⁄]—^X›à¬à	–\]]H€›€Hô]\õö[ô…Àà	—[ô\ôﬁHõ‹õX[^ö[ô…Àà	‘›[YôôX›]ôKù]\‹…¬àKà\Œà¬à	‘›^HZ[ôù[⁄]õ€Ÿ	Àà	‘ô\\ôHõ‹àô^‹ŸIÀà	”õ‹õX[ò[ú⁄][€â¬àBàKà¬àò[YNà	’õ›Y⁄	Àà›\úŒàÃMéNNWKàX€€éà	¸'‰¢IÀà€€‹éà	›^\ôYM	Ààô–€€‹éà	ÿôÀ\ôYMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã\ôYMLÃÃ	Àà\ÿ‹ö\[€éà	‘ôKY‹ŸHôYYY	Àà⁄]“\[ö[ôŒà¬à	”›»YYXÿ][€à]ô[…Àà	–ò\Ÿ[[ôH›]Hô]\õö[ô…Àà	’[YHõ‹àô^[öôX›[€â¬àKà⁄]—^X›à¬à	“[ôŸ\à[‹ôHõ‹õX[	Àà	—[ô\ôﬁHò\Ÿ[[ôIÀà	‘ôXYHõ‹àô^ﬁX€I¬àKà\Œà¬à	“[öôX›Ÿ^IÀà	‘õ›]H[öôX›[€à⁄]IÀà	–ﬁX€Hô\›\ù»€[‹úõ›…¬àBàBàBàKà	“‹õ[€ôIŒà¬à\Ÿ\Œà¬à¬àò[YNà	”ÿY[ô…Àà›\úŒàÃçKàX€€éà	¯´!ªÓ#…Àà€€‹éà	›^XõYKM	Ààô–€€‹éà	ÿôÀXõYKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXõYKMLÃÃ	Àà\ÿ‹ö\[€éà	’\›‹›\õ€ôH[ù\ö[ô»ﬁ\›[IÀà⁄]“\[ö[ôŒà¬à	—\›\à€›€Hô[X\⁄[ô»‹õ[€ôIÀà	“[ö]X[Xú€‹ú[€àúõ€H[öôX›[€à⁄]IÀà	–õ€Ÿ]ô[»ôY⁄[õö[ô»»ö\ŸI¬àKà⁄]—^X›à¬à	”õ»[[YYX]HYôôX›…Àà	‘‹‹⁄XõH[öôX›[€à⁄]H€‹ô[ô\‹…Àà	”õ‹õX[[ô\ôﬁH]ô[…¬àKà\Œà¬à	”X\‹ÿYŸH[öôX›[€à⁄]HŸ[ùIÀà	‘›^HX›]ôHHõ€[›\»Xú€‹ú[€âÀà	—^X›YôôX›»€[‹úõ›»€ùÿ\ô	¬àBàKà¬àò[YNà	‘ö\⁄[ô…Àà›\úŒàÃçÃóKàX€€éà	¸'‰‚	Àà€€‹éà	›^^Y[›ÀM	Ààô–€€‹éà	ÿôÀ^Y[›ÀMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã^Y[›ÀMLÃÃ	Àà\ÿ‹ö\[€éà	’\›‹›\õ€ôH]ô[»€[Xö[ô…Àà⁄]“\[ö[ôŒà¬à	–õ€Ÿ\›‹›\õ€ôH[ò‹ôX\⁄[ô…Àà	–[ôõŸŸ[àôXŸ\‹ú»X›]ò][ô…Àà	‘õ›Z[àﬁ[ù\⁄\»ò[\[ô»\	¬àKà⁄]—^X›à¬à	—[ô\ôﬁH]ô[»[\õ›ö[ô…Àà	”[€Ÿ[ö[òŸ[Y[ù›\ù[ô…Àà	”XöY»X^H[ò‹ôX\ŸIÀà	”[›]ò][€à[\õ›ö[ô…¬àKà\Œà¬à	—‹ôX][YH»›\ù€‹ö€›]…Àà	“[ò‹ôX\ŸYõ›Z[àﬁ[ù\⁄\»HX][‹ôHõ›Z[âÀà	”õ›XŸH[€Ÿ[ô[ô\ôﬁH[\õ›ô[Y[ù…¬àBàKà¬àò[YNà	‘XZ…Àà›\úŒàÕÃãMóKàX€€éà	¸'‰™âÀà€€‹éà	›^Y‹ôY[ãML	Ààô–€€‹éà	ÿôÀY‹ôY[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãY‹ôY[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”X^[][H\›‹›\õ€ôH]ô[…Àà⁄]“\[ö[ôŒà¬à	‘XZ»õ€Ÿ€€òŸ[ùò][€âÀà	”X^[][H[òXõ€X»YôôX›…Àà	”‹[X[[ôõŸŸ[àôXŸ\‹àX›]ò][€âÀà	‘›õ€ôŸ\›]\ÿ€KXùZ[[ô»⁄[ô›…¬àKà⁄]—^X›à¬à	‘XZ»[ô\ôﬁH[ô[›]ò][€âÀà	–ô\›ﬁ[H\ôõ‹õX[òŸIÀà	“ZY⁄[ôYXöY…Àà	–€€ôöY[ùõÿ›\ŸY[€Ÿ	Àà	‘‹‹⁄XõH⁄[H⁄⁄[ãÿX€ôI¬àKà\Œà¬à	‘ÿ⁄Y[HX]ûH€‹ö€›]»õ›…Àà	”X^[][H]\ÿ€H‹õ›››[ùX[	Àà	“Y⁄õ›Z[à[ùZŸH‹ö]Xÿ[	Àà	”X[òYŸH⁄⁄[àYàôYYY	Àà	”]ô\òYŸHHXZ»\ôõ‹õX[òŸI¬àBàKà¬àò[YNà	–‹ùZ\ŸIÀà›\úŒàŒMãMKàX€€éà	¯¶®IÀà€€‹éà	›^XﬁX[ãM	Ààô–€€‹éà	ÿôÀXﬁX[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXﬁX[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”‹[X[\ò\]]X»ò[ôŸIÀà⁄]“\[ö[ôŒà¬à	‘›XõH[]ò]Y\›‹›\õ€ôIÀà	–€€ú⁄\›[ù[òXõ€X»YôôX›…Àà	‘›\›Z[ôY[ô\ôﬁH[ôôX€›ô\ûI¬àKà⁄]—^X›à¬à	—^Ÿ[[ù›ô\ò[ôY[[ô…Àà	‘›XõHY⁄[ô\ôﬁIÀà	—€€ŸôX€›ô\ûHô]ŸY[à€‹ö€›]…Àà	–€€ú⁄\›[ù[€Ÿ	¬àKà\Œà¬à	”XZ[ùZ[àòZ[ö[ô»[ù[ú⁄]IÀà	—õÿ›\»€àõŸ‹ô\‹⁄]ôH›ô\õÿY	Àà	–ô\›[YHõ‹à€€ú⁄\›[ùÿZ[ú…Àà	—[öõﬁHH›XõHYôôX›…¬àBàKà¬àò[YNà	—X€[ö[ô…Àà›\úŒàÃMMéKàX€€éà	¸'‰‚IÀà€€‹éà	›^[‹ò[ôŸKM	Ààô–€€‹éà	ÿôÀ[‹ò[ôŸKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã[‹ò[ôŸKMLÃÃ	Àà\ÿ‹ö\[€éà	”]ô[»õ‹[ô»›ÿ\ôò\Ÿ[[ôIÀà⁄]“\[ö[ôŒà¬à	’\›‹›\õ€ôH]ô[»ò[[ô…Àà	‘›[Xõ›ôHò\Ÿ[[ôIÀà	—YôôX›»‹òYX[HôYX⁄[ô…¬àKà⁄]—^X›à¬à	—[ô\ôﬁH›[€€Ÿù]X€[ö[ô…Àà	‘›[]ôH\ò\]]X»YôôX›…Àà	–\õÿX⁄[ô»ô^‹ŸH[YI¬àKà\Œà¬à	’òZ[ö[ô»›[õŸX›]ôIÀà	”õ‹õX[»ôY[€Y⁄⁄[ôŸ\…Àà	”ô^[öôX›[€à€€Z[ô»€€€â¬àBàKà¬àò[YNà	’õ›Y⁄	Àà›\úŒàÃMéNNWKàX€€éà	¸'‰¢IÀà€€‹éà	›^\ôYM	Ààô–€€‹éà	ÿôÀ\ôYMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã\ôYMLÃÃ	Àà\ÿ‹ö\[€éà	”ô^[öôX›[€àôYYY	Àà⁄]“\[ö[ôŒà¬à	”]ô[»]‹à\õÿX⁄[ô»ò\Ÿ[[ôIÀà	’[YH»ôKY‹ŸHõ‹à›Xö[]IÀà	–]õ⁄Yõ€€ôŸYõ›Y⁄	¬àKà⁄]—^X›à¬à	—[ô\ôﬁHô]\õö[ô»»ò\Ÿ[[ôIÀà	‘ôXYHõ‹àô^[öôX›[€âÀà	”X^Hõ›XŸH€Y⁄[€Ÿ\Yà[^YY	¬àKà\Œà¬à	“[öôX›Ÿ^Hõ‹à€€ú⁄\›[òﬁIÀà	—€ó	›]]ô[»õ‹€»€ô…Àà	‘›XõH]ô[»Hô]\àô\›[…¬àBàBàBàKà	‘\YIŒà¬à\Ÿ\Œà¬à¬àò[YNà	‘ò\YXú€‹ú[€âÀà›\úŒàÃóKàX€€éà	¯¶®IÀà€€‹éà	›^^Y[›ÀM	Ààô–€€‹éà	ÿôÀ^Y[›ÀMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã^Y[›ÀMLÃÃ	Àà\ÿ‹ö\[€éà	—ò\›XX›[ô»\YH[ù\ö[ô»ﬁ\›[IÀà⁄]“\[ö[ôŒà¬à	‘ò\Y\YHXú€‹ú[€âÀà	‘]ZX⁄»⁄\ò›[][€âÀà	“[[YYX]HôXŸ\‹àö[ô[ô…¬àKà⁄]—^X›à¬à	—YôôX›»›\ù[ô»⁄][àZ[ù]\»»›\ú…Àà	—\[ô[ô»€à\YH\IÀà	”Z[ö[X[⁄YHYôôX›…¬àKà\Œà¬à	—YôôX›»ôY⁄[à]ZX⁄€IÀà	‘›^HYò]Y	Àà	”[€ö]‹à›»[›Hô\‹€ô	¬àBàKà¬àò[YNà	‘XZ»YôôX›	Àà›\úŒàÃãKàX€€éà	¸'„´…Àà€€‹éà	›^Y‹ôY[ãML	Ààô–€€‹éà	ÿôÀY‹ôY[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãY‹ôY[ãMLÃÃ	Àà\ÿ‹ö\[€éà	”X^[][H\YHX›]ö]IÀà⁄]“\[ö[ôŒà¬à	‘XZ»õ€Ÿ€€òŸ[ùò][€âÀà	”X^[][HôXŸ\‹àX›]ò][€âÀà	‘›õ€ôŸ\›\ò\]]X»YôôX›…¬àKà⁄]—^X›à¬à	—ù[\YHYôôX›»X›]ôIÀà	“X[[ôÀ‹ôX€›ô\ûHõÿŸ\‹Ÿ\»[ö[òŸY	Àà	”‹[X[\ò\]]X»⁄[ô›…¬àKà\Œà¬à	–ô\›[YHõ‹à\ôŸ]YX›]ö]IÀà	“X[[ô»\Y\Œàô\›‹ôX€›ô\ûIÀà	—“\Y\Œàò\›Y›]HYX[	Àà	—YôôX›»\ôH›õ€ôŸ\›õ›…¬àBàKà¬àò[YNà	–X›]ôH\ŸIÀà›\úŒàŒçKàX€€éà	¯¶®IÀà€€‹éà	›^XﬁX[ãM	Ààô–€€‹éà	ÿôÀXﬁX[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXﬁX[ãMLÃÃ	Àà\ÿ‹ö\[€éà	–€€ù[ùYY\ò\]]X»X›]ö]IÀà⁄]“\[ö[ôŒà¬à	‘›\›Z[ôYô[ôYöX⁄X[YôôX›…Àà	”€ô€⁄[ô»ô\Z\àõÿŸ\‹Ÿ\…Àà	—‹òYX[€X\ò[òŸHôY⁄[õö[ô…¬àKà⁄]—^X›à¬à	—YôôX›»›[ô\Ÿ[ù	Àà	‘ôX€›ô\ûHõÿŸ\‹Ÿ\»€€ù[ùZ[ô…Àà	—‹òYX[H[Z[ö\⁄[ô…¬àKà\Œà¬à	–€€ù[ùYHõ‹õX[X›]ö]Y\…Àà	”][\HZ[H‹Ÿ\»Ÿù[à\ŸY	Àà	”ô^‹ŸH[Z[ô»\[ô»€à\YI¬àBàKà¬àò[YNà	”ô^‹ŸIÀà›\úŒàÃçNNWKàX€€éà	¸'‰¢IÀà€€‹éà	›^[‹ò[ôŸKM	Ààô–€€‹éà	ÿôÀ[‹ò[ôŸKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã[‹ò[ôŸKMLÃÃ	Àà\ÿ‹ö\[€éà	‘ôXYHõ‹àô^[öôX›[€âÀà⁄]“\[ö[ôŒà¬à	‘\YH[‹›H€X\ôY	Àà	—YôôX›»ô\€€ôY	Àà	’[YHõ‹àô^‹ŸHYàÿ⁄Y[Y	¬àKà⁄]—^X›à¬à	–òX⁄»»ò\Ÿ[[ôIÀà	‘ôXYHõ‹àô^[öôX›[€âÀà	—úô\]Y[òﬁH\[ô»€àõ›ÿ€€	¬àKà\Œà¬à	–îÀLMMÀ’ãMLàŸù[àZ[H‹àS—	Àà	—“\Y\ŒàŸù[à][\H[Y\»Z[IÀà	—õ€›»[›\àõ›ÿ€€	Àà	–€€ú⁄\›[òﬁHX]\ú»õ‹àô\›[…¬àBàBàBàKà	‘—TìIŒà¬à\Ÿ\Œà¬à¬àò[YNà	–Xú€‹ú[€âÀà›\úŒàÃóKàX€€éà	¯´!ªÓ#…Àà€€‹éà	›^XõYKM	Ààô–€€‹éà	ÿôÀXõYKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãXõYKMLÃÃ	Àà\ÿ‹ö\[€éà	”‹ò[YYXÿ][€àXú€‹òö[ô…Àà⁄]“\[ö[ôŒà¬à	—[ò€€Z\[ôHXú€‹òö[ô»úõ€H›]	Àà	—\›õŸŸ[àôXŸ\‹àõÿ⁄ÿYHôY⁄[õö[ô…Àà	‘]Z]\ûH⁄Y€ò[[ô»›\ù[ô»»⁄Yù	¬àKà⁄]—^X›à¬à	”õ»[[YYX]HYôôX›…Àà	’ZŸH⁄]‹à⁄]›]õ€Ÿ\»ô\ÿ‹öXôY	Àà	–€€ú⁄\›[ùZ[H[Z[ô»[…¬àKà\Œà¬à	’ZŸH]ÿ[YH[YHXX⁄^IÀà	‘›^H€€ú⁄\›[ù⁄]‹⁄[ô…Àà	”õ›H[ûHö\›X[⁄[ôŸ\»»ô\‹ù	¬àBàKà¬àò[YNà	‘ö\⁄[ô…Àà›\úŒàÕãLóKàX€€éà	¸'‰‚	Àà€€‹éà	›^^Y[›ÀM	Ààô–€€‹éà	ÿôÀ^Y[›ÀMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã^Y[›ÀMLÃÃ	Àà\ÿ‹ö\[€éà	”—î“›[][][€àùZ[[ô…Àà⁄]“\[ö[ôŒà¬à	—\›õŸŸ[àôXŸ\‹ú»õÿ⁄ŸY[à\›[[]\À‹]Z]\ûIÀà	”[ôî“ô[X\ŸH[ò‹ôX\⁄[ô…Àà	”ò]\ò[\›‹›\õ€ôHõŸX›[€àò[\[ô»\	¬àKà⁄]—^X›à¬à	—YôôX›»ùZ[[ô»õ›Y⁄H^IÀà	–›[][]]ôHYôôX››ô\à^\»»ŸYZ‹…Àà	‘XZ»ô[ôYö]⁄]›XYK\›]H‹⁄[ô…¬àKà\Œà¬à	—⁄]ôH]x†$ÃàŸYZ‹»õ‹à›XYH›]IÀà	’òX⁄»[€Ÿ[ô[ô\ôﬁHYà\⁄\ôY	Àà	‘ô\‹ù[ûHö\›X[ﬁ[\€\…¬àBàKà¬àò[YNà	‘XZ…Àà›\úŒàÃLãçKàX€€éà	¸'„´…Àà€€‹éà	›^Y‹ôY[ãML	Ààô–€€‹éà	ÿôÀY‹ôY[ãMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ãY‹ôY[ãMLÃÃ	Àà\ÿ‹ö\[€éà	’\ò\]]X»YôôX›ôYõ‹ôHô^‹ŸIÀà⁄]“\[ö[ôŒà¬à	‘›\›Z[ôY—î“[]ò][€âÀà	”ò]\ò[\›‹›\õ€ôH›\‹ù	Àà	—\›õŸŸ[à[Ÿ[][€àX›]ôI¬àKà⁄]—^X›à¬à	‘›XõHYôôX›⁄]Z[H\ŸIÀà	‘›XYH›]HYù\àx†$ÃàŸYZ‹»Ÿà‹⁄[ô…Àà	”€ô»[ã[YôHYX[ú»]ô[»ùZ[›ô\à[YI¬àKà\Œà¬à	’ZŸHô^‹ŸH]\›X[[YIÀà	–€€ú⁄\›[òﬁHX]\ú»[‹ôH[à^X››\âÀà	”[€ö]‹à⁄]Xú»\»\ôX›Y	¬àBàKà¬àò[YNà	”ô^‹ŸIÀà›\úŒàÃçNNWKàX€€éà	¸'‰¢âÀà€€‹éà	›^[‹ò[ôŸKM	Ààô–€€‹éà	ÿôÀ[‹ò[ôŸKMLÃL	Ààõ‹ô\ê€€‹éà	ÿõ‹ô\ã[‹ò[ôŸKMLÃÃ	Àà\ÿ‹ö\[€éà	’[YHõ‹àô^Z[H‹ŸIÀà⁄]“\[ö[ôŒà¬à	”]ô[»›[ô\Ÿ[ù
+€ô»[ã[YôJIÀà	–›[][]]ôHYôôX›XZ[ùZ[ôY⁄]Z[H‹⁄[ô…Àà	‘ôXYHõ‹àô^‹ŸH»XZ[ùZ[à›XYH›]I¬àKà⁄]—^X›à¬à	’ZŸHŸ^x†&\»‹ŸH»›^H€àÿ⁄Y[IÀà	‘⁄⁄\[ô»ÿ[à⁄Yù›XYH›]IÀà	—YôôX›»\ú⁄\›YH»€ô»[ã[YôI¬àKà\Œà¬à	’ZŸH[›\àZ[H‹ŸHŸ^IÀà	‘ÿ[YH[YHZ[Hõ‹àô\›€€ú⁄\›[òﬁIÀà	“YàZ\‹ŸYZŸH⁄[àô[Y[Xô\ôY\à[›\àõ›ÿ€€	¬àBàBàBàBüN¬Çò€€ú›SíëP’S”ó‘ì’UT»H…‘›XîIÀ	“SI◊N¬ò€€ú›ì—W”––US”î»H…‘›€XX⁄	À	’Y⁄
+Yù
+IÀ	’Y⁄
+öY⁄
+IÀ	–\õH
+Yù
+IÀ	–\õH
+öY⁄
+IÀ	—€]H
+Yù
+IÀ	—€]H
+öY⁄
+IÀ	’\\à\õIÀ	–Xô€Y[â◊N¬ò€€ú›“QW—QëëP’»H…”ò]\ŸXIÀ	—ò]Y›YIÀ	“XYX⁄IÀ	“[öôX›[€à⁄]HZ[âÀ	—X\úöXIÀ	–€€ú›\][€âÀ	—^ûö[ô\‹…À	–\]]H‹‹…À	–X⁄YôYõ^	À	’õ€Z][ô…À	“[ú€€[öXIÀ	–õÿ][ô…◊N¬ò€€ú›QPT’TëSQSï’TT»H…”ôX⁄…À	–⁄\›	À	’ÿZ\›	À	“\…À	–öXŸ\
+
+IÀ	–öXŸ\
+äIÀ	’Y⁄
+
+IÀ	’Y⁄
+äIÀ	–ÿ[à
+
+IÀ	–ÿ[à
+äI◊N¬ÇãÀ»[\éà\úŸH»H]Kàõ‹àZ[àVVVKSSKQ
+X⁄Ÿ\ú Kÿÿ[ZYöY⁄]^KÇãÀ»õ‹àT”»]][Y\»
+8†)ï8†)ñà»ŸôúŸ]
+K\ŸHH
+äõÿÿ[
+äàÿ[[ô\à^H]ÿÿ[ZYöY⁄8†%õ›U»VVVKSSKQ€XŸBãÀ»
+]⁄YùY[öôX›[€ú»	à⁄\ù›»€ôH^H[àTÀŸ]ô[ö[ô¯†$ﬁõ€ôHÿ\Ÿ\ KÇò€€ú›\úŸSÿÿ[]HH
+]T›ö[ô HOà¬àYà
+]T›ö[ô»[ú›[òŸ[Ÿà]JHô]\õàô]»]J]T›ö[ôÀôŸ][YJ
+JN¬à€€ú›»H\[Ÿà]T›ö[ô»OOH	‹›ö[ô…»»]T›ö[ôÀùö[J
+Hà›ö[ô ]T›ö[ô Kùö[J
+N¬àYà
+◊óÕKWÃüKWÃüIÀù\›
+ JH¬à€€ú›ﬁKKHHÀú‹]
+	ÀI KõX\
+ù[Xô\äN¬àYà
+^H[HY
+Hô]\õàô]»]JòSäN¬àô]\õàô]»]JKHHK
+N¬àBàYà
+◊óÕKWÃüKWÃüUÀù\›
+ HÀô[ô’⁄]
+	÷â JH¬à€€ú›[ú›Hô]»]J N¬àYà
+\”òSä[ú›ôŸ][YJ
+JJHô]\õàô]»]JòSäN¬àô]\õàô]»]J[ú›ôŸ]ù[YX\ä
+K[ú›ôŸ][€ù
+
+K[ú›ôŸ]]J
+JN¬àBàYà
+◊óÕKWÃüKWÃüKÀù\›
+ JH¬à€€ú›ﬁKKHHÀú€XŸJL
+Kú‹]
+	ÀI KõX\
+ù[Xô\äN¬àYà
+^H[HY
+Hô]\õàô]»]JòSäN¬àô]\õàô]»]JKHHK
+N¬àBà€€ú›ﬁYX\ã[€ù^WHHÀú‹]
+	ÀI KõX\
+ù[Xô\äN¬àô]\õàô]»]JYX\ã[€ùHK^JN¬üN¬ÇãÀ»Ÿ^H\»VVVKSSKQ[àÿÿ[[Y^õ€ôH
+ö^\»]HX⁄Ÿ\à⁄›⁄[ô»õô^^Hà[à€€YH[Y^õ€ô\ Bò€€ú›Ÿ]Ÿ^Sÿÿ[H
+
+HOà¬à€€ú›Hô]»]J
+N¬à€€ú›HHôŸ]ù[YX\ä
+N¬à€€ú›HH›ö[ô ôŸ][€ù
+
+H
+»JKúY›\ù
+ã	Ã	 N¬à€€ú›^HH›ö[ô ôŸ]]J
+JKúY›\ù
+ã	Ã	 N¬àô]\õà	ﬁ_KI€_KIŸ^_X¬üN¬ò€€ú›õ‹õX]]Sÿÿ[H
+
+HOà¬à€€ú›HHôŸ]ù[YX\ä
+N¬à€€ú›HH›ö[ô ôŸ][€ù
+
+H
+»JKúY›\ù
+ã	Ã	 N¬à€€ú›^HH›ö[ô ôŸ]]J
+JKúY›\ù
+ã	Ã	 N¬àô]\õà	ﬁ_KI€_KIŸ^_X¬üN¬ãÀ»õ‹õX[^ôH[ûH]H›ö[ô»»VVVKSSKQõ‹àÿ[[ô\ãY^H€€\\ö\€€à
+T”»8°§à
+äõÿÿ[
+äàÿ[[ô\à^JBò€€ú›–ÿ[[ô\ë^HH
+]T›ö[ô HOà¬àYà
+Y]T›ö[ô»	âà]T›ö[ô»OOH
+Hô]\õà	…Œ¬àYà
+]T›ö[ô»[ú›[òŸ[Ÿà]JH¬à€€ú›H]T›ö[ôŒ¬àYà
+\”òSäôŸ][YJ
+JJHô]\õà	…Œ¬àô]\õàõ‹õX]]Sÿÿ[
+ô]»]JôŸ]ù[YX\ä
+KôŸ][€ù
+
+KôŸ]]J
+JJN¬àBà€€ú›»H›ö[ô ]T›ö[ô Kùö[J
+N¬àYà
+◊óÕKWÃüKWÃüIÀù\›
+ JHô]\õàŒ¬à€€ú›H\úŸSÿÿ[]J]T›ö[ô N¬àô]\õà\”òSäôŸ][YJ
+JH»	…»àõ‹õX]]Sÿÿ[
+
+N¬üN¬ÇãÀ»ùYHYàò[YHZY[»Hò[Yÿ[[ô\à^H
+\ŸY€»òY€X[õ‹õYY[ùûH]\»€â›‹ò\⁄⁄\ù»‹à[ú⁄Y⁄ Bò€€ú›\’ò[Y[ùûQ]HH
+ò[YJHOà¬à€€ú›^HH–ÿ[[ô\ë^Jò[YJN¬àYà
+Y^JHô]\õàò[ŸN¬à€€ú›H\úŸSÿÿ[]J^JN¬àô]\õà	âàù[Xô\ãö\—ö[ö]JôŸ][YJ
+JN¬üN¬ÇãÀ»€‹ùŸZY⁄[ùöY\»ûH]H[àY
+ÿ[YKY^H‹ô\àH[ùûH‹ô\äKà\ŸHõ‹àúô]ö[›\»à»ò›\úô[ùà»ú›\ùãÇò€€ú›€‹ùŸZY⁄ûQ]P\ÿ»H
+[ùöY\ HOàÀããô[ùöY\◊Kú€‹ù
+
+KäHOà¬à€€ú›H\úŸSÿÿ[]JKô]JHH\úŸSÿÿ[]Jãô]JN¬àô]\õàOOH»à
+
+KöY
+HH
+ãöY
+JN¬üJN¬ò€€ú›€‹ùŸZY⁄ûQ]Q\ÿ»H
+[ùöY\ HOàÀããô[ùöY\◊Kú€‹ù
+
+KäHOà¬à€€ú›H\úŸSÿÿ[]Jãô]JHH\úŸSÿÿ[]JKô]JN¬àô]\õàOOH»à
+
+ãöY
+HH
+KöY
+JN¬üJN¬Çò€€ú›Ÿ]öX[ô[XZ[ö[ô”Y»H
+äHOà¬àYà
+]äHô]\õà¬à€€ú›àHãúô[XZ[ö[ô”YŒ¬àYà
+àOOH[ôYö[ôY	âààOOHù[	âà›ö[ô äHOOH	…»	âàZ\”òSäù[Xô\ääJJHô]\õàù[Xô\ääN¬à€€ú›Hãù›[YŒ¬àYà
+OOH[ôYö[ôY	âàOOHù[	âàZ\”òSäù[Xô\ä
+JJHô]\õàù[Xô\ä
+N¬àô]\õà¬üN¬Çã äàõ‹öX[»⁄]õ»ô[XZ[ö[ô»õŸX›
+[ùô[ù‹ûH[\JKà
+ã¬ò€€ú›ù[ôQ[\UöX[»H
+\›
+HOà¬àYà
+P\úò^Kö\–\úò^J\›
+JHô]\õà◊N¬àô]\õà\›ôö[\ä
+äHOàŸ]öX[ô[XZ[ö[ô”Y äHà
+N¬üN¬Çò€€ú›\[»H
+
+HOà¬à€€ú›¬à\Ÿ\ãà]]ÿY[ôŒà›\Xò\ŸP]]ÿY[ôÀà\–€€ôöY›\ôYà›\Xò\ŸP€€ôöY›\ôYà[ô[ô–€›Yô\›‹ôKàô\€€ôP€›Yô\›‹ôKà⁄Y€í[éà›\Xò\ŸT⁄Y€í[ãà⁄Y€ï\à›\Xò\ŸT⁄Y€ï\à⁄Y€ì›]à›\Xò\ŸT⁄Y€ì›]àﬁ[ò”õ›Œà›\Xò\ŸTﬁ[ò”õ›ÀàHH\ŸT›\Xò\ŸP]]
+
+N¬à€€ú›ÿ€›Y[XZ[Ÿ]€›Y[XZ[HH\ŸT›]J	… N¬à€€ú›ÿ€›Y\‹›€‹ôŸ]€›Y\‹›€‹ôHH\ŸT›]J	… N¬à€€ú›ÿ€›Y]]Y\‹ÿYŸKŸ]€›Y]]Y\‹ÿYŸWHH\ŸT›]J	… N¬à€€ú›ÿ€›Yù\ﬁKŸ]€›Yù\ﬁWHH\ŸT›]Jò[ŸJN¬à€€ú›ÿ€›Y‹›]Ÿ]€›Y‹›]HH\ŸT›]J
+
+HOà¬àûH¬àô]\õà\[Ÿàÿÿ[›‹òYŸHOOH	›[ôYö[ôY	»	âàÿÿ[›‹òYŸKôŸ]][J	‹\[ÀX€›Y[‹[›]	 HOOH	›ùYIŒ¬àHÿ]⁄¬àô]\õàò[ŸN¬àBàJN¬à€€ú›⁄\”€õ[ôKŸ]\”€õ[ôWHH\ŸT›]J
+
+HOà
+\[Ÿàò]öYÿ]‹àOOH	›[ôYö[ôY	»»ò]öYÿ]‹ãõ€ì[ôHàùYJJN¬à€€ú›ÿòX⁄Ÿ‹õ›[ôﬁ[ò—\úõ‹ãŸ]òX⁄Ÿ‹õ›[ôﬁ[ò—\úõ‹óHH\ŸT›]J	… N¬Çà€€ú›ÿX›]ôUXãŸ]X›]ôUXóHH\ŸT›]J	‹›[[X\ûI N¬à€€ú››ŸZY⁄[ùöY\ÀŸ]ŸZY⁄[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›⁄[öôX›[€ë[ùöY\ÀŸ][öôX›[€ë[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›€YX\›\ô[Y[ù[ùöY\ÀŸ]YX\›\ô[Y[ù[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›‹õŸ‹ô\‹‘›‹ÀŸ]õŸ‹ô\‹‘›‹◊HH\ŸT›]J◊JN¬à€€ú›‹ÿ⁄Y[\ÀŸ]ÿ⁄Y[\◊HH\ŸT›]J◊JN¬à€€ú››]ò][€î[úÀŸ]]ò][€î[ú◊HH\ŸT›]J◊JN¬à€€ú›⁄õ›\õò[[ùöY\ÀŸ]õ›\õò[[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›‹⁄›–Yõ‹õKŸ]⁄›–Yõ‹õWHH\ŸT›]Jò[ŸJN¬à€€ú›⁄[öôX›[€í\›‹ûT€‹ùŸ][öôX›[€í\›‹ûT€‹ùHH\ŸT›]J	ÿûSYY	 N»À»	ÿûSYY	»	ÿûQ]I¬à€€ú››ŸZY⁄\›‹ûQö[\ë]KŸ]ŸZY⁄\›‹ûQö[\ë]WHH\ŸT›]J	… N¬à€€ú›⁄[öôX›[€í\›‹ûQö[\ë]KŸ][öôX›[€í\›‹ûQö[\ë]WHH\ŸT›]J	… N¬à€€ú›⁄\”ÿY[ôÀŸ]\”ÿY[ô◊HH\ŸT›]JùYJN¬à€€ú›‹⁄›‘‹\⁄Ÿ]⁄›‘‹\⁄HH\ŸT›]JùYJN¬à€€ú›‹⁄›–Ÿ[Xúò][€ãŸ]⁄›–Ÿ[Xúò][€óHH\ŸT›]Jò[ŸJN¬à€€ú›ÿŸ[Xúò][€ìY\‹ÿYŸKŸ]Ÿ[Xúò][€ìY\‹ÿYŸWHH\ŸT›]J	… N¬à€€ú››\Ÿ\îõŸö[KŸ]\Ÿ\îõŸö[WHH\ŸT›]J»ZY⁄àÃ€ÿ[ŸZY⁄àåYò][€ë€ÿ[ﬁéàçJN¬à€€ú››[YTò[ôŸKŸ][YTò[ôŸWHH\ŸT›]J	ÿ[	 N¬à€€ú›ÿX›]ôU€€ŸX›[€ãŸ]X›]ôU€€ŸX›[€óHH\ŸT›]J	ÿÿ[›[]‹â N¬à€€ú›Ÿ^‹ùõ‹õX]Ÿ]^‹ùõ‹õX]HH\ŸT›]J	⁄ú€€â N»À»	⁄ú€€â»	ÿ‹›â¬à€€ú›ÿ‹›ï\KŸ]‹›ï\WHH\ŸT›]J	Ÿù[	 N»À»	Ÿù[	»	›ŸZY⁄	»	⁄[öôX›[€ú…¬à€€ú›‹⁄›’⁄\P€€ôö\õKŸ]⁄›’⁄\P€€ôö\õWHH\ŸT›]Jò[ŸJN¬à€€ú››⁄\P€€ôö\õP⁄X⁄ŸYŸ]⁄\P€€ôö\õP⁄X⁄ŸYHH\ŸT›]Jò[ŸJN¬à€€ú›‹⁄›—‹ò\Xÿ[›[[X\ûKŸ]⁄›—‹ò\Xÿ[›[[X\ûWHH\ŸT›]Jò[ŸJN¬à€€ú›Ÿ‹ò\Xÿ[êù\ﬁKŸ]‹ò\Xÿ[êù\ﬁWHH\ŸT›]Jò[ŸJN¬à€€ú›‹ò\Xÿ[›[[X\ûPÿ\\ôTôYàH\ŸTôYäù[
+N¬à€€ú›‹⁄›’Ÿ[€€YS[Ÿ[Ÿ]⁄›’Ÿ[€€YS[Ÿ[HH\ŸT›]Jò[ŸJN¬à€€ú››Ÿ[€€YQ€ù⁄›–YÿZ[ãŸ]Ÿ[€€YQ€ù⁄›–YÿZ[óHH\ŸT›]Jò[ŸJN¬à€€ú››\]Tõ€\Ÿ]\]Tõ€\HH\ŸT›]Jù[
+N¬à€€ú›‹⁄›”›’öX[‹\Ÿ]⁄›”›’öX[‹\HH\ŸT›]Jò[ŸJN¬à€€ú›ô]ö[›\–X›]ôUXîôYàH\ŸTôYäù[
+N¬à€€ú›‹Ÿ[X›YöX[YŸ]Ÿ[X›YöX[YHH\ŸT›]Jù[
+N¬à€€ú››öX[ÀŸ]öX[◊HH\ŸT›]J◊JN¬à€€ú››öX[YYXÿ][€ãŸ]öX[YYXÿ][€óHH\ŸT›]J	‘Ÿ[XY€]YI N¬à€€ú››öX[›[YÀŸ]öX[›[Y◊HH\ŸT›]J	… N¬à€€ú››öX[[ö]Ÿ]öX[[ö]HH\ŸT›]J	€Y… N¬à€€ú››öX[òX’ÿ]\ì[Ÿ]öX[òX’ÿ]\ì[HH\ŸT›]J	… N»À»[ŸàòX»ÿ]\à\ŸYõ‹àôX€€ú›]][€Çà€€ú››öX[€€òŸ[ùò][€ëõ‹ì[Ÿ]öX[€€òŸ[ùò][€ëõ‹ì[HH\ŸT›]J	… N»À»YÀ€[⁄[àöX[⁄^ôH\»[ù\ôY[à[à€€ú››öX[^\ûKŸ]öX[^\ûWHH\ŸT›]J	… N¬à€€ú››öX[ôX€€ú›]]YŸ]öX[ôX€€ú›]]YHH\ŸT›]Jò[ŸJN¬à€€ú››öX[ôX€€ú›]]Y]KŸ]öX[ôX€€ú›]]Y]WHH\ŸT›]J	… N¬à€€ú›ŸY][ô’öX[YŸ]Y][ô’öX[YHH\ŸT›]Jù[
+N¬à€€ú››öX[ô[XZ[ö[ô”YÀŸ]öX[ô[XZ[ö[ô”Y◊HH\ŸT›]J	… N¬ÇààÀ»‹ò\ö\⁄Xö[]H›]Bà€€ú››ö\⁄XõS[ô\ÀŸ]ö\⁄XõS[ô\◊HH\ŸT›]J»ŸZY⁄àùYKô[ôàùYHJN¬à€€ú›ÿ⁄\ùò[ôŸUŸYZ‹ÀŸ]⁄\ùò[ôŸUŸYZ‹◊HH\ŸT›]J
+N»À»H[LÇà€€ú›⁄[ú⁄Y⁄—^[ôYYYŸ][ú⁄Y⁄—^[ôYYYHH\ŸT›]Jù[
+N»À»YYXÿ][€àò[YH‹àù[à€€ú›⁄[ú⁄Y⁄‘⁄›”]ô[“[Ÿ][ú⁄Y⁄‘⁄›”]ô[“[HH\ŸT›]Jò[ŸJN¬à€€ú›⁄[ú⁄Y⁄–⁄\ùY[ìYYÀŸ][ú⁄Y⁄–⁄\ùY[ìYY◊HH\ŸT›]J
+
+HOàô]»Ÿ]
+
+JN»À»YYXÿ][€àò[Y\»Y[àúõ€H[öYöYY⁄\ùà€€ú›⁄[ú⁄Y⁄–⁄\ùò[ôŸKŸ][ú⁄Y⁄–⁄\ùò[ôŸWHH\ŸT›]J	Ã[I N»À»	Ã]…»	Ã[I»	Ã€I»	ÿ[	»õ‹à\›[X]Y]ô[»⁄\ùà€€ú›⁄[ú⁄Y⁄‘⁄YQYôôX›—^[ôYYYŸ][ú⁄Y⁄‘⁄YQYôôX›—^[ôYYYHH\ŸT›]Jù[
+N»À»YYXÿ][€àò[YH^[ôY[à⁄YHYôôX›»ûH^K‹àù[à€€ú››ŸYZ€Q‹ŸUŸZY⁄^€YYYYÀŸ]ŸYZ€Q‹ŸUŸZY⁄^€YYYY◊HH\ŸT›]J◊JN»À»YYò[Y\»Y[àúõ€HŸYZ€H‹ŸH	àŸZY⁄⁄[ôŸHXõBà äà›[à8†)ààÿ]8†%›\ùŸàXX⁄ÀY^HùX⁄Ÿ]õ‹àŸYZ€H‹ŸH	àŸZY⁄
+Yò][HH[€ô^JH
+ã¬à€€ú››ŸYZ€Q‹ŸUŸYZ‘›\ù”€ãŸ]ŸYZ€Q‹ŸUŸYZ‘›\ù”€óHH\ŸT›]JJN¬à€€ú›Ÿ€ÿ[›ZYPÿ]Y€‹ûRYŸ]€ÿ[›ZYPÿ]Y€‹ûRYHH\ŸT›]Jù[
+N»À»ù[HX⁄»H€ÿ[»YH]Z[öY]¬à€€ú›Ÿ€ÿ[›ZYTŸX\ò⁄Ÿ]€ÿ[›ZYTŸX\ò⁄HH\ŸT›]J	… N¬à€€ú›Ÿ€ÿ[\Ÿ\î›X⁄ÀŸ]€ÿ[\Ÿ\î›X⁄◊HH\ŸT›]J◊JN»À»YYXÿ][€àò[Y\»8†%€€òŸ\X[›X⁄»úõ€H€ÿ[»›ZYBà€€ú›Ÿ€ÿ[›X⁄“[ôõ”YYŸ]€ÿ[›X⁄“[ôõ”YYHH\ŸT›]Jù[
+N»À»[Ÿ[à⁄X⁄YY»^Z[ÇÇàÀ»ŸZY⁄õ‹õH›]\¬à€€ú››ŸZY⁄Ÿ]ŸZY⁄HH\ŸT›]J	… N¬à€€ú››ŸZY⁄]KŸ]ŸZY⁄]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›ŸY][ô’ŸZY⁄Ÿ]Y][ô’ŸZY⁄HH\ŸT›]Jù[
+N¬ààÀ»ò\›[ô»⁄[ô›»òX⁄Ÿ\à›]\»
+Ÿ\\ò]Húõ€HŸZY⁄
+Bà€€ú›Ÿò\›[ô—[ùöY\ÀŸ]ò\›[ô—[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›Ÿò\›[ô“›\úÀŸ]ò\›[ô“›\ú◊HH\ŸT›]J	… N¬à€€ú›Ÿò\›[ô—]KŸ]ò\›[ô—]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›‹⁄›—ò\›[ô—õ‹õKŸ]⁄›—ò\›[ô—õ‹õWHH\ŸT›]Jò[ŸJN¬à€€ú›ŸY][ô—ò\›[ôÀŸ]Y][ô—ò\›[ô◊HH\ŸT›]Jù[
+N¬ààÀ»õ›YöXÿ][€à›]\¬à€€ú›€õ›YöXÿ][€î\õZ\‹⁄[€ãŸ]õ›YöXÿ][€î\õZ\‹⁄[€óHH\ŸT›]J	ŸYò][	 N¬à€€ú›€õ›YöXÿ][€îŸ][ô‹ÀŸ]õ›YöXÿ][€îŸ][ô‹◊HH\ŸT›]J¬à[öôX›[€îô[Z[ô\úŒàùYKàô[Z[ô\ï[YNà	ÃNå	Àà›ô\ôYP[\ùŒàùYKàŸZY⁄ô[Z[ô\úŒàò[ŸKàŸZY⁄ô[Z[ô\ï[YNà	ÃŒå	¬àJN¬à€€ú›Ÿ\€Z\‹ŸY[\ùÀŸ]\€Z\‹ŸY[\ù◊HH\ŸT›]J◊JN»À»òX⁄»\€Z\‹ŸY[\ùQ¬ààÀ»[öôX›[€àõ‹õH›]\¬à€€ú›⁄[öôX›[€ï\KŸ][öôX›[€ï\WHH\ŸT›]J	‘Ÿ[XY€]YI N¬à€€ú›⁄[öôX›[€ë‹ŸKŸ][öôX›[€ë‹ŸWHH\ŸT›]J	… N¬à€€ú›⁄[öôX›[€ï[ö]Ÿ][öôX›[€ï[ö]HH\ŸT›]J	€Y… N¬à€€ú›⁄[öôX›[€ë]KŸ][öôX›[€ë]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›⁄[öôX›[€ï[YKŸ][öôX›[€ï[YWHH\ŸT›]J	ÃNå	 N¬à€€ú›⁄[öôX›[€îõ›]KŸ][öôX›[€îõ›]WHH\ŸT›]J	‘›XîI N¬à€€ú›⁄[öôX›[€î⁄]KŸ][öôX›[€î⁄]WHH\ŸT›]J	‘›€XX⁄	 N¬à€€ú›⁄[öôX›[€ìõ›\ÀŸ][öôX›[€ìõ›\◊HH\ŸT›]J	… N¬à€€ú›‹Ÿ[X›Y⁄YQYôôX›ÀŸ]Ÿ[X›Y⁄YQYôôX›◊HH\ŸT›]J◊JN¬à€€ú›ŸY][ô“[öôX›[€ãŸ]Y][ô“[öôX›[€óHH\ŸT›]Jù[
+N¬à€€ú›‹⁄›”YYõ‹›€ãŸ]⁄›”YYõ‹›€óHH\ŸT›]Jò[ŸJN¬à€€ú›€YYŸX\ò⁄\õKŸ]YYŸX\ò⁄\õWHH\ŸT›]J	… N¬à€€ú››öX[\ôŸ]YÀŸ]öX[\ôŸ]Y◊HH\ŸT›]J	… N»À»õ›ÿ€€Y»8°§à›YŸŸ\›[ö]À€S
+Ÿ»[öôX›[€äBÇàÀ»YX\›\ô[Y[ùõ‹õH›]\¬à€€ú›€YX\›\ô[Y[ù\KŸ]YX\›\ô[Y[ù\WHH\ŸT›]J	’ÿZ\›	 N¬à€€ú›€YX\›\ô[Y[ùò[YKŸ]YX\›\ô[Y[ùò[YWHH\ŸT›]J	… N¬à€€ú›€YX\›\ô[Y[ù]KŸ]YX\›\ô[Y[ù]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬ÇàÀ»ÿ⁄Y[Hõ‹õH›]\¬à€€ú›‹ÿ⁄Y[SYYŸ]ÿ⁄Y[SYYHH\ŸT›]J	‘Ÿ[XY€]YI N¬à€€ú›‹ÿ⁄Y[Qúô\]Y[òﬁKŸ]ÿ⁄Y[Qúô\]Y[òﬁWHH\ŸT›]J N¬à€€ú›‹ÿ⁄Y[Q^KŸ]ÿ⁄Y[Q^WHH\ŸT›]J
+N¬à€€ú›‹ÿ⁄Y[T›\ù]KŸ]ÿ⁄Y[T›\ù]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›‹ÿ⁄Y[U\KŸ]ÿ⁄Y[U\WHH\ŸT›]J	‹ôX›\úö[ô… N»À»	‹ôX›\úö[ô…»‹à	‹‹X⁄YöX◊Ÿ^\…¬à€€ú›‹Ÿ[X›Y^\ÀŸ]Ÿ[X›Y^\◊HH\ŸT›]J◊JN»À»ÃKãÀKóHõ‹à›[ãTÿ]ÇàÀ»]ò][€àõ‹õH›]\¬à€€ú››]ò][€ìYYŸ]]ò][€ìYYHH\ŸT›]J	‘Ÿ[XY€]YI N¬à€€ú››]ò][€î›\ÀŸ]]ò][€î›\◊HH\ŸT›]Jﬁ»‹ŸNà	…ÀŸYZ‹Œà[ö]à	€Y…»WJN¬ÇàÀ»ÿ[›[]‹à›]\¬à€€ú›‹ôX€€î\YP[[›[ùŸ]ôX€€î\YP[[›[ùHH\ŸT›]J	… N¬à€€ú›‹ôX€€î\YU[ö]Ÿ]ôX€€î\YU[ö]HH\ŸT›]J	€Y… N¬à€€ú›‹ôX€€ïÿ]\ê[[›[ùŸ]ôX€€ïÿ]\ê[[›[ùHH\ŸT›]J	… N¬à€€ú›‹ôX€€ë\⁄\ôY‹ŸKŸ]ôX€€ë\⁄\ôY‹ŸWHH\ŸT›]J	… N¬à€€ú›‹ôX€€ë\⁄\ôY[ö]Ÿ]ôX€€ë\⁄\ôY[ö]HH\ŸT›]J	€XŸ… N¬à€€ú›‹ôX€€îô\›[Ÿ]ôX€€îô\›[HH\ŸT›]Jù[
+N¬à€€ú›‹ôX€€ì[ŸKŸ]ôX€€ì[ŸWHH\ŸT›]J	›öX[ÿòX… N»À»	›öX[ÿòX…»HöX[
+»òX»8°§à€€òŸ[ùò][€à	à‹ŸH\à[»	›öX[Ÿ‹ŸI»HöX[
+»‹ŸH8°§àòX»ÿ]\àôYYYà€€ú›‹ôX€€ïõ€[YT\ë‹ŸKŸ]ôX€€ïõ€[YT\ë‹ŸWHH\ŸT›]J	ÃçI N»À»[\à‹ŸH⁄[à€€ö[ô»õ‹àòX»ÿ]\ÇàÀ»ÿ[‹öYH»QHÿ[›[]‹Çà€€ú››YPYŸKŸ]YPYŸWHH\ŸT›]J	… N¬à€€ú››YQŸ[ô\ãŸ]YQŸ[ô\óHH\ŸT›]J	€X[I N¬à€€ú››YUŸZY⁄úÀŸ]YUŸZY⁄ú◊HH\ŸT›]J	… N¬à€€ú››YRZY⁄[ãŸ]YRZY⁄[óHH\ŸT›]J	… N¬à€€ú››YPX›]ö]KŸ]YPX›]ö]WHH\ŸT›]J	€[Ÿ\ò]I N¬à€€ú››YTô\›[Ÿ]YTô\›[HH\ŸT›]Jù[
+N¬ÇàÀ»€X€‹ŸH	àLP»
+‹[€ò[õ‹à”LKŸXXô]\ Bà€€ú›Ÿ€X€‹ŸQ[ùöY\ÀŸ]€X€‹ŸQ[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›ÿLX—[ùöY\ÀŸ]LX—[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›Ÿ€X€‹ŸUò[YKŸ]€X€‹ŸUò[YWHH\ŸT›]J	… N¬à€€ú›Ÿ€X€‹ŸQ]KŸ]€X€‹ŸQ]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›Ÿ€X€‹ŸU\KŸ]€X€‹ŸU\WHH\ŸT›]J	Ÿò\›[ô… N¬à€€ú›ÿLX’ò[YKŸ]LX’ò[YWHH\ŸT›]J	… N¬à€€ú›ÿLX—]KŸ]LX—]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›‹⁄›—€X€‹ŸQõ‹õKŸ]⁄›—€X€‹ŸQõ‹õWHH\ŸT›]Jò[ŸJN¬à€€ú›‹⁄›–LX—õ‹õKŸ]⁄›–LX—õ‹õWHH\ŸT›]Jò[ŸJN¬ÇàÀ»õ€Ÿ€‹ö»»Xú»
+[ûHXà\Nà\›‹›\õ€ôK]ÀäBà€€ú›€Xë[ùöY\ÀŸ]Xë[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›€Xï\KŸ]Xï\WHH\ŸT›]J	’\›‹›\õ€ôI N¬à€€ú›€Xïò[YKŸ]Xïò[YWHH\ŸT›]J	… N¬à€€ú›€Xï[ö]Ÿ]Xï[ö]HH\ŸT›]J	€ôÀŸ	 N¬à€€ú›€Xë]KŸ]Xë]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›‹⁄›”Xëõ‹õKŸ]⁄›”Xëõ‹õWHH\ŸT›]Jò[ŸJN¬à€€ú›Pó’TT»H…–LP…À	’\›‹›\õ€ôIÀ	—úôYH\›‹›\õ€ôIÀ	”	À	“	À	’öY€XŸ\öY\…À	—ò\›[ô»€X€‹ŸIÀ	“êLX…À	–‹ôX][ö[ôIÀ	ŸQ—îâÀ	”›\â◊N¬ÇàÀ»Z[HòX⁄»
+Yò][€à	àõ›Z[àúõ€HYX[»
+»‹[€ò[^òHÿ]\äBà€€ú›ŸZ[UòX⁄—[ùöY\ÀŸ]Z[UòX⁄—[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›€ù]ö][€ìXô[Ÿ]ù]ö][€ìXô[HH\ŸT›]J	… N¬à€€ú›€ù]ö][€êÿ[‹öY\ÀŸ]ù]ö][€êÿ[‹öY\◊HH\ŸT›]J	… N¬à€€ú›€ù]ö][€îõ›Z[ãŸ]ù]ö][€îõ›Z[óHH\ŸT›]J	… N¬à€€ú›€ù]ö][€êÿ\òúÀŸ]ù]ö][€êÿ\òú◊HH\ŸT›]J	… N¬à€€ú›€ù]ö][€ëò]Ÿ]ù]ö][€ëò]HH\ŸT›]J	… N¬à€€ú›€ù]ö][€íYò][€ìﬁãŸ]ù]ö][€íYò][€ìﬁóHH\ŸT›]J	… N¬à€€ú›Ÿ^òRYò][€ìﬁãŸ]^òRYò][€ìﬁóHH\ŸT›]J	… N¬à€€ú›€YX[\ÿ‹ö\[€ãŸ]YX[\ÿ‹ö\[€óHH\ŸT›]J	… N¬ÇàÀ»[‹ôHXà›Xã\ŸX›[€à
+⁄[à\⁄[ô»HXú Bà€€ú›ÿX›]ôS[‹ôTŸX›[€ãŸ]X›]ôS[‹ôTŸX›[€óHH\ŸT›]J	‹õŸö[I N¬ÇàÀ»õ›\õò[õ‹õH›]\¬à€€ú›⁄õ›\õò[]KŸ]õ›\õò[]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›⁄õ›\õò[€€ù[ùŸ]õ›\õò[€€ù[ùHH\ŸT›]J	… N¬à€€ú›⁄õ›\õò[[€ŸŸ]õ›\õò[[€ŸHH\ŸT›]J	€ô]]ò[	 N¬à€€ú›⁄õ›\õò[[ô\ôﬁKŸ]õ›\õò[[ô\ôﬁWHH\ŸT›]JJN¬à€€ú›⁄õ›\õò[[ôŸ\ãŸ]õ›\õò[[ôŸ\óHH\ŸT›]JJN¬à€€ú›ŸY][ô“õ›\õò[Ÿ]Y][ô“õ›\õò[HH\ŸT›]Jù[
+N¬Çà€€ú›‹€Y\[ùöY\ÀŸ]€Y\[ùöY\◊HH\ŸT›]J◊JN¬à€€ú›‹€Y\ôY]KŸ]€Y\ôY]WHH\ŸT›]JŸ]Ÿ^Sÿÿ[
+
+JN¬à€€ú›‹€Y\ôY[YKŸ]€Y\ôY[YWHH\ŸT›]J	ÃåéåÃ	 N¬à€€ú›‹€Y\ÿZŸU[YKŸ]€Y\ÿZŸU[YWHH\ŸT›]J	ÃŒå	 N¬à€€ú›‹€Y\]X[]KŸ]€Y\]X[]WHH\ŸT›]J N¬à€€ú›‹€Y\õ›\ÀŸ]€Y\õ›\◊HH\ŸT›]J	… N¬à€€ú›‹⁄›‘€Y\õ‹õKŸ]⁄›‘€Y\õ‹õWHH\ŸT›]Jò[ŸJN¬à€€ú›ŸY][ô‘€Y\Ÿ]Y][ô‘€Y\HH\ŸT›]Jù[
+N¬à€€ú››Ÿ^T›\“[ú]Ÿ]Ÿ^T›\“[ú]HH\ŸT›]J	… N¬à€€ú›‹⁄YQYôôX›Ÿ]ô\ö]KŸ]⁄YQYôôX›Ÿ]ô\ö]WHH\ŸT›]JﬂJN¬à€€ú›‹›‹òYŸT][›Uÿ\õö[ôÀŸ]›‹òYŸT][›Uÿ\õö[ô◊HH\ŸT›]Jò[ŸJN¬à€€ú›€\›€›Yﬁ[ò–]Ÿ]\›€›Yﬁ[ò–]HH\ŸT›]J
+
+HOà¬àûH¬àô]\õà\[Ÿàÿÿ[›‹òYŸHOOH	›[ôYö[ôY	»»ÿÿ[›‹òYŸKôŸ]][J	‹\[À[\›X€›Y\ﬁ[ò… H	…»à	…Œ¬àHÿ]⁄¬àô]\õà	…Œ¬àBàJN¬à€€ú››ÿ\›[ôÀŸ]ÿ\›[ô◊HH\ŸT›]Jù[
+N¬à€€ú››öX[›—]U\õŸ]öX[›—]U\õHH\ŸT›]Jù[
+N¬à€€ú››öX[›‘ô[[›ôYŸ]öX[›‘ô[[›ôYHH\ŸT›]Jò[ŸJN¬à€€ú›Ÿò\S‹[íYŸ]ò\S‹[íYHH\ŸT›]Jù[
+N¬ÇàÀ»ÿ[[ô\à›]Bà€€ú›ÿÿ[[ô\ì[€ùŸ]ÿ[[ô\ì[€ùHH\ŸT›]Jô]»]J
+JN¬Çà€€ú››“[ú]ôYàH\ŸTôYäù[
+N¬à€€ú›[‹ôTŸX›[€îôYú»H\ŸTôYäﬂJN¬à€€ú›[ô’[Y\îôYàH\ŸTôYäù[
+N¬Çà\ŸQYôôX›
+
+
+HOà»ÿY]J
+N»K◊JN¬ÇàÀ»Ÿ[€€YK›]‹öX[àYù\àÿÿ[]HÿYÀ⁄[à›\Xò\ŸH\»Ÿôà8†%ô\ú⁄[€ãXò\ŸY€õKà⁄[à›\Xò\ŸH\»€à8†%€õHYù\à⁄Y€ãZ[à
+ô\ú⁄[€à⁄[ôŸH‹àö\ú›⁄Y€ôYZ[à]‹öX[
+Kà€›Y‹[›]ôX]»H\ZŸHÿÿ[[€õHõ‹àŸ[€€YKÇà\ŸQYôôX›
+
+
+HOà¬àYà
+\”ÿY[ô Hô]\õé¬àYà
+›\Xò\ŸP€€ôöY›\ôY	âàX€›Y‹›]	âà
+]\Ÿ\à›\Xò\ŸP]]ÿY[ô JHô]\õé¬àûH¬à€€ú›YQõ‹ô]ô\àHÿÿ[›‹òYŸKôŸ]][J	‹\[À]Ÿ[€€YKZYKYõ‹ô]ô\â HOOH	›ùYIŒ¬àYà
+YQõ‹ô]ô\äHô]\õé¬à€€ú›\›ŸY[ïô\ú⁄[€àHÿÿ[›‹òYŸKôŸ]][J	‹\[À]Ÿ[€€YK]ô\ú⁄[€â N¬à€€ú›ŸY[î⁄Y€ôY[àHÿÿ[›‹òYŸKôŸ]][J	‹\[À]Ÿ[€€YK\ŸY[ã\⁄Y€ôYZ[â HOOH	›ùYIŒ¬à€€ú›ôYYô\ú⁄[€ïŸ[€€YHH\›ŸY[ïô\ú⁄[€àOOHT’ëTî“S”é¬à€€ú›ôYY‹›]]Ÿ[€€YHH›\Xò\ŸP€€ôöY›\ôY	âàX€›Y‹›]	âà\Ÿ\à	âà\ŸY[î⁄Y€ôY[é¬àYà
+ôYYô\ú⁄[€ïŸ[€€YH	âà
+\›\Xò\ŸP€€ôöY›\ôY€›Y‹›]
+JHŸ]⁄›’Ÿ[€€YS[Ÿ[
+ùYJN¬à[ŸHYà
+›\Xò\ŸP€€ôöY›\ôY	âàX€›Y‹›]	âà\Ÿ\à	âà
+ôYYô\ú⁄[€ïŸ[€€YHôYY‹›]]Ÿ[€€YJJHŸ]⁄›’Ÿ[€€YS[Ÿ[
+ùYJN¬àHÿ]⁄
+ HﬂBàK⁄\”ÿY[ôÀ›\Xò\ŸP€€ôöY›\ôY€›Y‹›]\Ÿ\ã›\Xò\ŸP]]ÿY[ô◊JN¬Çà\ŸQYôôX›
+
+
+HOà¬àYà
+›\Xò\ŸP€€ôöY›\ôY	âàX€›Y‹›]	âà]\Ÿ\à	âà\›\Xò\ŸP]]ÿY[ô HŸ]⁄›’Ÿ[€€YS[Ÿ[
+ò[ŸJN¬àK‹›\Xò\ŸP€€ôöY›\ôY€›Y‹›]\Ÿ\ã›\Xò\ŸP]]ÿY[ô◊JN¬Çà\ŸQYôôX›
+
+
+HOà¬à€€ú›€àH
+
+HOàŸ]\”€õ[ôJùYJN¬à€€ú›ŸôàH
+
+HOàŸ]\”€õ[ôJò[ŸJN¬à⁄[ô›ÀòY]ô[ù\›[ô\ä	€€õ[ôIÀ€äN¬à⁄[ô›ÀòY]ô[ù\›[ô\ä	€Ÿôõ[ôIÀŸôäN¬àô]\õà
+
+HOà¬à⁄[ô›Àúô[[›ôQ]ô[ù\›[ô\ä	€€õ[ôIÀ€äN¬à⁄[ô›Àúô[[›ôQ]ô[ù\›[ô\ä	€Ÿôõ[ôIÀŸôäN¬àN¬àK◊JN¬Çà\ŸQYôôX›
+
+
+HOà¬à€€ú›€îô\›[H
+JHOà¬àYà
+Kô]Z[Àõ⁄ H¬àŸ]òX⁄Ÿ‹õ›[ôﬁ[ò—\úõ‹ä	… N¬à€€ú›\€»Hô]»]J
+Kù“T”‘›ö[ô 
+N¬àŸ]\›€›Yﬁ[ò–]
+\€ N¬àûH¬àÿÿ[›‹òYŸKúŸ]][J	‹\[À[\›X€›Y\ﬁ[ò…À\€ N¬àHÿ]⁄
+ HﬂBàH[ŸHYà
+Kô]Z[ÀõY\‹ÿYŸJHŸ]òX⁄Ÿ‹õ›[ôﬁ[ò—\úõ‹äKô]Z[õY\‹ÿYŸJN¬àN¬à⁄[ô›ÀòY]ô[ù\›[ô\ä	‹\[Œò€›Y\ﬁ[òÀ\ô\›[	À€îô\›[
+N¬àô]\õà
+
+HOà⁄[ô›Àúô[[›ôQ]ô[ù\›[ô\ä	‹\[Œò€›Y\ﬁ[òÀ\ô\›[	À€îô\›[
+N¬àK◊JN¬Çà\ŸQYôôX›
+
+
+HOà¬àYà
+Z\”€õ[ôJHŸ]òX⁄Ÿ‹õ›[ôﬁ[ò—\úõ‹ä	… N¬àK⁄\”€õ[ôWJN¬Çà€€ú›\]SX[öYô\›\õH[\‹ùõY]Kô[ùãïíUW–T’TUW”PSíQëT’’Tì	…Œ¬Çà\ŸQYôôX›
+
+
+HOà¬àYà
+]\]SX[öYô\›\õ\”ÿY[ô Hô]\õé¬àYà
+›\Xò\ŸP€€ôöY›\ôY	âà]\Ÿ\à	âàX€›Y‹›]
+Hô]\õé¬àYà
+⁄›’Ÿ[€€YS[Ÿ[
+Hô]\õé¬à]ÿ[òŸ[YHò[ŸN¬à€€ú›ù[àH\ﬁ[ò»
+
+HOà¬à€€ú›[ôõ»H]ÿZ]⁄X⁄—õ‹ê\\]J\]SX[öYô\›\õT’ëTî“S”äN¬àYà
+ÿ[òŸ[YZ[ôõÀù\]P]òZ[XõJHô]\õé¬àŸ]\]Tõ€\
+[ôõ N¬àN¬à€€ú›HŸ][Y[›]
+ù[ãé
+N¬àô]\õà
+
+HOà¬àÿ[òŸ[YHùYN¬à€X\ï[Y[›]
+
+N¬àN¬àK⁄\”ÿY[ôÀ›\Xò\ŸP€€ôöY›\ôY€›Y‹›]\Ÿ\ã⁄›’Ÿ[€€YS[Ÿ[\]SX[öYô\›\õJN¬Çà\ŸQYôôX›
+
+
+HOà¬àYà
+]\]SX[öYô\›\õ\”ÿY[ô Hô]\õé¬àYà
+›\Xò\ŸP€€ôöY›\ôY	âà]\Ÿ\à	âàX€›Y‹›]
+Hô]\õé¬àYà
+⁄›’Ÿ[€€YS[Ÿ[
+Hô]\õé¬à€€ú›€ïö\»H
+
+HOà¬àYà
+ÿ›[Y[ùùö\⁄Xö[]T›]HOOH	›ö\⁄XõI Hô]\õé¬à⁄X⁄—õ‹ê\\]J\]SX[öYô\›\õT’ëTî“S”äKù[ä
+[ôõ HOà¬àYà
+[ôõÀù\]P]òZ[XõJHŸ]\]Tõ€\
+[ôõ N¬àJN¬àN¬àÿ›[Y[ùòY]ô[ù\›[ô\ä	›ö\⁄Xö[]X⁄[ôŸIÀ€ïö\ N¬àô]\õà
+
+HOàÿ›[Y[ùúô[[›ôQ]ô[ù\›[ô\ä	›ö\⁄Xö[]X⁄[ôŸIÀ€ïö\ N¬àK⁄\”ÿY[ôÀ›\Xò\ŸP€€ôöY›\ôY€›Y‹›]\Ÿ\ã⁄›’Ÿ[€€YS[Ÿ[\]SX[öYô\›\õJN¬ÇàÀ»YH‹\⁄ÿ‹ôY[àYù\à]HÿY¬à\ŸQYôôX›
+
+
+HOà¬àYà
+Z\”ÿY[ô H¬àŸ][Y[›]
+
+
+HOàŸ]⁄›‘‹\⁄
+ò[ŸJKML
+N¬àBàK⁄\”ÿY[ô◊JN¬ÇàÀ»ô\ÿ⁄Y[Hÿÿ[
+\⁄
+Hõ›YöXÿ][€ú»⁄[à\ÿY»[ô[ûHô[Z[ô\à\»€Çà\ŸQYôôX›
+
+
+HOà¬àYà
+Z\”ÿY[ô»	âàõ›YöXÿ][€î\õZ\‹⁄[€àOOH	Ÿ‹ò[ùY	»	âà
+õ›YöXÿ][€îŸ][ô‹Àö[öôX›[€îô[Z[ô\ú»õ›YöXÿ][€îŸ][ô‹ÀùŸZY⁄ô[Z[ô\ú JH¬àÿ⁄Y[Sÿÿ[[öôX›[€îô[Z[ô\ú 
+N¬àBàK⁄\”ÿY[ôÀõ›YöXÿ][€î\õZ\‹⁄[€ãõ›YöXÿ][€îŸ][ô‹Àö[öôX›[€îô[Z[ô\úÀõ›YöXÿ][€îŸ][ô‹Àúô[Z[ô\ï[YKõ›YöXÿ][€îŸ][ô‹ÀùŸZY⁄ô[Z[ô\úÀõ›YöXÿ][€îŸ][ô‹ÀùŸZY⁄ô[Z[ô\ï[YWJN¬ÇàÀ»⁄[à€à[‹ôHXãÿ‹õ€HX›]ôHŸX›[€àXà[ù»öY]»€»õŸö[H\€∏†&]Y[àŸôã\ÿ‹ôY[Çà\ŸQYôôX›
+
+
+HOà¬àYà
+X›]ôUXàOOH	€[‹ôI»XX›]ôS[‹ôTŸX›[€äHô]\õé¬à€€ú›[H[‹ôTŸX›[€îôYúÀò›\úô[ùÿX›]ôS[‹ôTŸX›[€óN¬àYà
+[
+H[úÿ‹õ€[ù’öY] »ôZ]ö[‹éà	‹€[€›	Àõÿ⁄Œà	€ôX\ô\›	À[õ[ôNà	ÿŸ[ù\â»JN¬àKÿX›]ôUXãX›]ôS[‹ôTŸX›[€óJN¬ààÀ»Ÿ[Xúò][€àöYŸŸ\àù[ò›[€Çà€€ú›Ÿ[Xúò]HH
+Y\‹ÿYŸJHOà¬àŸ]Ÿ[Xúò][€ìY\‹ÿYŸJY\‹ÿYŸJN¬àŸ]⁄›–Ÿ[Xúò][€äùYJN¬àŸ][Y[›]
+
+
+HOàŸ]⁄›–Ÿ[Xúò][€äò[ŸJKÃ
+N¬àN¬àÇà€€ú›ÿY]HH\ﬁ[ò»
+
+HOà¬àŸ]\”ÿY[ô ùYJN¬àûH¬à€€ú›ŸZY⁄]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[]ŸZY⁄Y[ùöY\… N¬à€€ú›[öôX›[€ë]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[Z[öôX›[€ãY[ùöY\… N¬à€€ú›õŸö[Q]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[]\Ÿ\ã\õŸö[I N¬à€€ú›YX\›\ô[Y[ù]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[[YX\›\ô[Y[ù… N¬à€€ú››—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[\›‹… N¬à€€ú›ÿ⁄Y[Q]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[\ÿ⁄Y[\… N¬à€€ú›]ò][€ë]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[]]ò][€â N¬à€€ú›õ›\õò[]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[Zõ›\õò[	 N¬à€€ú›ò\›[ô—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[Yò\›[ôÀY[ùöY\… N¬à€€ú›õ›YöXÿ][€îŸ][ô‹—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[[õ›YöXÿ][€ã\Ÿ][ô‹… N¬à€€ú›Z[UòX⁄—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[YZ[K]òX⁄… N¬à€€ú›€X€‹ŸQ]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[Y€X€‹ŸKY[ùöY\… N¬à€€ú›LX—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[XLXÀY[ùöY\… N¬à€€ú›Xë]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[[XãY[ùöY\… N¬àYà
+ŸZY⁄]JH¬à€€ú›\úŸYHî””ãú\úŸJŸZY⁄]JN¬àŸ]ŸZY⁄[ùöY\ €‹ùŸZY⁄ûQ]P\ÿ \úŸY
+JN¬àBàYà
+[öôX›[€ë]JHŸ][öôX›[€ë[ùöY\ î””ãú\úŸJ[öôX›[€ë]JJN¬àYà
+õŸö[Q]JH¬à€€ú›\úŸYHî””ãú\úŸJõŸö[Q]JN¬àŸ]\Ÿ\îõŸö[J»ZY⁄àÃ€ÿ[ŸZY⁄àåããú\úŸYYò][€ë€ÿ[ﬁéà\úŸYöYò][€ë€ÿ[ﬁàœ»çJN¬àBàYà
+YX\›\ô[Y[ù]JHŸ]YX\›\ô[Y[ù[ùöY\ î””ãú\úŸJYX\›\ô[Y[ù]JJN¬àYà
+›—]JHŸ]õŸ‹ô\‹‘›‹ î””ãú\úŸJ›—]JJN¬àYà
+ÿ⁄Y[Q]JHŸ]ÿ⁄Y[\ î””ãú\úŸJÿ⁄Y[Q]JJN¬àYà
+]ò][€ë]JHŸ]]ò][€î[ú î””ãú\úŸJ]ò][€ë]JJN¬àYà
+õ›\õò[]JHŸ]õ›\õò[[ùöY\ î””ãú\úŸJõ›\õò[]JJN¬àYà
+ò\›[ô—]JHŸ]ò\›[ô—[ùöY\ î””ãú\úŸJò\›[ô—]JJN¬àYà
+õ›YöXÿ][€îŸ][ô‹—]JHŸ]õ›YöXÿ][€îŸ][ô‹ î””ãú\úŸJõ›YöXÿ][€îŸ][ô‹—]JJN¬àYà
+Z[UòX⁄—]JHŸ]Z[UòX⁄—[ùöY\ î””ãú\úŸJZ[UòX⁄—]JJN¬àYà
+€X€‹ŸQ]JHŸ]€X€‹ŸQ[ùöY\ î””ãú\úŸJ€X€‹ŸQ]JJN¬àYà
+LX—]JHŸ]LX—[ùöY\ î””ãú\úŸJLX—]JJN¬àYà
+Xë]JHŸ]Xë[ùöY\ î””ãú\úŸJXë]JJN¬à€€ú›€Y\]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[\€Y\Y[ùöY\… N¬àYà
+€Y\]JH¬àûH¬à€€ú›\úŸYHî””ãú\úŸJ€Y\]JN¬àYà
+\úò^Kö\–\úò^J\úŸY
+JHŸ]€Y\[ùöY\ \úŸY
+N¬àHÿ]⁄
+ H» àY€õ‹ôH
+ã»BàBà€€ú›öX[—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[]öX[… N¬àYà
+öX[—]JH¬à€€ú›\úŸYHî””ãú\úŸJöX[—]JN¬à€€ú›õ‹õX[^ôYH\úŸYõX\
+àOà
+»ããùãô[XZ[ö[ô”YŒàãúô[XZ[ö[ô”Y»œ»ãù›[Y»JJN¬à€€ú›ù[ôYHù[ôQ[\UöX[ õ‹õX[^ôY
+N¬àYà
+ù[ôYõ[ô›OOHõ‹õX[^ôYõ[ô›
+Hÿ]ôQ]J	⁄X[]öX[…Àù[ôY
+N¬àŸ]öX[ ù[ôY
+N¬àBà€€ú›ŸYZ€Q‹ŸQ^€YYHÿÿ[›‹òYŸKôŸ]][J	⁄X[]ŸYZ€KY‹ŸK]ŸZY⁄Y^€YY[YY… N¬àYà
+ŸYZ€Q‹ŸQ^€YY
+H¬àûH¬à€€ú›\úŸYHî””ãú\úŸJŸYZ€Q‹ŸQ^€YY
+N¬àYà
+\úò^Kö\–\úò^J\úŸY
+JHŸ]ŸYZ€Q‹ŸUŸZY⁄^€YYYY \úŸY
+N¬àHÿ]⁄
+ H» àY€õ‹ôH
+ã»BàBà€€ú›ŸYZ€Q‹ŸUŸYZ‘›\ùHÿÿ[›‹òYŸKôŸ]][J	⁄X[]ŸYZ€KY‹ŸK]ŸYZÀ\›\ùÀ[€â N¬àYà
+ŸYZ€Q‹ŸUŸYZ‘›\ùOHù[	âàŸYZ€Q‹ŸUŸYZ‘›\ùOOH	… H¬àûH¬à€€ú›\úŸYHî””ãú\úŸJŸYZ€Q‹ŸUŸYZ‘›\ù
+N¬àYà
+\[Ÿà\úŸYOOH	€ù[Xô\â»	âà\úŸYèH	âà\úŸYHäHŸ]ŸYZ€Q‹ŸUŸYZ‘›\ù”€ä\úŸY
+N¬àHÿ]⁄
+ H» àY€õ‹ôH
+ã»BàBà€€ú›€ÿ[‘›X⁄—]HHÿÿ[›‹òYŸKôŸ]][J	⁄X[Y€ÿ[À]\Ÿ\ã\›X⁄… N¬àYà
+€ÿ[‘›X⁄—]JH¬àûH¬à€€ú›\úŸYHî””ãú\úŸJ€ÿ[‘›X⁄—]JN¬àYà
+\úò^Kö\–\úò^J\úŸY
+JHŸ]€ÿ[\Ÿ\î›X⁄ \úŸYôö[\ä
+
+HOà\[ŸàOOH	‹›ö[ô… JN¬àHÿ]⁄
+ H» àY€õ‹ôH
+ã»BàBÇàÀ»⁄X⁄»õ›YöXÿ][€à\õZ\‹⁄[€à›]\»
+ŸXàú»ò]]ôJBàYà
+ÿ\X⁄]‹ãö\”ò]]ôT]õ‹õJ
+JH¬àûH¬à€€ú›»ÿÿ[õ›YöXÿ][€ú»HH]ÿZ][\‹ù
+	–ÿ\X⁄]‹ã€ÿÿ[[õ›YöXÿ][€ú… N¬à€€ú›\õHH]ÿZ]ÿÿ[õ›YöXÿ][€úÀò⁄X⁄‘\õZ\‹⁄[€ú 
+N¬àŸ]õ›YöXÿ][€î\õZ\‹⁄[€ä\õKô\‹^HOOH	Ÿ‹ò[ùY	»»	Ÿ‹ò[ùY	»à\õKô\‹^HOOH	Ÿ[öYY	»»	Ÿ[öYY	»à	ŸYò][	 N¬àHÿ]⁄
+ H¬àŸ]õ›YöXÿ][€î\õZ\‹⁄[€ä	ŸYò][	 N¬àBàH[ŸHYà
+	”õ›YöXÿ][€â»[à⁄[ô› H¬àŸ]õ›YöXÿ][€î\õZ\‹⁄[€äõ›YöXÿ][€ãú\õZ\‹⁄[€äN¬àBàHÿ]⁄
+\úõ‹äH¬à€€ú€€KõŸ 	”ÿY[ô»]NâÀ\úõ‹äN¬àBàŸ]\”ÿY[ô ò[ŸJN¬àN¬Çà€€ú›ÿ]ôQ]HH
+Ÿ^K]JHOà¬àûH¬àÿÿ[›‹òYŸKúŸ]][JŸ^Kî””ãú›ö[ô⁄YûJ]JJN¬àŸ]›‹òYŸT][›Uÿ\õö[ô ò[ŸJN¬àÿ⁄Y[P€›Yﬁ[ò 
+N¬àô]\õàùYN¬àHÿ]⁄
+\úõ‹äH¬à€€ú€€Kô\úõ‹ä	—\úõ‹àÿ]ö[ôŒâÀ\úõ‹äN¬à€€ú›ò[YHH\úõ‹èÀõò[YH	…Œ¬à€€ú›€ŸHH\úõ‹èÀò€ŸN¬àYà
+ò[YHOOH	‘][›Q^ŸYYY\úõ‹â»€ŸHOOHåäHŸ]›‹òYŸT][›Uÿ\õö[ô ùYJN¬àô]\õàò[ŸN¬àBàN¬Çà€€ú›\⁄[ô’ÿ\›H
+Y\‹ÿYŸK€ï[ô HOà¬àYà
+[ô’[Y\îôYãò›\úô[ù
+H€X\ï[Y[›]
+[ô’[Y\îôYãò›\úô[ù
+N¬àŸ]ÿ\›[ô »Y\‹ÿYŸK€ï[ô»JN¬à[ô’[Y\îôYãò›\úô[ùHŸ][Y[›]
+
+
+HOà¬àŸ]ÿ\›[ô ù[
+N¬à[ô’[Y\îôYãò›\úô[ùHù[¬àK
+N¬àN¬ÇàÀ»õ‹õHô\Ÿ]ù[ò›[€ú¬à€€ú›ô\Ÿ]ŸZY⁄õ‹õHH
+
+HOà»Ÿ]ŸZY⁄
+	… N»Ÿ]ŸZY⁄]JŸ]Ÿ^Sÿÿ[
+
+JN»Ÿ]Y][ô’ŸZY⁄
+ù[
+N»Ÿ]⁄›–Yõ‹õJò[ŸJN»N¬à€€ú›ô\Ÿ][öôX›[€ëõ‹õHH
+
+HOà»Ÿ][öôX›[€ï\J	‘Ÿ[XY€]YI N»Ÿ][öôX›[€ë‹ŸJ	… N»Ÿ][öôX›[€ï[ö]
+	€Y… N»Ÿ][öôX›[€ë]JŸ]Ÿ^Sÿÿ[
+
+JN»Ÿ][öôX›[€ï[YJ	ÃNå	 N»Ÿ][öôX›[€îõ›]J	‘›XîI N»Ÿ][öôX›[€î⁄]J	‘›€XX⁄	 N»Ÿ][öôX›[€ìõ›\ 	… N»Ÿ]Ÿ[X›Y⁄YQYôôX› ◊JN»Ÿ]⁄YQYôôX›Ÿ]ô\ö]JﬂJN»Ÿ]Y][ô“[öôX›[€äù[
+N»Ÿ]⁄›–Yõ‹õJò[ŸJN»Ÿ]⁄›”YYõ‹›€äò[ŸJN»Ÿ]YYŸX\ò⁄\õJ	… N»Ÿ]Ÿ[X›YöX[Y
+ù[
+N»Ÿ]öX[\ôŸ]Y 	… N»N¬à€€ú›ô\Ÿ]YX\›\ô[Y[ùõ‹õHH
+
+HOà»Ÿ]YX\›\ô[Y[ù\J	’ÿZ\›	 N»Ÿ]YX\›\ô[Y[ùò[YJ	… N»Ÿ]YX\›\ô[Y[ù]JŸ]Ÿ^Sÿÿ[
+
+JN»Ÿ]⁄›–Yõ‹õJò[ŸJN»N¬à€€ú›ô\Ÿ]õ›\õò[õ‹õHH
+
+HOà»Ÿ]õ›\õò[€€ù[ù
+	… N»Ÿ]õ›\õò[[€Ÿ
+	€ô]]ò[	 N»Ÿ]õ›\õò[[ô\ôﬁJJN»Ÿ]õ›\õò[[ôŸ\äJN»Ÿ]õ›\õò[]JŸ]Ÿ^Sÿÿ[
+
+JN»Ÿ]Y][ô“õ›\õò[
+ù[
+N»Ÿ]⁄›–Yõ‹õJò[ŸJN»N¬à€€ú›ô\Ÿ]ò\›[ô—õ‹õHH
+
+HOà»Ÿ]ò\›[ô“›\ú 	… N»Ÿ]ò\›[ô—]JŸ]Ÿ^Sÿÿ[
+
+JN»Ÿ]Y][ô—ò\›[ô ù[
+N»Ÿ]⁄›—ò\›[ô—õ‹õJò[ŸJN»N¬ÇàÀ»‘ïQ‹\ò][€ú¬à€€ú›Y‹ï\]UŸZY⁄H
+
+HOà¬àYà
+]ŸZY⁄\”òSä\úŸQõÿ]
+ŸZY⁄
+JJHô]\õé¬à€€ú›ô]’ŸZY⁄H\úŸQõÿ]
+ŸZY⁄
+N¬à]\]YHY][ô’ŸZY⁄à»ŸZY⁄[ùöY\ÀõX\
+HOàKöYOOHY][ô’ŸZY⁄öY»»ããôKŸZY⁄àô]’ŸZY⁄]NàŸZY⁄]HHàJBààÀããùŸZY⁄[ùöY\À»Yà]Kõõ› 
+KŸZY⁄àô]’ŸZY⁄]NàŸZY⁄]HWN¬àÀ»›‹ôH[à⁄õ€õ€Ÿ⁄Xÿ[‹ô\à
+]H\ÿÀ[àYõ‹àÿ[YKY^JBà\]YH€‹ùŸZY⁄ûQ]P\ÿ \]Y
+N¬ààÀ»⁄X⁄»õ‹àZ[\›€ô\»[ôŸ[Xúò]HH\ŸH]K›[YH‹ô\ãõ›\úò^H‹⁄][€ãÇàYà
+YY][ô’ŸZY⁄	âàŸZY⁄[ùöY\Àõ[ô›à
+H¬à€€ú›ûQ]Q\ÿ»H€‹ùŸZY⁄ûQ]Q\ÿ ŸZY⁄[ùöY\ N¬à€€ú›ûQ]P\ÿ»H€‹ùŸZY⁄ûQ]P\ÿ ŸZY⁄[ùöY\ N¬à€€ú›€ŸZY⁄HûQ]Q\ÿ÷ÃKùŸZY⁄»À»[‹›ôXŸ[ù[ùûHûH]H
+[ô[YHöXHY
+Bà€€ú››\ùŸZY⁄HûQ]P\ÿ÷ÃKùŸZY⁄»À»€\›[ùûHûH]Bà€€ú›ŸZY⁄‹›H€ŸZY⁄Hô]’ŸZY⁄¬à€€ú››[‹›H›\ùŸZY⁄Hô]’ŸZY⁄¬ààYà
+ŸZY⁄‹›èHJHŸ[Xúò]J	¸'„¢H›€à	»
+»ŸZY⁄‹›ù—ö^Y
+JH
+»	»ú»I N¬àYà
+X]ôõ€‹ä›[‹›
+H	HLOOH	âà›[‹›èHL
+HŸ[Xúò]J	¸'„·à	»
+»X]ôõ€‹ä›[‹›
+H
+»	»ú»‹››[I N¬àYà
+\Ÿ\îõŸö[Kô€ÿ[ŸZY⁄	âàô]’ŸZY⁄H\Ÿ\îõŸö[Kô€ÿ[ŸZY⁄
+HŸ[Xúò]J	¸'„´»€ÿ[ŸZY⁄ôXX⁄YI N¬àBààŸ]ŸZY⁄[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[]ŸZY⁄Y[ùöY\…À\]Y
+N¬àô\Ÿ]ŸZY⁄õ‹õJ
+N¬àN¬Çà€€ú›[]UŸZY⁄H
+Y
+HOà¬à€€ú›ô[[›ôYHŸZY⁄[ùöY\Àôö[ô
+HOàKöYOOHY
+N¬àYà
+\ô[[›ôY
+Hô]\õé¬à€€ú›ô]àHŸZY⁄[ùöY\Œ¬à€€ú›\]YHô]ãôö[\äHOàKöYOOHY
+N¬àŸ]ŸZY⁄[ùöY\ \]Y
+N¬àYà
+\ÿ]ôQ]J	⁄X[]ŸZY⁄Y[ùöY\…À\]Y
+JH¬àŸ]ŸZY⁄[ùöY\ ô]äN¬àô]\õé¬àBà\⁄[ô’ÿ\›
+	’ŸZY⁄[ùûHô[[›ôY	À
+
+HOà¬à€€ú›ô\›‹ôYH€‹ùŸZY⁄ûQ]P\ÿ Àããù\]Yô[[›ôYJN¬àŸ]ŸZY⁄[ùöY\ ô\›‹ôY
+N¬àÿ]ôQ]J	⁄X[]ŸZY⁄Y[ùöY\…Àô\›‹ôY
+N¬àJN¬àN¬ÇàÀ»€X€‹ŸH	àLP»‘ïQà€€ú›Y€X€‹ŸHH
+
+HOà¬à€€ú›àH\úŸQõÿ]
+€X€‹ŸUò[YJN¬àYà
+Y€X€‹ŸUò[YH\”òSääHàåààL
+Hô]\õé¬à€€ú›\]YHÀããô€X€‹ŸQ[ùöY\À»Yà]Kõõ› 
+K]Nà€X€‹ŸQ]Kò[YNàã\Nà€X€‹ŸU\HWN¬à\]Yú€‹ù
+
+KäHOà
+ãô]H	… Kõÿÿ[P€€\\ôJKô]H	… JN¬àŸ]€X€‹ŸQ[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[Y€X€‹ŸKY[ùöY\…À\]Y
+N¬àŸ]€X€‹ŸUò[YJ	… N¬àŸ]€X€‹ŸQ]JŸ]Ÿ^Sÿÿ[
+
+JN¬àŸ]⁄›—€X€‹ŸQõ‹õJò[ŸJN¬àN¬à€€ú›[]Q€X€‹ŸHH
+Y
+HOà¬à€€ú›\]YH€X€‹ŸQ[ùöY\Àôö[\äHOàKöYOOHY
+N¬àŸ]€X€‹ŸQ[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[Y€X€‹ŸKY[ùöY\…À\]Y
+N¬àN¬à€€ú›YLX»H
+
+HOà¬à€€ú›àH\úŸQõÿ]
+LX’ò[YJN¬àYà
+XLX’ò[YH\”òSääHàààMJHô]\õé¬à€€ú›\]YHÀããòLX—[ùöY\À»Yà]Kõõ› 
+K]NàLX—]Kò[YNààWN¬à\]Yú€‹ù
+
+KäHOà
+ãô]H	… Kõÿÿ[P€€\\ôJKô]H	… JN¬àŸ]LX—[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[XLXÀY[ùöY\…À\]Y
+N¬àŸ]LX’ò[YJ	… N¬àŸ]LX—]JŸ]Ÿ^Sÿÿ[
+
+JN¬àŸ]⁄›–LX—õ‹õJò[ŸJN¬àN¬à€€ú›[]PLX»H
+Y
+HOà¬à€€ú›\]YHLX—[ùöY\Àôö[\äHOàKöYOOHY
+N¬àŸ]LX—[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[XLXÀY[ùöY\…À\]Y
+N¬àN¬Çà€€ú›YXë[ùûHH
+
+HOà¬à€€ú›àH\úŸQõÿ]
+Xïò[YJN¬àYà
+[Xï\Kùö[J
+H\”òSääJHô]\õé¬à€€ú›[ùûHH»Yà]Kõõ› 
+K\NàXï\Kùö[J
+Kò[YNàã[ö]àXï[ö]ùö[J
+H	¯†%	À]NàXë]HN¬à€€ú›\]YHÀããõXë[ùöY\À[ùûWKú€‹ù
+
+KäHOàãô]Kõÿÿ[P€€\\ôJKô]JJN¬àŸ]Xë[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[[XãY[ùöY\…À\]Y
+N¬àŸ]Xïò[YJ	… N¬àŸ]Xë]JŸ]Ÿ^Sÿÿ[
+
+JN¬àŸ]⁄›”Xëõ‹õJò[ŸJN¬àN¬à€€ú›[]SXë[ùûHH
+Y
+HOà¬à€€ú›\]YHXë[ùöY\Àôö[\äHOàKöYOOHY
+N¬àŸ]Xë[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[[XãY[ùöY\…À\]Y
+N¬àN¬ÇàÀ»ò\›[ô»⁄[ô›»‘ïQ‹\ò][€ú¬à€€ú›Y‹ï\]Qò\›[ô»H
+
+HOà¬àYà
+Yò\›[ô“›\ú»\”òSä\úŸR[ù
+ò\›[ô“›\ú JJHô]\õé¬à€€ú››\ú»H\úŸR[ù
+ò\›[ô“›\ú N¬àYà
+›\ú»H›\ú»àå Hô]\õé»À»ò[Y]HôX\€€òXõHò\›[ô»›\ú¬à]\]YHY][ô—ò\›[ô¬à»ò\›[ô—[ùöY\ÀõX\
+HOàKöYOOHY][ô—ò\›[ôÀöY»»ããôKò\›[ô“›\úŒà›\úÀ]Nàò\›[ô—]HHàJBààÀããôò\›[ô—[ùöY\À»Yà]Kõõ› 
+Kò\›[ô“›\úŒà›\úÀ]Nàò\›[ô—]HWN¬à\]Yú€‹ù
+
+KäHOà\úŸSÿÿ[]Jãô]JHH\úŸSÿÿ[]JKô]JJN¬ààÀ»ÿ[›[]H›ôXZ»[ôŸ[Xúò]HZ[\›€ô\¬àYà
+YY][ô—ò\›[ô H¬à€€ú››ôXZ»H\]Yôö[\ä
+KJHOà¬à€€ú›[ùûQ]HH\úŸSÿÿ[]JKô]JN¬à€€ú›Ÿ^HHô]»]J
+N¬à€€ú›^\—YôàHX]ôõ€‹ä
+Ÿ^HH[ùûQ]JH»
+L
+àå
+àå
+àç
+JN¬àô]\õà^\—YôàOOHN¬àJKõ[ô›¬ààYà
+›ôXZ»OOH HŸ[Xúò]J	¸'Â)H»^Hò\›[ô»›ôXZ»I N¬àYà
+›ôXZ»OOHM
+HŸ[Xúò]J	¸'Â)HàŸYZ»›ôXZ»I N¬àYà
+›ôXZ»OOHÃ
+HŸ[Xúò]J	¸'„·àÃ^H›ôXZ»I N¬àYà
+›\ú»èHMäHŸ[Xúò]J	¸'‰™à‹ôX]	»
+»›\ú»
+»	»›\àò\›I N¬àBààŸ]ò\›[ô—[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[Yò\›[ôÀY[ùöY\…À\]Y
+N¬àô\Ÿ]ò\›[ô—õ‹õJ
+N¬àN¬Çà€€ú›[]Qò\›[ô»H
+Y
+HOà¬à€€ú›\]YHò\›[ô—[ùöY\Àôö[\äHOàKöYOOHY
+N¬àŸ]ò\›[ô—[ùöY\ \]Y
+N¬àÿ]ôQ]J	⁄X[Yò\›[ôÀY[ùöY\…À\]Y
+N¬àN¬ÇàÀ»ÿ⁄Y[Hÿÿ[
+\⁄\›[JHõ›YöXÿ][€ú»€à]öXŸHõ‹à⁄[à\\»€‹ŸY
+[ôõ⁄Y⁄S‘ Bà€€ú›ÿ⁄Y[Sÿÿ[[öôX›[€îô[Z[ô\ú»H\ﬁ[ò»
+Ÿ][ô‹”›ô\úöYJHOà¬àûH¬àYà
+Pÿ\X⁄]‹ãö\”ò]]ôT]õ‹õJ
+JHô]\õé¬à€€ú›»ÿÿ[õ›YöXÿ][€ú»HHu€Nw‚⁄$z{-ÆÈ‹j◊ù <TrendingUp className="h-5 w-5 text-violet-400" />
                     Titration Guidelines
                   </h3>
                   
