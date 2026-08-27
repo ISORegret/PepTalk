@@ -18,6 +18,13 @@ import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
 const APP_VERSION = '1.4.7';
+const MAIN_TABS = [
+  { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
+  { id: 'weight', icon: Scale, label: 'Weight' },
+  { id: 'injections', icon: Syringe, label: 'Doses' },
+  { id: 'insights', icon: Activity, label: 'Insights' },
+  { id: 'more', icon: MoreHorizontal, label: 'More' },
+];
 
 // Comprehensive peptide/medication list with pharmacokinetic data (halfLife in hours; used for level curve & phase labels)
 const MEDICATIONS = [
@@ -4095,7 +4102,7 @@ const wipeAllData = () => {
   }
 
   return (
-    <div className="min-h-screen p-3 pb-28 transition-all duration-300 bg-[var(--bg-base)]">
+    <div className="min-h-screen px-3 pt-2 pb-32 transition-all duration-300 bg-[var(--bg-base)]">
       {storageQuotaWarning && (
         <div className="sticky top-0 z-40 mb-2 -mt-1">
           <div className="flex items-start gap-2 rounded-xl border border-orange-500/35 bg-orange-500/10 px-3 py-2.5 text-orange-100/95 text-sm">
@@ -4219,7 +4226,7 @@ const wipeAllData = () => {
               <p><strong className="text-white">Weight</strong> — Log and edit weight entries. See your trend and chart.</p>
               <p><strong className="text-white">Injections</strong> — Log doses (medication, amount, date, SubQ/IM, site, side effects). Keeps a full history.</p>
               <p><strong className="text-white">Insights</strong> — Medication levels over time, phases, and when to dose next. Tap a medication to expand details.</p>
-              <p><strong className="text-white">More</strong> — Body measurements &amp; progress photos, daily nutrition/hydration, calendar, <strong className="text-gold-400">Tools</strong> (calculators, schedules, titration, reminders, export/import), and Glucose &amp; A1C.</p>
+              <p><strong className="text-white">More</strong> — Profile, body measurements, progress photos, calendar, labs, wellness, Help, and <strong className="text-gold-400">Tools</strong> for schedules, vials, calculators, reminders, and backups.</p>
               {weightEntries.length === 0 && injectionEntries.length === 0 && (
                 <p className="bg-accent/10 border border-accent/20 rounded-lg p-2.5 text-gold-400 text-xs mt-2">Get started by logging your first weight or injection from Summary.</p>
               )}
@@ -4465,9 +4472,19 @@ const wipeAllData = () => {
       `}</style>
       
       <div className="max-w-2xl mx-auto px-1">
-        <header className="text-center mb-5">
-          <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
-          <p className="text-gold-400 text-xs mt-0.5 font-medium">Weight · Injections · Insights · Daily · Glucose</p>
+        <header className="flex items-center justify-between gap-3 mb-5 py-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-11 w-11 rounded-2xl bg-accent text-slate-950 flex items-center justify-center shadow-[0_8px_30px_rgba(245,158,11,.22)] shrink-0">
+              <Syringe className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
+              <p className="text-gray-500 text-xs mt-0.5 font-medium">Health tracking, without the clutter</p>
+            </div>
+          </div>
+          <div className={`h-9 px-3 rounded-full border flex items-center gap-2 text-[11px] font-semibold shrink-0 ${user ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-300' : 'border-white/10 bg-white/[0.04] text-gray-500'}`}>
+            <Cloud className="h-3.5 w-3.5" />{user ? 'Backed up' : 'On device'}
+          </div>
         </header>
 
         {/* Upcoming Injections Alert — single box for all due/overdue */}
@@ -4502,31 +4519,6 @@ const wipeAllData = () => {
             </div>
           );
         })()}
-
-        {/* Tab Navigation */}
-        <div className="mb-4">
-          <div className="ui-tab-bar p-1 overflow-x-auto">
-            {[
-              { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
-              { id: 'weight', icon: Scale, label: 'Weight' },
-              { id: 'injections', icon: Syringe, label: 'Injections' },
-              { id: 'insights', icon: Activity, label: 'Insights' },
-              { id: 'more', icon: MoreHorizontal, label: 'More' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setShowAddForm(false);
-                }}
-                className={`ui-tab whitespace-nowrap ${activeTab === tab.id ? 'ui-tab-active' : ''}`}
-              >
-                <tab.icon className="h-4 w-4 shrink-0" />
-                <span className="truncate max-w-full text-[11px]">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* SUMMARY TAB */}
         {(activeTab === 'summary' || activeTab === 'cycles') && (
@@ -4602,7 +4594,7 @@ const wipeAllData = () => {
                   <h2 className="text-xl font-bold text-white">Weight Change</h2>
                   <span className="text-gray-400 text-sm">{getDateRangeLabel()}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="ui-card p-4">
                     <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Scale className="h-3 w-3" />Total change</div>
                     <div className={`text-xl font-bold ${parseFloat(stats.change) < 0 ? 'text-green-500' : parseFloat(stats.change) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.change}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
@@ -4624,10 +4616,6 @@ const wipeAllData = () => {
                   <div className="ui-card p-4">
                     <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Calendar className="h-3 w-3" />Weekly avg</div>
                     <div className={`text-xl font-bold ${parseFloat(stats.weeklyAvg) < 0 ? 'text-green-500' : parseFloat(stats.weeklyAvg) > 0 ? 'text-red-400' : 'text-white'}`}>{stats.weeklyAvg}<span className="text-sm font-normal text-gray-400"> lbs/wk</span></div>
-                  </div>
-                  <div className="ui-card p-4">
-                    <div className="flex items-center gap-2 text-gold-400 text-xs font-semibold mb-1"><Target className="h-3 w-3" />To goal</div>
-                    <div className="text-xl font-bold text-white">{stats.toGoal}<span className="text-sm font-normal text-gray-400"> lbs</span></div>
                   </div>
                 </div>
               </div>
@@ -4833,47 +4821,6 @@ const wipeAllData = () => {
               );
             })()}
 
-            {/* Estimated goal + Goal tracker side by side */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {stats.estimatedGoalDate && (
-                <div className="ui-card p-4 border-accent/25 bg-accent/10">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-accent/20 p-2.5 rounded-xl border border-accent/30"><Target className="h-5 w-5 text-gold-400" /></div>
-                    <div>
-                      <div className="text-gold-400 text-sm font-semibold">Estimated Goal Date</div>
-                      <div className="text-white text-lg font-bold mt-0.5">{stats.estimatedGoalDate}</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Based on your {stats.weeklyAvg} lbs/week average</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {userProfile?.goalWeight && (() => {
-                const goal = parseFloat(userProfile.goalWeight);
-                const current = parseFloat(stats.current) || 0;
-                const hasWeight = current > 0;
-                const filtered = getFilteredData(weightEntries);
-                const startWeight = filtered.length ? parseFloat(sortWeightByDateAsc(filtered)[0].weight) : current;
-                const totalToLose = startWeight - goal;
-                const progress = totalToLose > 0 && hasWeight ? Math.min(100, ((startWeight - current) / totalToLose) * 100) : 0;
-                return (
-                  <div className="ui-card p-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-400 text-sm">Goal</span>
-                      <span className="text-white font-medium">{userProfile.goalWeight} lbs</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div className="h-full rounded-full bg-gradient-to-r from-accent to-gold-500 transition-all duration-500" style={{ width: `${Math.max(0, progress)}%` }} />
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>{hasWeight ? `${stats.current} lbs now` : 'Add weight to see progress'}</span>
-                      <span>{hasWeight ? (stats.toGoal || '—') + ' to go' : '—'}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
             {/* Week in review + protocol snapshot */}
             {(() => {
               const d = getWeeklyDigest();
@@ -4884,9 +4831,6 @@ const wipeAllData = () => {
                     <span><Scale className="h-3.5 w-3 inline mr-1 text-gray-400" />Weight {d.weightStr}</span>
                     <span><Syringe className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.injStr} injections</span>
                     <span><Droplets className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.hydrationStr} hydrated</span>
-                    {d.avgGlucose != null && <span className="text-green-500">Glucose avg {d.avgGlucose} mg/dL</span>}
-                    {d.avgGlucose == null && d.lastGlucose && <span className="text-green-500">Last glucose {d.lastGlucose.value} mg/dL</span>}
-                    {d.lastA1c && <span className="text-cyan-400">A1C {d.lastA1c.value}%</span>}
                   </div>
                   <p className="text-gray-500 text-[11px] mt-2 leading-relaxed border-t border-white/[0.06] pt-2">
                     <span className="text-gray-400 font-medium">At a glance: </span>
@@ -4925,7 +4869,7 @@ const wipeAllData = () => {
                       </div>
                     )}
                     <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('profile'); }} className="text-gray-500 hover:text-gold-400 text-xs ml-auto">
-                      Edit goal
+                      Edit target
                     </button>
                   </div>
                 </div>
@@ -6109,7 +6053,7 @@ const wipeAllData = () => {
             </div>
 
             <div className="rounded-2xl p-4 border border-accent/20 bg-accent/5 backdrop-blur-sm">
-              <p className="text-gray-300 text-sm mb-2">For best results, use our Calorie / TDEE calculator to align your intake with your goals.</p>
+              <p className="text-gray-300 text-sm mb-2">Use the Calorie / TDEE calculator when you want a practical nutrition reference.</p>
               <button onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('calculator'); }} className="text-gold-400 hover:text-gold-400 text-sm font-medium flex items-center gap-2">
                 <Calculator className="h-4 w-4" /> Open Calorie & TDEE Calculator
               </button>
@@ -7411,14 +7355,12 @@ const wipeAllData = () => {
         {/* MORE TAB */}
         {activeTab === 'more' && (
           <div key="more" className="space-y-4 tab-enter">
-            <div className="menu-3d flex flex-wrap gap-2 rounded-xl p-2 overflow-x-auto overflow-y-hidden bg-[var(--bg-elevated)] backdrop-blur-sm scroll-smooth" style={{ scrollbarWidth: 'thin' }}>
+            <div className="menu-3d grid grid-cols-3 sm:grid-cols-4 gap-2 rounded-2xl p-2.5 bg-[var(--bg-elevated)] backdrop-blur-sm">
               {[
                 { id: 'profile', icon: User, label: 'Profile' },
                 { id: 'body', icon: Ruler, label: 'Body' },
-                { id: 'daily', icon: UtensilsCrossed, label: 'Daily' },
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' },
-                { id: 'glucose', icon: Droplet, label: 'Glucose' },
                 { id: 'labs', icon: Activity, label: 'Labs' },
                 { id: 'wellness', icon: Moon, label: 'Wellness' },
                 { id: 'help', icon: HelpCircle, label: 'Help' }
@@ -7427,7 +7369,7 @@ const wipeAllData = () => {
                   key={section.id}
                   ref={el => { moreSectionRefs.current[section.id] = el; }}
                   onClick={() => setActiveMoreSection(section.id)}
-                  className={`menu-3d-item flex-1 min-w-[4.5rem] flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium transition-all text-sm whitespace-nowrap ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900 shadow-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                  className={`menu-3d-item min-h-16 flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl font-medium transition-all text-xs ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent/15 text-gold-400 border border-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <section.icon className="h-4 w-4 flex-shrink-0" />{section.label}
                 </button>
@@ -7575,13 +7517,9 @@ const wipeAllData = () => {
                   )}
                 </div>
                 <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><User className="h-5 w-5 text-gold-400" />Profile & goals</h3>
-                  <p className="text-gray-400 text-xs mb-4">Set your goal weight, height (for BMI), and daily hydration goal. These drive progress and reminders.</p>
+                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><User className="h-5 w-5 text-gold-400" />Profile settings</h3>
+                  <p className="text-gray-400 text-xs mb-4">Keep the basic measurements used by BMI and hydration tracking.</p>
                   <div className="space-y-4">
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Goal weight (lbs)</label>
-                      <input type="number" min="0" step="1" value={userProfile?.goalWeight ?? 200} onChange={(e) => { const p = { ...userProfile, goalWeight: parseFloat(e.target.value) || 200 }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" />
-                    </div>
                     <div>
                       <label className="text-gray-400 text-sm block mb-1">Height (inches)</label>
                       <input type="number" min="0" step="0.5" value={userProfile?.height ?? 70} onChange={(e) => { const p = { ...userProfile, height: parseFloat(e.target.value) || 70 }; setUserProfile(p); saveData('health-user-profile', p); }} className="w-full bg-slate-700 text-white rounded-lg px-4 py-2.5" />
@@ -8817,7 +8755,7 @@ const wipeAllData = () => {
                         <BarChart3 className="h-4 w-4 text-gold-400" />
                         Open protocol-style summary
                       </button>
-                      <p className="text-gray-500 text-[11px] mt-2">PDF packs recent weight, injections (with side-effect intensity), labs, glucose, sleep, and journal snippets for visits. Protocol-style summary uses a worksheet layout (stack table, optional weekly grid, vials, charts) you can save as a multi-page PDF.</p>
+                      <p className="text-gray-500 text-[11px] mt-2">PDF tools package your recent tracker records for visits. Protocol-style summary uses a worksheet layout with stack details, schedules, vials, and charts.</p>
                     </div>
 
                     {/* Import Section */}
@@ -8870,10 +8808,6 @@ const wipeAllData = () => {
                         <div className="flex justify-between">
                           <span className="text-gray-400">Progress photos:</span>
                           <span className="text-white font-medium">{progressPhotos.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Journal entries:</span>
-                          <span className="text-white font-medium">{journalEntries.length}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-400">Schedules:</span>
@@ -9212,6 +9146,25 @@ const wipeAllData = () => {
           </div>
         )}
       </div>
+      <nav className="peptalk-bottom-nav" aria-label="Main navigation">
+        <div className="max-w-2xl mx-auto grid grid-cols-5 gap-1 px-2 pt-2">
+          {MAIN_TABS.map((tab) => (
+            <button
+              type="button"
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setShowAddForm(false);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`ui-tab ${activeTab === tab.id ? 'ui-tab-active' : ''}`}
+            >
+              <tab.icon className="h-5 w-5 shrink-0" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
       {toastUndo && (
         <div className="fixed bottom-20 left-3 right-3 z-[100] max-w-lg mx-auto flex items-center gap-2 rounded-xl border border-accent/40 bg-slate-900/95 backdrop-blur-md px-3 py-3 shadow-lg shadow-black/40">
           <span className="flex-1 text-sm text-gray-200">{toastUndo.message}</span>

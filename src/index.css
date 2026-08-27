@@ -4,12 +4,12 @@
 
 :root {
   /* Background — deep neutral night */
-  --bg-base: #0E1117;
-  --bg-surface: #151922;
-  /* Cards — elevated slate */
-  --bg-elevated: #1F2937;
-  --bg-card: #1F2937;
-  --bg-card-hover: #374151;
+  --bg-base: #090C12;
+  --bg-surface: #0F141E;
+  /* Cards — layered, quieter slate */
+  --bg-elevated: rgba(18, 25, 37, 0.96);
+  --bg-card: rgba(18, 25, 37, 0.88);
+  --bg-card-hover: rgba(27, 36, 51, 0.94);
 
   /* Accent / Highlight — energy amber */
   --accent: #F59E0B;
@@ -17,7 +17,7 @@
   --accent-muted: rgba(245, 158, 11, 0.12);
   --accent-glow: rgba(245, 158, 11, 0.28);
   /* Box outline — keep visible */
-  --border-gold: rgba(245, 158, 11, 0.35);
+  --border-gold: rgba(245, 158, 11, 0.24);
 
   /* Success — performance green */
   --color-success: #22C55E;
@@ -35,8 +35,8 @@
   --radius-xl: 1.25rem;
 
   /* Shadows — lighter so cards don’t feel heavy */
-  --shadow-card: 0 4px 20px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-gold);
-  --shadow-card-hover: 0 12px 40px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(245, 158, 11, 0.45);
+  --shadow-card: 0 12px 32px -22px rgba(0, 0, 0, 0.9);
+  --shadow-card-hover: 0 18px 42px -24px rgba(0, 0, 0, 0.95);
   --shadow-nav: 0 -1px 0 0 rgba(255, 255, 255, 0.06), 0 4px 24px rgba(0, 0, 0, 0.25);
 
   /* Set by JS for web vs native */
@@ -60,7 +60,7 @@ body::before {
   background-image: var(--bg-image);
   background-size: cover;
   background-position: center;
-  opacity: 0.06;
+  opacity: 0.035;
   z-index: 0;
   pointer-events: none;
 }
@@ -78,22 +78,24 @@ body {
   z-index: 1;
   min-height: 100%;
   box-sizing: border-box;
-  background: radial-gradient(ellipse 100% 50% at 50% -15%, rgba(245, 158, 11, 0.03), transparent 50%);
+  background:
+    radial-gradient(ellipse 90% 45% at 12% -10%, rgba(245, 158, 11, 0.07), transparent 55%),
+    radial-gradient(ellipse 70% 40% at 100% 15%, rgba(34, 211, 238, 0.035), transparent 60%);
 }
 
 /* Card - primary content container */
 @layer components {
   .ui-card {
-    @apply rounded-xl border transition-all duration-300 ease-out;
+    @apply rounded-2xl border transition-all duration-300 ease-out;
     background: var(--bg-card);
-    border-color: var(--border-gold);
+    border-color: var(--border-subtle);
     box-shadow: var(--shadow-card);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(18px);
   }
   .ui-card:hover {
     /* No fill change — keeps borders and lines sharp */
-    box-shadow: var(--shadow-card);
-    border-color: var(--border-gold);
+    box-shadow: var(--shadow-card-hover);
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
   .ui-card-inner {
@@ -107,11 +109,10 @@ body {
 
   /* Accent “hero” panel — same language as Goals → Your current stack (use sparingly) */
   .ui-hero-panel {
-    @apply relative rounded-2xl border-2 border-accent/50 bg-slate-950/80 overflow-hidden;
+    @apply relative rounded-2xl border border-accent/25 bg-slate-950/70 overflow-hidden;
     box-shadow:
-      0 0 0 1px rgba(245, 158, 11, 0.12),
-      0 12px 40px -8px rgba(0, 0, 0, 0.55),
-      0 0 48px -12px rgba(245, 158, 11, 0.25);
+      0 18px 45px -26px rgba(0, 0, 0, 0.9),
+      0 0 40px -22px rgba(245, 158, 11, 0.28);
   }
   .ui-hero-panel--sticky {
     @apply sticky top-2;
@@ -172,7 +173,7 @@ body {
     box-shadow: 0 0 20px rgba(245, 158, 11, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
   .ui-tab {
-    @apply flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2.5 px-1.5 rounded-lg font-medium text-xs transition-all duration-200 ease-out;
+    @apply min-w-0 min-h-[54px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-semibold text-[10px] transition-all duration-200 ease-out;
     color: var(--text-muted);
   }
   .ui-tab:hover {
@@ -183,9 +184,9 @@ body {
     transform: scale(0.98);
   }
   .ui-tab-active {
-    background: var(--accent);
-    color: #0E1117;
-    box-shadow: 0 2px 8px var(--accent-glow);
+    background: var(--accent-muted);
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.1);
   }
   .ui-tab-active:hover {
     transform: none;
@@ -297,8 +298,8 @@ body {
 
 /* More / legacy menu */
 .menu-3d {
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-gold);
+  box-shadow: 0 16px 36px -28px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
 }
 .menu-3d-item {
@@ -310,7 +311,21 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 .menu-3d-item-active {
-  background: var(--accent) !important;
-  color: #0E1117 !important;
-  box-shadow: 0 2px 8px var(--accent-glow);
+  background: var(--accent-muted) !important;
+  color: var(--accent) !important;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.08);
+}
+
+.peptalk-bottom-nav {
+  position: fixed;
+  z-index: 45;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  background: rgba(9, 12, 18, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -18px 40px -30px rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
 }
