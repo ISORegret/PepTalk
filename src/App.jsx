@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceArea, ReferenceLine } from 'recharts';
-import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, ArrowUpDown, Cloud, WifiOff, Download, Sparkles, ChevronLeft, Stethoscope, Search, Layers, Info, Moon, HelpCircle, FileText, BarChart3 } from 'lucide-react';
+import { Scale, Syringe, Plus, TrendingDown, TrendingUp, Calendar, Trash2, Edit2, X, Activity, Calculator, LayoutDashboard, Wrench, ChevronDown, Bell, Ruler, Camera, Target, Clock, CheckCircle, AlertCircle, BookOpen, Smile, Meh, Frown, Zap, CalendarDays, Droplets, Beef, FileDown, MoreHorizontal, Trophy, UtensilsCrossed, Droplet, User, Cloud, WifiOff, Download, Sparkles, ChevronLeft, Stethoscope, Search, Layers, Info, Moon, HelpCircle, FileText, BarChart3 } from 'lucide-react';
 import { useSupabaseAuth } from './context/SupabaseAuthContext.jsx';
 import { checkForAppUpdate, dismissUpdatePrompt, openDownloadUrl } from './lib/appUpdateCheck.js';
 import { formatCloudError, scheduleCloudSync } from './lib/cloudSync.js';
@@ -1206,7 +1206,7 @@ const PepTalk = () => {
   const [titrationPlans, setTitrationPlans] = useState([]);
   const [journalEntries, setJournalEntries] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [injectionHistorySort, setInjectionHistorySort] = useState('byMed'); // 'byMed' | 'byDate'
+  const [expandedInjectionMed, setExpandedInjectionMed] = useState(null);
   const [weightHistoryFilterDate, setWeightHistoryFilterDate] = useState('');
   const [injectionHistoryFilterDate, setInjectionHistoryFilterDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -6389,44 +6389,6 @@ const wipeAllData = () => {
               </div>
             )}
 
-            {/* Injection site rotation + body map */}
-            <div className="ui-card p-4">
-              <h3 className="text-white font-medium text-sm mb-1 flex items-center gap-2">Injection site rotation</h3>
-              <p className="text-gray-400 text-xs mb-3">Last 30 days. Green = safe to use · Yellow = moderate · Red = rotate away.</p>
-              {/* Body map: all sites in a visual grid */}
-              <div className="mb-4 grid grid-cols-3 gap-1.5">
-                {getInjectionSiteCountsForMap().map((item) => (
-                  <div
-                    key={item.site}
-                    className={`rounded-lg p-2 text-center min-h-[48px] flex flex-col justify-center ${
-                      item.status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
-                      item.status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
-                      'bg-red-500/20 text-red-400 border border-red-500/40'
-                    }`}
-                    title={`${item.site}: ${item.count} injections`}
-                  >
-                    <span className="text-[10px] font-medium leading-tight block truncate">{item.site.replace(' (Left)', ' L').replace(' (Right)', ' R')}</span>
-                    <span className="text-xs opacity-80">{item.count}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {getInjectionSiteCounts().map(({ site, count, status }) => (
-                  <div
-                    key={site}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                      status === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
-                      status === 'yellow' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' :
-                      'bg-red-500/20 text-red-400 border border-red-500/40'
-                    }`}
-                  >
-                    {site} <span className="opacity-80">({count})</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-gray-500 text-xs mt-2">Green = 0–2 · Yellow = 3–5 · Red = 6+</p>
-            </div>
-
             {showAddForm && (
               <div className="ui-hero-panel">
                 <div className="ui-hero-panel__wash" aria-hidden />
@@ -6667,150 +6629,92 @@ const wipeAllData = () => {
               </div>
             )}
 
-            <div className="ui-card p-4">
-              <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
-              <h3 className="text-white font-medium">History</h3>
-                <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={injectionHistoryFilterDate}
-                  onChange={(e) => setInjectionHistoryFilterDate(e.target.value)}
-                  className="bg-slate-800 text-gray-200 text-xs rounded-lg px-2 py-1.5"
-                  title="Filter by week (pick any day in the week)"
-                />
-                {injectionHistoryFilterDate && (
-                  <button
-                    type="button"
-                    onClick={() => setInjectionHistoryFilterDate('')}
-                    className="text-gray-500 hover:text-gray-300 text-xs"
-                  >
-                    Clear
-                  </button>
-                )}
-                  <button
-                    type="button"
-                    onClick={() => setInjectionHistorySort(prev => prev === 'byMed' ? 'byDate' : 'byMed')}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 hover:text-white text-xs font-medium transition-colors"
-                    title={injectionHistorySort === 'byMed' ? 'Switch to sort by date' : 'Switch to group by medication'}
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                    {injectionHistorySort === 'byMed' ? 'By medication' : 'By date'}
-                  </button>
-                  {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2 rounded-lg shadow-gold-glow"><Plus className="h-5 w-5" /></button>}
+            <div className="ui-card overflow-hidden">
+              <div className="flex items-center justify-between gap-3 p-4 border-b border-white/[0.06]">
+                <div>
+                  <h3 className="text-white font-semibold">Dose history</h3>
+                  <p className="text-gray-500 text-xs mt-0.5">Grouped by medication. Tap one to see every dose and location.</p>
                 </div>
+                {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2.5 rounded-xl shadow-gold-glow shrink-0"><Plus className="h-5 w-5" /></button>}
               </div>
               {injectionEntries.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm"><Syringe className="h-12 w-12 mx-auto mb-2 opacity-50" /><p>No injections logged</p></div>
+                <div className="text-center py-8 text-gray-400 text-sm"><Syringe className="h-10 w-10 mx-auto mb-2 opacity-40" /><p>No doses logged</p></div>
               ) : (
-                <div className={`space-y-3 overflow-y-auto ${injectionHistorySort === 'byMed' ? 'max-h-[32rem]' : 'max-h-[32rem]'}`}>
-                  {injectionHistorySort === 'byDate' ? (
-                    (() => {
-                      const sorted = [...injectionEntries].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-                      if (!injectionHistoryFilterDate) return sorted;
+                <div>
+                  {(() => {
+                    let filtered = [...injectionEntries];
+                    if (injectionHistoryFilterDate) {
                       const selected = parseLocalDate(injectionHistoryFilterDate);
-                      if (!selected) return sorted;
-                      const startOfWeek = (d) => {
-                        const date = new Date(d);
-                        const day = date.getDay();
-                        const diff = day === 0 ? -6 : 1 - day;
-                        date.setDate(date.getDate() + diff);
-                        date.setHours(0, 0, 0, 0);
-                        return date;
-                      };
-                      const ws = startOfWeek(selected);
-                      const we = new Date(ws.getTime() + 6 * 24 * 60 * 60 * 1000);
-                      return sorted.filter(entry => {
-                        const d = parseLocalDate(entry.date);
-                        return d && d >= ws && d <= we;
-                      });
-                    })().map((entry) => {
-                        const color = getMedicationColor(entry.type);
-                        return (
-                          <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-start gap-2 min-w-0 flex-1">
-                                <div className="p-1.5 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: `${color}20` }}><Syringe className="h-4 w-4" style={{ color }} /></div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                                    <span className="text-white font-medium">{entry.type}</span>
-                                    <span className="text-gray-400">{entry.dose} {entry.unit}</span>
-                                  </div>
-                                  <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">· {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
-                                  {entry.sideEffects?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                      {entry.sideEffects.map((effect) => (
-                                        <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">
-                                          {effect}{entry.sideEffectSeverity?.[effect] != null ? ` (${entry.sideEffectSeverity[effect]}/5)` : ''}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
-                                </div>
-                              </div>
-                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
-                                <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-                              </div>
+                      if (selected) {
+                        const day = selected.getDay();
+                        const ws = new Date(selected);
+                        ws.setDate(ws.getDate() + (day === 0 ? -6 : 1 - day));
+                        ws.setHours(0, 0, 0, 0);
+                        const we = new Date(ws.getTime() + (7 * 24 * 60 * 60 * 1000) - 1);
+                        filtered = filtered.filter((entry) => {
+                          const date = parseLocalDate(entry.date);
+                          return date && date >= ws && date <= we;
+                        });
+                      }
+                    }
+                    const byMed = filtered.reduce((acc, entry) => {
+                      const name = entry.type || 'Other';
+                      if (!acc[name]) acc[name] = [];
+                      acc[name].push(entry);
+                      return acc;
+                    }, {});
+                    const names = Object.keys(byMed).sort((a, b) => a.localeCompare(b));
+                    if (!names.length) return <p className="p-5 text-center text-sm text-gray-500">No doses during that week.</p>;
+                    return names.map((medName) => {
+                      const entries = byMed[medName].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+                      const latest = entries[0];
+                      const color = getMedicationColor(medName);
+                      const expanded = expandedInjectionMed === medName;
+                      return (
+                        <section key={medName} className="border-b border-white/[0.06] last:border-0">
+                          <button type="button" onClick={() => setExpandedInjectionMed(expanded ? null : medName)} className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-white/[0.025] active:bg-white/[0.04] transition-colors">
+                            <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}18`, color }}><Syringe className="h-4.5 w-4.5" /></div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2"><span className="font-semibold text-sm text-white truncate">{medName}</span><span className="text-[10px] rounded-full bg-white/[0.06] text-gray-500 px-2 py-0.5">{entries.length}</span></div>
+                              <p className="text-xs text-gray-500 mt-1">Latest: {latest.dose} {latest.unit} · {parseLocalDate(latest.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                             </div>
-                          </div>
-                        );
-                      })
-                  ) : (
-                    (() => {
-                      const byMed = injectionEntries.reduce((acc, entry) => {
-                        const t = entry.type || 'Other';
-                        if (!acc[t]) acc[t] = [];
-                        acc[t].push(entry);
-                        return acc;
-                      }, {});
-                      const medOrder = [...new Set(injectionEntries.map(e => e.type || 'Other'))].sort((a, b) => a.localeCompare(b));
-                      return medOrder.map(medName => {
-                        const entries = (byMed[medName] || []).sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
-                        const color = getMedicationColor(medName);
-                        return (
-                          <div key={medName}>
-                            <div className="flex items-center gap-2 mb-1.5 sticky top-0 z-10 py-1 bg-[var(--bg-base)]/95 backdrop-blur">
-                              <div className="p-1.5 rounded-md" style={{ backgroundColor: `${color}25` }}><Syringe className="h-3.5 w-3.5" style={{ color }} /></div>
-                              <span className="text-xs font-semibold text-white">{medName}</span>
-                              <span className="text-[11px] text-gray-500">({entries.length})</span>
-                            </div>
-                            <div className="space-y-1.5 pl-1">
-                              {entries.map((entry) => (
-                                <div key={entry.id} className="bg-slate-700/50 rounded-lg p-2.5 group">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-start gap-2 min-w-0 flex-1">
-                                      <div className="p-1.5 rounded-md shrink-0 mt-0.5" style={{ backgroundColor: `${color}20` }}><Syringe className="h-4 w-4" style={{ color }} /></div>
+                            <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {expanded && (
+                            <div className="px-4 pb-3">
+                              <div className="rounded-xl border border-white/[0.06] overflow-hidden bg-black/10">
+                                {entries.map((entry) => (
+                                  <div key={entry.id} className="px-3 py-3 border-b border-white/[0.06] last:border-0">
+                                    <div className="flex items-start gap-3">
                                       <div className="min-w-0 flex-1">
-                                        <div className="text-xs text-gray-300">{entry.dose} {entry.unit}</div>
-                                        <div className="text-gray-500 text-[11px] mt-0.5">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}{(entry.route || entry.site) && <span className="ml-1.5">· {[entry.route, entry.site].filter(Boolean).join(' · ')}</span>}</div>
-                                        {entry.sideEffects?.length > 0 && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {entry.sideEffects.map((effect) => (
-                                              <span key={effect} className="text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded">
-                                                {effect}{entry.sideEffectSeverity?.[effect] != null ? ` (${entry.sideEffectSeverity[effect]}/5)` : ''}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                        {entry.notes && <div className="text-[11px] text-gray-500 mt-1 italic">{entry.notes}</div>}
+                                        <div className="flex items-baseline justify-between gap-2">
+                                          <span className="text-sm font-semibold text-white">{entry.dose} {entry.unit}</span>
+                                          <span className="text-[11px] text-gray-500 shrink-0">{parseLocalDate(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                        </div>
+                                        {(entry.route || entry.site) && <p className="text-xs text-gold-400/80 mt-1">{[entry.route, entry.site].filter(Boolean).join(' · ')}</p>}
+                                        {entry.sideEffects?.length > 0 && <p className="text-[11px] text-orange-300/80 mt-1.5">Side effects: {entry.sideEffects.map((effect) => `${effect}${entry.sideEffectSeverity?.[effect] != null ? ` ${entry.sideEffectSeverity[effect]}/5` : ''}`).join(', ')}</p>}
+                                        {entry.notes && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{entry.notes}</p>}
+                                      </div>
+                                      <div className="flex gap-1 shrink-0">
+                                        <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="h-8 w-8 rounded-lg bg-white/[0.05] text-gray-400 flex items-center justify-center" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                                        <button onClick={() => deleteInjection(entry.id)} className="h-8 w-8 rounded-lg bg-white/[0.05] text-gray-500 hover:text-red-400 flex items-center justify-center" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                                       </div>
                                     </div>
-                                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                      <button onClick={() => { setEditingInjection(entry); setInjectionType(entry.type); setInjectionDose(entry.dose.toString()); setInjectionUnit(entry.unit || 'mg'); setInjectionDate(entry.date); setInjectionRoute(entry.route || 'SubQ'); setInjectionSite(entry.site || 'Stomach'); setInjectionNotes(entry.notes || ''); setSelectedSideEffects(entry.sideEffects || []); setSideEffectSeverity(entry.sideEffectSeverity || Object.fromEntries((entry.sideEffects || []).map((ef) => [ef, 3]))); setSelectedVialId(entry.vialId ?? null); setTrialTargetMg(''); setShowAddForm(true); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-slate-600 rounded-md" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
-                                      <button onClick={() => deleteInjection(entry.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-slate-600 rounded-md" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      });
-                    })()
-                  )}
+                          )}
+                        </section>
+                      );
+                    });
+                  })()}
                 </div>
               )}
+              <div className="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2">
+                <input type="date" value={injectionHistoryFilterDate} onChange={(e) => setInjectionHistoryFilterDate(e.target.value)} className="bg-slate-800 text-gray-300 text-xs rounded-lg px-2 py-1.5" title="Filter by week" />
+                {injectionHistoryFilterDate && <button type="button" onClick={() => setInjectionHistoryFilterDate('')} className="text-gray-500 hover:text-gray-300 text-xs">Clear week</button>}
+              </div>
             </div>
           </div>
         )}
