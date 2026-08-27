@@ -35,6 +35,7 @@ const MEDICATIONS = [
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: '5-Amino-1MQ', category: 'Other', color: '#e99173', defaultSchedule: 1, halfLife: 7, peakHours: 2, effectDuration: 24 },
   { name: 'Cagrilintide', category: 'Other', color: '#ec8f72', defaultSchedule: 3.5, halfLife: 168, peakHours: 24, effectDuration: 168 },
+  { name: 'Tesamorelin / Ipamorelin', category: 'Peptide', color: '#f08f70', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 4 },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
@@ -120,6 +121,25 @@ const REGIMEN_CAGRILINTIDE_IMPORT = [
   type: 'Cagrilintide',
   dose,
   unit: 'mg',
+  date,
+  time,
+  route: 'SubQ',
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
+}));
+
+const REGIMEN_TESAMORELIN_IPAMORELIN_IMPORT = [
+  ['2026-08-27', '06:00', 20, 'Love Handles (L)'],
+  ['2026-08-26', '05:58', 20, null],
+  ['2026-08-25', '02:22', 10, null],
+  ['2026-08-24', '06:20', 10, null],
+  ['2026-08-22', '23:47', 10, 'Love Handles (R)'],
+].map(([date, time, dose, site]) => ({
+  id: `regimen-tesamorelin-ipamorelin-${date}-${time.replace(':', '')}`,
+  type: 'Tesamorelin / Ipamorelin',
+  dose,
+  unit: 'IU',
   date,
   time,
   route: 'SubQ',
@@ -1617,6 +1637,7 @@ const PepTalk = () => {
         const imports = [
           { key: 'peptalk-regimen-5-amino-import-v1', entries: REGIMEN_5_AMINO_1MQ_IMPORT },
           { key: 'peptalk-regimen-cagrilintide-import-v1', entries: REGIMEN_CAGRILINTIDE_IMPORT },
+          { key: 'peptalk-regimen-tesamorelin-ipamorelin-import-v1', entries: REGIMEN_TESAMORELIN_IPAMORELIN_IMPORT },
         ];
         let merged = [...existing];
         let changed = false;
@@ -1651,6 +1672,10 @@ const PepTalk = () => {
           {
             key: 'peptalk-regimen-cagrilintide-schedule-v1',
             schedule: { id: 'regimen-cagrilintide-wed-sat', medication: 'Cagrilintide', frequencyDays: 3, preferredDay: 3, startDate: '2026-07-29', scheduleType: 'specific_days', specificDays: [3, 6], preferredTime: '22:00' },
+          },
+          {
+            key: 'peptalk-regimen-tesamorelin-ipamorelin-schedule-v1',
+            schedule: { id: 'regimen-tesamorelin-ipamorelin-weekdays', medication: 'Tesamorelin / Ipamorelin', frequencyDays: 1, preferredDay: 1, startDate: '2026-08-22', scheduleType: 'specific_days', specificDays: [1, 2, 3, 4, 5], preferredTime: '06:00' },
           },
         ];
         let merged = [...existing];
@@ -3807,6 +3832,12 @@ const wipeAllData = () => {
     });
 
     const schedule = schedules.find((item) => item.medication === medName);
+    const loggedUnits = [...new Set(entries.map((entry) => String(entry.unit || 'mg').toLowerCase()))];
+    const levelUnit = loggedUnits.length === 1 && loggedUnits[0] === 'iu'
+      ? 'IU'
+      : loggedUnits.length === 1 && loggedUnits[0] === 'units'
+        ? 'units'
+        : 'mg';
     const frequencyDays = Math.max(1, Number(schedule?.frequencyDays || medication.defaultSchedule || 1));
     const adherenceStart = new Date(Math.max(firstDoseAt.getTime(), now.getTime() - 30 * 24 * 60 * 60 * 1000));
     let expectedDoses;
@@ -3852,6 +3883,7 @@ const wipeAllData = () => {
       adherence,
       nextDoseAt,
       frequencyDays,
+      levelUnit,
     };
   };
 
@@ -3899,10 +3931,14 @@ const wipeAllData = () => {
       bucket.totalMg += safeDose;
 
       const medName = inj.type || 'Other';
+      const rawUnit = String(inj.unit || 'mg').toLowerCase();
+      const displayUnit = rawUnit === 'iu' ? 'IU' : rawUnit === 'units' ? 'units' : 'mg';
+      const displayDose = displayUnit === 'mg' ? safeDose : (Number(inj.dose) || 0);
       if (!bucket.perMed[medName]) {
-        bucket.perMed[medName] = { doseMg: 0 };
+        bucket.perMed[medName] = { doseMg: 0, displayDose: 0, unit: displayUnit };
       }
       bucket.perMed[medName].doseMg += doseMg || 0;
+      bucket.perMed[medName].displayDose += displayDose;
     });
 
     const rows = [];
@@ -5717,6 +5753,7 @@ const wipeAllData = () => {
               const { rows, meds } = getWeeklyDoseAndWeightSummary();
               if (!rows.length) return null;
               const visibleMeds = meds.filter((m) => !weeklyDoseWeightExcludedMeds.includes(m));
+              const getWeeklyDisplayUnit = (medName) => rows.find((row) => row.perMed?.[medName]?.unit)?.perMed?.[medName]?.unit || 'mg';
               const totalWeightChange = rows.reduce((sum, row) => {
                 return row.weightChange != null ? sum + row.weightChange : sum;
               }, 0);
@@ -5779,7 +5816,7 @@ const wipeAllData = () => {
                     </div>
                   </div>
                   <p className="text-gray-400 text-xs mb-3 leading-relaxed">
-                    <span className="hidden sm:inline">Weekly </span><strong className="text-gray-300">Total mg</strong> per med (from vial concentration when you log units or ml with a vial). Each week shows <strong className="text-gray-400">start weight</strong> (last weigh-in before that week, or first in the week) and <strong className="text-gray-400">end weight</strong> (last weigh-in in that week). Hide meds below to declutter.
+                    <span className="hidden sm:inline">Weekly </span><strong className="text-gray-300">dose totals</strong> use each compound&apos;s logged unit (mg, IU, or units). Each week shows <strong className="text-gray-400">start weight</strong> and <strong className="text-gray-400">end weight</strong>. Hide meds below to declutter.
                   </p>
                   <div className="flex flex-col gap-2 mb-3 text-xs text-gray-400 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
                     <label htmlFor="weekly-dose-week-start" className="text-gray-500 shrink-0">
@@ -5855,9 +5892,10 @@ const wipeAllData = () => {
                   <div className="xl:hidden space-y-2 max-h-[min(40rem,80vh)] overflow-y-auto pr-0.5">
                     {rows.map((row, idx) => {
                       const doseLines = visibleMeds.map((medName) => {
-                        const mg = row.perMed?.[medName]?.doseMg;
-                        return { medName, mg: mg != null && mg > 0 ? mg : null };
-                      }).filter((x) => x.mg != null);
+                        const dose = row.perMed?.[medName]?.displayDose;
+                        const unit = row.perMed?.[medName]?.unit || getWeeklyDisplayUnit(medName);
+                        return { medName, dose: dose != null && dose > 0 ? dose : null, unit };
+                      }).filter((x) => x.dose != null);
                       return (
                         <div
                           key={`mobile-${row.weekLabel}-${idx}`}
@@ -5904,10 +5942,10 @@ const wipeAllData = () => {
                             </p>
                           ) : (
                             <ul className="space-y-1.5 text-xs">
-                              {doseLines.map(({ medName, mg }) => (
+                              {doseLines.map(({ medName, dose, unit }) => (
                                 <li key={medName} className="flex justify-between gap-2 text-gray-300">
                                   <span className="text-gray-400 min-w-0 truncate" title={medName}>{medName}</span>
-                                  <span className="tabular-nums shrink-0">{mg.toFixed(2)} mg/wk</span>
+                                  <span className="tabular-nums shrink-0">{dose.toFixed(2)} {unit}/wk</span>
                                 </li>
                               ))}
                             </ul>
@@ -5925,7 +5963,7 @@ const wipeAllData = () => {
                           {visibleMeds.map((medName) => (
                             <th key={medName} className="py-2 px-2 text-right font-medium min-w-[5rem] max-w-[9rem]">
                               <span className="block leading-tight line-clamp-2" title={medName}>{medName}</span>
-                              <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">mg / wk</span>
+                              <span className="block text-[10px] font-normal text-gray-500 normal-case tracking-normal">{getWeeklyDisplayUnit(medName)} / wk</span>
                             </th>
                           ))}
                           <th className="py-2 px-2 text-right font-medium whitespace-nowrap tabular-nums">Start lb</th>
@@ -5941,8 +5979,8 @@ const wipeAllData = () => {
                               <span className="whitespace-nowrap">{row.weekLabel}</span>
                             </td>
                             {visibleMeds.map((medName) => {
-                              const mg = row.perMed?.[medName]?.doseMg;
-                              if (mg == null || mg <= 0) {
+                              const dose = row.perMed?.[medName]?.displayDose;
+                              if (dose == null || dose <= 0) {
                                 return (
                                   <td key={medName} className="py-2 px-2 text-right text-gray-500 align-top">
                                     —
@@ -5951,7 +5989,7 @@ const wipeAllData = () => {
                               }
                               return (
                                 <td key={medName} className="py-2 px-2 text-right text-gray-200 tabular-nums align-top">
-                                  {mg.toFixed(2)}
+                                  {dose.toFixed(2)}
                                 </td>
                               );
                             })}
@@ -6147,7 +6185,7 @@ const wipeAllData = () => {
                                   <Activity className="h-4 w-4" style={{ color: insight.color }} />
                                   Medication level
                                 </div>
-                                <div className="mt-2 text-4xl font-semibold tracking-tight text-white">~{remainingLabel} <span className="text-base font-normal text-gray-400">mg</span></div>
+                                <div className="mt-2 text-4xl font-semibold tracking-tight text-white">~{remainingLabel} <span className="text-base font-normal text-gray-400">{detail.levelUnit}</span></div>
                                 <div className="mt-1 text-xs text-gray-500">Estimated t½ ~{detail.medication.halfLife}h</div>
                               </div>
                               <span className="text-xs text-gray-400">{statusLabel}</span>
@@ -6177,7 +6215,7 @@ const wipeAllData = () => {
                                     cursor={{ stroke: '#64748b', strokeOpacity: 0.35 }}
                                     contentStyle={{ backgroundColor: 'rgba(15,23,42,.96)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, fontSize: 11 }}
                                     labelFormatter={(timestamp) => new Date(timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                    formatter={(value, name, item) => [`${Number(value).toFixed(2)} mg${item?.payload?.dose ? ` · dose ${item.payload.dose}` : ''}`, name === 'projectedMg' ? 'Projected' : 'Estimated']}
+                                    formatter={(value, name, item) => [`${Number(value).toFixed(2)} ${detail.levelUnit}${item?.payload?.dose ? ` · dose ${item.payload.dose}` : ''}`, name === 'projectedMg' ? 'Projected' : 'Estimated']}
                                   />
                                   <Area type="linear" dataKey="actualMg" stroke="none" fill={`url(#compound-fill-${insight.medication.replace(/[^a-z0-9]/gi, '')})`} connectNulls={false} />
                                   <Line
