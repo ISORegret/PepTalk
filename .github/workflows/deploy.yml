@@ -57,7 +57,6 @@ jobs:
         run: |
           mkdir -p dist/PepTalk
           find dist -maxdepth 1 -mindepth 1 ! -name PepTalk -exec mv {} dist/PepTalk/ \;
-          sed -i 's|/PepTalk/|/PepTalk/PepTalk/|g' dist/PepTalk/manifest.json 2>/dev/null || true
           VERSION=$(grep -o '"version": "[^"]*"' package.json | head -1 | cut -d'"' -f4)
           sed "s/__APK_VERSION__/$VERSION/g" website/index.html > dist/index.html
           if [ -f website/PepTalk.apk ]; then

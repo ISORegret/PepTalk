@@ -2,9 +2,9 @@
   "name": "PepTalk - Peptide & Weight Management",
   "short_name": "PepTalk",
   "description": "Track weight, medications, body measurements, and progress for your health journey",
-  "start_url": "/PepTalk/",
-  "scope": "/PepTalk/",
-  "id": "/PepTalk/",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
   "display": "standalone",
   "display_override": [
     "standalone",
@@ -24,44 +24,14 @@
   ],
   "icons": [
     {
-      "src": "../icons/icon-48.webp",
-      "type": "image/webp",
-      "sizes": "48x48",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "../icons/icon-72.webp",
-      "type": "image/webp",
-      "sizes": "72x72",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "../icons/icon-96.webp",
-      "type": "image/webp",
-      "sizes": "96x96",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "../icons/icon-128.webp",
-      "type": "image/webp",
-      "sizes": "128x128",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "../icons/icon-192.webp",
-      "type": "image/webp",
+      "src": "icon-192.png",
+      "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "../icons/icon-256.webp",
-      "type": "image/webp",
-      "sizes": "256x256",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "../icons/icon-512.webp",
-      "type": "image/webp",
+      "src": "icon-512.png",
+      "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
     }

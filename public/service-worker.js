@@ -1,17 +1,17 @@
-// Service Worker for Health Tracker PWA
-const CACHE_NAME = 'health-tracker-v1';
-const RUNTIME_CACHE = 'health-tracker-runtime';
-
-// Base path for GitHub Pages
-const BASE_PATH = '/health-tracker-app';
+// Service worker for the PepTalk PWA. All URLs are resolved from this file so
+// the same build works at /PepTalk/, /PepTalk/PepTalk/, or another base path.
+const CACHE_NAME = 'peptalk-shell-v2';
+const RUNTIME_CACHE = 'peptalk-runtime-v2';
+const APP_ROOT = new URL('./', self.location.href);
+const appUrl = (path = '') => new URL(path, APP_ROOT).href;
 
 // Files to cache immediately on install
 const PRECACHE_URLS = [
-  `${BASE_PATH}/`,
-  `${BASE_PATH}/index.html`,
-  `${BASE_PATH}/manifest.json`,
-  `${BASE_PATH}/icon-192.png`,
-  `${BASE_PATH}/icon-512.png`
+  appUrl(),
+  appUrl('index.html'),
+  appUrl('manifest.json'),
+  appUrl('icon-192.png'),
+  appUrl('icon-512.png')
 ];
 
 // Install event - cache essential files
@@ -33,7 +33,7 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_NAME && name !== RUNTIME_CACHE)
+            .filter((name) => name.startsWith('peptalk-') && name !== CACHE_NAME && name !== RUNTIME_CACHE)
             .map((name) => {
               console.log('Service Worker: Deleting old cache:', name);
               return caches.delete(name);
@@ -46,8 +46,29 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  // Always try the network first for page navigations so a newly deployed
+  // version is picked up promptly. Fall back to the cached app shell offline.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(appUrl('index.html'), copy));
+          }
+          return response;
+        })
+        .catch(async () =>
+          (await caches.match(appUrl('index.html'))) || caches.match(appUrl())
+        )
+    );
     return;
   }
 
@@ -79,7 +100,7 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         // If both cache and network fail, return offline page if available
-        return caches.match(`${BASE_PATH}/index.html`);
+        return caches.match(appUrl('index.html'));
       })
   );
 });

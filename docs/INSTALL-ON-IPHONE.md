@@ -7,7 +7,7 @@ Follow these steps to add PepTalk to your home screen so it opens like an app.
 ## What you need
 
 - Your iPhone
-- The link to PepTalk (the web address you were sent — e.g. `https://yoursite.com/PepTalk/` or similar)
+- The PepTalk web app: `https://isoregret.github.io/PepTalk/PepTalk/`
 - A connection to the internet (Wi‑Fi or cellular)
 
 ---
@@ -15,7 +15,7 @@ Follow these steps to add PepTalk to your home screen so it opens like an app.
 ## Steps
 
 1. **Open the link in Safari**  
-   Tap the PepTalk link you were sent.  
+   Open `https://isoregret.github.io/PepTalk/PepTalk/`.
    Make sure it opens in **Safari** (Apple’s browser), not Chrome or another app.  
    If it opened elsewhere, copy the link and paste it into Safari’s address bar.
 
