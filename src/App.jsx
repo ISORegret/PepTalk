@@ -34,6 +34,7 @@ const MEDICATIONS = [
   { name: 'Liraglutide', category: 'GLP-1', color: '#059669', defaultSchedule: 1, halfLife: 13, peakHours: 12, effectDuration: 24 },
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: '5-Amino-1MQ', category: 'Other', color: '#e99173', defaultSchedule: 1, halfLife: 7, peakHours: 2, effectDuration: 24 },
+  { name: 'Cagrilintide', category: 'Other', color: '#ec8f72', defaultSchedule: 3.5, halfLife: 168, peakHours: 24, effectDuration: 168 },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
@@ -103,6 +104,28 @@ const REGIMEN_5_AMINO_1MQ_IMPORT = [
   notes: 'Imported from Regimen screenshot',
   sideEffects: [],
   importOrder: index,
+}));
+
+const REGIMEN_CAGRILINTIDE_IMPORT = [
+  ['2026-08-26', '23:25', 0.13, null],
+  ['2026-08-22', '23:46', 0.3, null],
+  ['2026-08-19', '22:00', 0.13, 'Upper Arm (Left)'],
+  ['2026-08-12', '22:00', 0.13, 'Love Handles (L)'],
+  ['2026-08-08', '22:00', 0.13, 'Belly (Left)'],
+  ['2026-08-05', '23:34', 0.13, 'Belly (Left)'],
+  ['2026-08-01', '22:00', 0.13, 'Belly (Right)'],
+  ['2026-07-29', '22:00', 0.13, null],
+].map(([date, time, dose, site]) => ({
+  id: `regimen-cagrilintide-${date}-${time.replace(':', '')}`,
+  type: 'Cagrilintide',
+  dose,
+  unit: 'mg',
+  date,
+  time,
+  route: 'SubQ',
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
 }));
 
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
@@ -1590,18 +1613,26 @@ const PepTalk = () => {
       {
         const parsed = injectionData ? JSON.parse(injectionData) : [];
         const existing = Array.isArray(parsed) ? parsed : [];
-        const importKey = 'peptalk-regimen-5-amino-import-v1';
-        if (localStorage.getItem(importKey) !== 'done') {
-          const doseKey = (entry) => `${entry.type}|${toCalendarDay(entry.date)}|${Number(entry.dose)}|${String(entry.unit || 'mg').toLowerCase()}`;
-          const existingKeys = new Set(existing.map(doseKey));
-          const additions = REGIMEN_5_AMINO_1MQ_IMPORT.filter((entry) => !existingKeys.has(doseKey(entry)));
-          const merged = [...existing, ...additions].sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
-          setInjectionEntries(merged);
-          if (additions.length > 0) saveData('health-injection-entries', merged);
-          localStorage.setItem(importKey, 'done');
-        } else {
-          setInjectionEntries(existing);
-        }
+        const doseKey = (entry) => `${entry.type}|${toCalendarDay(entry.date)}|${Number(entry.dose)}|${String(entry.unit || 'mg').toLowerCase()}`;
+        const imports = [
+          { key: 'peptalk-regimen-5-amino-import-v1', entries: REGIMEN_5_AMINO_1MQ_IMPORT },
+          { key: 'peptalk-regimen-cagrilintide-import-v1', entries: REGIMEN_CAGRILINTIDE_IMPORT },
+        ];
+        let merged = [...existing];
+        let changed = false;
+        imports.forEach(({ key, entries }) => {
+          if (localStorage.getItem(key) === 'done') return;
+          const existingKeys = new Set(merged.map(doseKey));
+          const additions = entries.filter((entry) => !existingKeys.has(doseKey(entry)));
+          if (additions.length > 0) {
+            merged = [...merged, ...additions];
+            changed = true;
+          }
+          localStorage.setItem(key, 'done');
+        });
+        merged.sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
+        setInjectionEntries(merged);
+        if (changed) saveData('health-injection-entries', merged);
       }
       if (profileData) {
         const parsed = JSON.parse(profileData);
@@ -1612,26 +1643,28 @@ const PepTalk = () => {
       {
         const parsed = scheduleData ? JSON.parse(scheduleData) : [];
         const existing = Array.isArray(parsed) ? parsed : [];
-        const scheduleImportKey = 'peptalk-regimen-5-amino-schedule-v1';
-        if (localStorage.getItem(scheduleImportKey) !== 'done' && !existing.some((schedule) => schedule.medication === '5-Amino-1MQ')) {
-          const importedSchedule = {
-            id: 'regimen-5-amino-1mq-daily',
-            medication: '5-Amino-1MQ',
-            frequencyDays: 1,
-            preferredDay: 0,
-            startDate: '2026-07-31',
-            scheduleType: 'specific_days',
-            specificDays: [0, 1, 2, 3, 4, 5, 6],
-            preferredTime: '06:00',
-          };
-          const merged = [...existing, importedSchedule];
-          setSchedules(merged);
-          saveData('health-schedules', merged);
-          localStorage.setItem(scheduleImportKey, 'done');
-        } else {
-          setSchedules(existing);
-          if (existing.some((schedule) => schedule.medication === '5-Amino-1MQ')) localStorage.setItem(scheduleImportKey, 'done');
-        }
+        const scheduleImports = [
+          {
+            key: 'peptalk-regimen-5-amino-schedule-v1',
+            schedule: { id: 'regimen-5-amino-1mq-daily', medication: '5-Amino-1MQ', frequencyDays: 1, preferredDay: 0, startDate: '2026-07-31', scheduleType: 'specific_days', specificDays: [0, 1, 2, 3, 4, 5, 6], preferredTime: '06:00' },
+          },
+          {
+            key: 'peptalk-regimen-cagrilintide-schedule-v1',
+            schedule: { id: 'regimen-cagrilintide-wed-sat', medication: 'Cagrilintide', frequencyDays: 3, preferredDay: 3, startDate: '2026-07-29', scheduleType: 'specific_days', specificDays: [3, 6], preferredTime: '22:00' },
+          },
+        ];
+        let merged = [...existing];
+        let changed = false;
+        scheduleImports.forEach(({ key, schedule }) => {
+          const alreadyExists = merged.some((item) => item.medication === schedule.medication);
+          if (localStorage.getItem(key) !== 'done' && !alreadyExists) {
+            merged.push(schedule);
+            changed = true;
+          }
+          if (alreadyExists || changed) localStorage.setItem(key, 'done');
+        });
+        setSchedules(merged);
+        if (changed) saveData('health-schedules', merged);
       }
       if (titrationData) setTitrationPlans(JSON.parse(titrationData));
       if (journalData) setJournalEntries(JSON.parse(journalData));
@@ -3629,7 +3662,22 @@ const wipeAllData = () => {
         const lastDay = toCalendarDay(lastInjection.date);
         const nextDate = lastDay ? new Date(parseLocalDate(lastDay)) : null;
         if (nextDate && Number.isFinite(nextDate.getTime())) {
-          nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
+          if (schedule.scheduleType === 'specific_days' && Array.isArray(schedule.specificDays) && schedule.specificDays.length > 0) {
+            for (let offset = 1; offset <= 7; offset += 1) {
+              const candidate = new Date(nextDate);
+              candidate.setDate(candidate.getDate() + offset);
+              if (schedule.specificDays.includes(candidate.getDay())) {
+                nextDate.setTime(candidate.getTime());
+                break;
+              }
+            }
+          } else {
+            nextDate.setDate(nextDate.getDate() + schedule.frequencyDays);
+          }
+          if (schedule.preferredTime && /^\d{2}:\d{2}$/.test(schedule.preferredTime)) {
+            const [hour, minute] = schedule.preferredTime.split(':').map(Number);
+            nextDate.setHours(hour, minute, 0, 0);
+          }
           nextInjection = nextDate;
         }
       }
@@ -3761,11 +3809,36 @@ const wipeAllData = () => {
     const schedule = schedules.find((item) => item.medication === medName);
     const frequencyDays = Math.max(1, Number(schedule?.frequencyDays || medication.defaultSchedule || 1));
     const adherenceStart = new Date(Math.max(firstDoseAt.getTime(), now.getTime() - 30 * 24 * 60 * 60 * 1000));
-    const expectedDoses = Math.max(1, Math.floor((now - adherenceStart) / (frequencyDays * 24 * 60 * 60 * 1000)) + 1);
+    let expectedDoses;
+    if (schedule?.scheduleType === 'specific_days' && Array.isArray(schedule.specificDays) && schedule.specificDays.length > 0) {
+      expectedDoses = 0;
+      const cursor = new Date(adherenceStart);
+      cursor.setHours(0, 0, 0, 0);
+      const endDay = new Date(now);
+      endDay.setHours(23, 59, 59, 999);
+      while (cursor <= endDay) {
+        if (schedule.specificDays.includes(cursor.getDay())) expectedDoses += 1;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      expectedDoses = Math.max(1, expectedDoses);
+    } else {
+      expectedDoses = Math.max(1, Math.floor((now - adherenceStart) / (frequencyDays * 24 * 60 * 60 * 1000)) + 1);
+    }
     const actualDoseDays = new Set(entries.filter((entry) => getEntryDateTime(entry) >= adherenceStart && getEntryDateTime(entry) <= now).map((entry) => toCalendarDay(entry.date))).size;
     const adherence = Math.min(100, Math.round((actualDoseDays / expectedDoses) * 100));
     const nextDoseAt = new Date(lastDoseAt);
-    nextDoseAt.setDate(nextDoseAt.getDate() + frequencyDays);
+    if (schedule?.scheduleType === 'specific_days' && Array.isArray(schedule.specificDays) && schedule.specificDays.length > 0) {
+      for (let offset = 1; offset <= 7; offset += 1) {
+        const candidate = new Date(lastDoseAt);
+        candidate.setDate(candidate.getDate() + offset);
+        if (schedule.specificDays.includes(candidate.getDay())) {
+          nextDoseAt.setTime(candidate.getTime());
+          break;
+        }
+      }
+    } else {
+      nextDoseAt.setDate(nextDoseAt.getDate() + frequencyDays);
+    }
     if (schedule?.preferredTime && /^\d{2}:\d{2}$/.test(schedule.preferredTime)) {
       const [hour, minute] = schedule.preferredTime.split(':').map(Number);
       nextDoseAt.setHours(hour, minute, 0, 0);
