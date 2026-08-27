@@ -120,11 +120,14 @@ export function isLocalHealthDataEmpty() {
   try {
     const w = localStorage.getItem('health-weight-entries');
     const i = localStorage.getItem('health-injection-entries');
+    const s = localStorage.getItem('health-schedules');
     const wa = w ? JSON.parse(w) : [];
     const ia = i ? JSON.parse(i) : [];
+    const sa = s ? JSON.parse(s) : [];
     const hasW = Array.isArray(wa) && wa.length > 0;
     const hasI = Array.isArray(ia) && ia.length > 0;
-    return !hasW && !hasI;
+    const hasS = Array.isArray(sa) && sa.length > 0;
+    return !hasW && !hasI && !hasS;
   } catch {
     return true;
   }

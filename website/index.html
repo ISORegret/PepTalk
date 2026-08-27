@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="PepTalk v1.4.7 — track weight, injections, vials, and progress. Protocol-style summary (worksheet layout + charts + PDF), clinician PDF, optional cloud backup, offline-first logging, low-vial alerts, Insights with medication levels, goals, export, and more." />
+  <meta name="description" content="PepTalk is a fast, iPhone-friendly daily peptide and hormone tracker with one-tap dose logging, flexible protocols, history, and optional cloud backup." />
   <title>PepTalk — Your Health Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -549,148 +549,52 @@
 
   <main class="page">
     <section class="hero">
-      <span class="badge">Android · Free</span>
+      <span class="badge">iPhone-ready web app · Free</span>
       <h1 class="logo">PepTalk</h1>
-      <p class="tagline">Weight · Injections · Insights · Tools</p>
-      <h2>Track weight, doses, and progress in one place</h2>
-      <p class="version">v1.4.7</p>
+      <p class="tagline">Today · Protocols · History</p>
+      <h2>Your full daily peptide and hormone schedule, without the clutter.</h2>
+      <p class="version">Web v2.0</p>
       <div class="hero-buttons">
-        <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
-        <a href="/PepTalk/PepTalk/" class="btn-browser" target="_blank" rel="noopener noreferrer">Use in browser</a>
+        <a href="/PepTalk/PepTalk/" class="btn-download">Open PepTalk</a>
+        <a href="/PepTalk/PepTalk/" class="btn-ios" id="btn-ios">Add to iPhone Home Screen</a>
       </div>
     </section>
 
-    <p class="value-oneliner"><strong>One app.</strong> Log everything locally — <strong>optional sign-in</strong> to back up and sync to the cloud. <strong>Works offline.</strong></p>
-
-    <section class="features-flow" style="margin-top: 0.5rem;">
-      <span class="section-label">What’s new</span>
-      <h2 class="section-title">v1.4.0 highlights</h2>
-      <p class="section-desc" style="margin-bottom: 1rem;"><strong>Protocol-style summary</strong> in <strong>More → Tools → Data</strong>: worksheet-style layout with weight KPI tiles, stack table (from schedules, vials, and logs), optional Mon–Sun schedule grid, vial inventory, reconstitution reminders, and trend charts — save the whole view as a multi-page PDF. Still includes the text <strong>clinician PDF</strong> and print-friendly summary for visits.</p>
-    </section>
-
-    <section class="screens-section">
-      <span class="section-label">See the app</span>
-      <h2 class="section-title">PepTalk in action</h2>
-      <p class="section-desc">Summary dashboard, weight & history, injections & vials, and insights with weekly dose and medication levels.</p>
-      <div class="screens-row">
-        <div class="phone-frame" data-screenshot="screenshots/summary.png" data-alt="Summary" role="button" tabindex="0" title="Click to enlarge">
-          <div class="phone-frame-inner">
-            <img src="screenshots/summary.png" alt="Summary" loading="lazy" />
-          </div>
-          <p class="phone-frame-caption">Summary</p>
-        </div>
-        <div class="phone-frame" data-screenshot="screenshots/weight.png" data-alt="Weight" role="button" tabindex="0" title="Click to enlarge">
-          <div class="phone-frame-inner">
-            <img src="screenshots/weight.png" alt="Weight" loading="lazy" />
-          </div>
-          <p class="phone-frame-caption">Weight</p>
-        </div>
-        <div class="phone-frame" data-screenshot="screenshots/injections.png" data-alt="Injections" role="button" tabindex="0" title="Click to enlarge">
-          <div class="phone-frame-inner">
-            <img src="screenshots/injections.png" alt="Injections" loading="lazy" />
-          </div>
-          <p class="phone-frame-caption">Injections</p>
-        </div>
-        <div class="phone-frame" data-screenshot="screenshots/insights.png" data-alt="Insights" role="button" tabindex="0" title="Click to enlarge">
-          <div class="phone-frame-inner">
-            <img src="screenshots/insights.png" alt="Insights" loading="lazy" />
-          </div>
-          <p class="phone-frame-caption">Insights</p>
-        </div>
-      </div>
-    </section>
+    <p class="value-oneliner"><strong>See today.</strong> Mark a dose taken in one tap. Add or change a protocol in seconds.</p>
 
     <section class="features-flow">
-      <span class="section-label">What’s inside</span>
-      <h2 class="section-title">Built for your routine</h2>
-      <p class="section-desc" style="margin-bottom: 1.25rem;">Log weight and injections, see weekly dose and weight change, estimated medication levels, protocol-style export, and never miss a low vial or due dose.</p>
-
+      <span class="section-label">Simple by design</span>
+      <h2 class="section-title">Only the daily tracker you need</h2>
+      <p class="section-desc" style="margin-bottom: 1.25rem;">PepTalk v2 focuses on the three jobs that matter most on your phone.</p>
       <div class="feature-card">
-        <h3>Summary</h3>
-        <p class="sub">Your dashboard: quick log buttons, weight change stats, and goal progress.</p>
-        <ul>
-          <li>Log weight & Log injection buttons at the top; weight change stats (total, weekly avg, BMI, % change, to goal) right below</li>
-          <li>Vial low warning banner when less than one dose remains — right where you see it</li>
-          <li>Weight over time graph (wider on mobile); estimated goal date and goal tracker side by side</li>
-          <li>On track? card: typical loss vs yours, time on medication, projected dates to each milestone (achieved ones marked)</li>
-          <li>Week in review, hydration progress, logging streak</li>
-        </ul>
+        <h3>Today</h3>
+        <p class="sub">See the complete schedule by morning, afternoon, evening, and night.</p>
       </div>
-
       <div class="feature-card">
-        <h3>Weight</h3>
-        <p class="sub">Current weight, BMI, history, and trends.</p>
-        <ul>
-          <li>Height for BMI; current weight and BMI cards; link to Calorie / TDEE calculator</li>
-          <li>History list with calendar-style filter — pick a date to see that week’s entries</li>
-          <li>Add, edit, delete entries; data drives Summary and Insights</li>
-        </ul>
+        <h3>One-tap dose logging</h3>
+        <p class="sub">Mark a scheduled dose taken instantly, see the time, or undo a mistake.</p>
       </div>
-
       <div class="feature-card">
-        <h3>Injections</h3>
-        <p class="sub">Log doses, track vials, rotate sites.</p>
-        <ul>
-          <li>Log injection with medication, dose, units, date, and <strong>time</strong> (morning, midday, evening, night or custom)</li>
-          <li>Side effects and notes; history with week filter so you can focus on a given week</li>
-          <li>Your vials: remaining vs total (mg/ml); injection site rotation grid (green / yellow / red by usage)</li>
-        </ul>
+        <h3>Flexible protocols</h3>
+        <p class="sub">Set the compound, dose, syringe units, time, route, site, and either weekdays or an every-X-days schedule.</p>
       </div>
-
       <div class="feature-card">
-        <h3>Insights</h3>
-        <p class="sub">Medication levels, weekly dose table, and per-med summaries.</p>
-        <ul>
-          <li>How levels work — short explanation at the top; level phases (Single dose, Building up, Steady state) right under the graph</li>
-          <li>Estimated medication levels over time (half-life model from your logs); Week / Month / 3 mo / All</li>
-          <li>Weekly dose & weight change table: one row per week, columns per medication (doses in the units you logged), total weight change highlighted in the header</li>
-          <li>Active medication cards: current level %, phase, next dose reminder, phase tips; expand for details</li>
-          <li>Side effects from logs and by day in cycle (reference)</li>
-        </ul>
-      </div>
-
-      <div class="feature-card">
-        <h3>Account &amp; cloud backup</h3>
-        <p class="sub">Optional sign-in to sync your encrypted data to your Supabase project.</p>
-        <ul>
-          <li>When configured, sign in with email — your data stays on the device and is backed up to the cloud</li>
-          <li>Restore on a new phone or resolve local vs cloud when both have data</li>
-          <li>Background sync after saves; clear messages when you’re offline or the network fails</li>
-        </ul>
-      </div>
-
-      <div class="feature-card">
-        <h3>Tools &amp; privacy</h3>
-        <p class="sub">Vials, calculators, protocol-style summary, export, reminders. Local-first.</p>
-        <ul>
-          <li>Vial inventory and reconstitution calculator (mg, mcg, ml, units, IU); expiry and use-by</li>
-          <li><strong>Protocol-style summary</strong> (charts + tables) and <strong>clinician PDF</strong> from Data; JSON/CSV backup for spreadsheets</li>
-          <li>BMI, TDEE, titration plans; calendar schedules feed the weekly grid in the protocol summary</li>
-          <li>Reminders for injections and weigh-ins; low-vial popup when you open Summary</li>
-          <li>Without cloud setup, everything stays on your device — no selling data</li>
-        </ul>
+        <h3>Backup and history</h3>
+        <p class="sub">Review completed doses, export a backup, or use the optional connected cloud account.</p>
       </div>
     </section>
 
-    <div class="highlights">
-      <p><strong>Protocol-style summary &amp; PDF</strong> for a clear handout or personal file. <strong>Low-vial popup</strong> when you return to Summary. <strong>Weekly dose &amp; weight table</strong> in Insights. Export (clinician PDF, CSV, JSON), reconstitution calculator, and typical-loss comparison — no paywall. <strong>Optional cloud backup</strong> when you configure Supabase.</p>
-    </div>
-
     <section class="strip">
-      <p><strong>Private by default.</strong> Your logs stay on your device; optional cloud backup when you enable it.</p>
-      <p>Low-vial alerts, injection reminders, med levels, and goal tracking — all in one app. Download free.</p>
-      <p class="version">v1.4.7</p>
+      <p><strong>Install it like an app.</strong> Open PepTalk in Safari, tap Share, then Add to Home Screen.</p>
       <div class="strip-buttons">
-        <a href="PepTalk.apk" class="btn-download" download="PepTalk.apk">Download APK</a>
-        <a href="/PepTalk/PepTalk/" class="btn-browser" target="_blank" rel="noopener noreferrer">Use in browser</a>
-        <a href="/PepTalk/PepTalk/" class="btn-ios" id="btn-ios" target="_blank" rel="noopener noreferrer">Add to Home Screen (iOS)</a>
-        <a href="https://buymeacoffee.com/rtaylorbrix" class="btn-coffee" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee</a>
+        <a href="/PepTalk/PepTalk/" class="btn-download">Open web app</a>
+        <a href="PepTalk.apk" class="btn-browser" download="PepTalk.apk">Legacy Android APK v__APK_VERSION__</a>
       </div>
-      <p class="note">Free · Android: APK above · Use in browser: opens the app · iOS: open in Safari, then Share → Add to Home Screen · Host <code style="font-size:0.8em;opacity:0.9;">peptalk-update.json</code> next to the APK for in-app update prompts</p>
+      <p class="note">Your tracker data is stored on your device. Optional cloud backup is available from Account.</p>
     </section>
 
     <footer>
-      PepTalk — Your health tracker. <a href="mailto:Ryan@Isoregret.media?subject=PepTalk%20feedback">Feedback</a> · <a href="https://buymeacoffee.com/rtaylorbrix" target="_blank" rel="noopener noreferrer">Coffee</a>
+      PepTalk — Daily peptide and hormone tracking. <a href="mailto:Ryan@Isoregret.media?subject=PepTalk%20feedback">Feedback</a>
     </footer>
   </main>
 

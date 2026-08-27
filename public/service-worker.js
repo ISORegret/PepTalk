@@ -1,7 +1,7 @@
 // Service worker for the PepTalk PWA. All URLs are resolved from this file so
 // the same build works at /PepTalk/, /PepTalk/PepTalk/, or another base path.
-const CACHE_NAME = 'peptalk-shell-v2';
-const RUNTIME_CACHE = 'peptalk-runtime-v2';
+const CACHE_NAME = 'peptalk-shell-v3';
+const RUNTIME_CACHE = 'peptalk-runtime-v3';
 const APP_ROOT = new URL('./', self.location.href);
 const appUrl = (path = '') => new URL(path, APP_ROOT).href;
 
