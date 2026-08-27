@@ -207,6 +207,41 @@ const REGIMEN_RETATRUTIDE_IMPORT = [
   sideEffects: [],
 }));
 
+const REGIMEN_KLOW_IMPORT = [
+  ['2026-08-26', '22:00', 8, null],
+  ['2026-08-24', '21:45', 4, null],
+  ['2026-08-23', '22:00', 4, null],
+  ['2026-08-22', '23:47', 4, 'Love Handles (R)'],
+  ['2026-08-19', '22:00', 2.84, 'Thigh (Left)'],
+  ['2026-08-17', '22:00', 2.84, 'Glute SubQ (Left)'],
+  ['2026-08-14', '22:00', 2.84, 'Glute SubQ (Right)'],
+  ['2026-08-13', '22:00', 2.84, 'Belly (Left)'],
+  ['2026-08-12', '22:00', 2.84, 'Thigh (Right)'],
+  ['2026-08-11', '22:00', 2.84, 'Belly (Right)'],
+  ['2026-08-10', '22:00', 2.84, 'Belly (Right)'],
+  ['2026-08-09', '22:00', 5.8, null],
+  ['2026-08-07', '22:00', 2.84, 'Glute SubQ (Left)'],
+  ['2026-08-06', '22:00', 2.84, 'Glute SubQ (Right)'],
+  ['2026-08-05', '23:34', 2.84, 'Belly (Left)'],
+  ['2026-08-04', '22:57', 2.84, 'Love Handles (L)'],
+  ['2026-08-03', '22:00', 2.84, 'Thigh (Right)'],
+  ['2026-08-02', '22:00', 2.84, 'Love Handles (L)'],
+  ['2026-08-01', '22:00', 2.84, 'Love Handles (R)'],
+  ['2026-07-31', '23:18', 2.84, 'Belly (Left)'],
+  ['2026-07-30', '22:00', 2.84, null],
+].map(([date, time, dose, site]) => ({
+  id: `regimen-klow-${date}-${time.replace(':', '')}`,
+  type: 'KLOW',
+  dose,
+  unit: 'mg',
+  date,
+  time,
+  route: 'SubQ',
+  ...(site ? { site } : {}),
+  notes: 'Imported from Regimen screenshot',
+  sideEffects: [],
+}));
+
 /** Retatrutide pen dial: units ÷ this = mg (10 units = 1 mg). Not U-100 (100 units = 1 mL). */
 const RETATRUTIDE_UNITS_PER_MG = 10;
 
@@ -1703,6 +1738,7 @@ const PepTalk = () => {
           { key: 'peptalk-regimen-tesamorelin-ipamorelin-import-v1', entries: REGIMEN_TESAMORELIN_IPAMORELIN_IMPORT },
           { key: 'peptalk-regimen-testosterone-cypionate-import-v1', entries: REGIMEN_TESTOSTERONE_CYPIONATE_IMPORT },
           { key: 'peptalk-regimen-retatrutide-import-v1', entries: REGIMEN_RETATRUTIDE_IMPORT },
+          { key: 'peptalk-regimen-klow-import-v1', entries: REGIMEN_KLOW_IMPORT },
         ];
         let merged = [...existing];
         let changed = false;
@@ -1749,6 +1785,10 @@ const PepTalk = () => {
           {
             key: 'peptalk-regimen-retatrutide-schedule-v1',
             schedule: { id: 'regimen-retatrutide-wed-sat', medication: 'Retatrutide', frequencyDays: 3, preferredDay: 3, startDate: '2026-01-07', scheduleType: 'specific_days', specificDays: [3, 6], preferredTime: '22:00' },
+          },
+          {
+            key: 'peptalk-regimen-klow-schedule-v1',
+            schedule: { id: 'regimen-klow-daily', medication: 'KLOW', frequencyDays: 1, preferredDay: 0, startDate: '2026-07-30', scheduleType: 'specific_days', specificDays: [0, 1, 2, 3, 4, 5, 6], preferredTime: '22:00' },
           },
         ];
         let merged = [...existing];
