@@ -1,8 +1,8 @@
 # If "job was not acquired by Runner" or "Internal server error" appears, re-run the workflow
 # (Actions → Deploy to GitHub Pages → Re-run all jobs). Both are usually transient GitHub issues.
 #
-# Web app: built here (Vite, pages mode). APK: NOT built in CI — build locally with `npm run build:apk`,
-# commit `website/PepTalk.apk` + version files, then push. The site serves whatever APK is in the repo.
+# Web app: built here (Vite, pages mode). The legacy APK remains in the repository but is not
+# included in the Pages artifact, keeping iPhone/web deployments small and reliable.
 name: Deploy to GitHub Pages
 
 on:
@@ -53,18 +53,12 @@ jobs:
       - name: Build web (GitHub Pages)
         run: npm run build -- --mode pages
       
-      - name: Prepare deploy (landing + app + committed APK)
+      - name: Prepare deploy (landing + web app)
         run: |
           mkdir -p dist/PepTalk
           find dist -maxdepth 1 -mindepth 1 ! -name PepTalk -exec mv {} dist/PepTalk/ \;
           VERSION=$(grep -o '"version": "[^"]*"' package.json | head -1 | cut -d'"' -f4)
           sed "s/__APK_VERSION__/$VERSION/g" website/index.html > dist/index.html
-          if [ -f website/PepTalk.apk ]; then
-            cp website/PepTalk.apk dist/
-            ls -la dist/PepTalk.apk
-          else
-            echo "::warning::No website/PepTalk.apk in the repo. Build locally: npm run build:apk — then commit website/PepTalk.apk (and version files) before pushing."
-          fi
           [ -d website/screenshots ] && cp -r website/screenshots dist/ || true
       
       - name: Upload artifact

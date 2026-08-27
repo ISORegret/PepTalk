@@ -1649,18 +1649,13 @@ const PepTalk = () => {
     // Store in chronological order (date asc, then id for same-day)
     updated = sortWeightByDateAsc(updated);
     
-    // Check for milestones and celebrate! Use date/time order, not array position.
+    // Celebrate meaningful changes without adding progress cards.
     if (!editingWeight && weightEntries.length > 0) {
       const byDateDesc = sortWeightByDateDesc(weightEntries);
-      const byDateAsc = sortWeightByDateAsc(weightEntries);
       const oldWeight = byDateDesc[0].weight;   // most recent entry by date (and time via id)
-      const startWeight = byDateAsc[0].weight; // oldest entry by date
       const weightLost = oldWeight - newWeight;
-      const totalLost = startWeight - newWeight;
       
       if (weightLost >= 1) celebrate('🎉 Down ' + weightLost.toFixed(1) + ' lbs!');
-      if (Math.floor(totalLost) % 10 === 0 && totalLost >= 10) celebrate('🏆 ' + Math.floor(totalLost) + ' lbs lost total!');
-      if (userProfile.goalWeight && newWeight <= userProfile.goalWeight) celebrate('🎯 Goal Weight Reached!');
     }
     
     setWeightEntries(updated);
@@ -1746,7 +1741,7 @@ const PepTalk = () => {
       : [...fastingEntries, { id: Date.now(), fastingHours: hours, date: fastingDate }];
     updated.sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
     
-    // Calculate streak and celebrate milestones
+    // Calculate the current fasting streak.
     if (!editingFasting) {
       const streak = updated.filter((e, i) => {
         const entryDate = parseLocalDate(e.date);
@@ -2706,26 +2701,14 @@ const wipeAllData = () => {
       ? Math.max(1, Math.round((now - parseLocalDate(firstMedInjection.date)) / (1000 * 60 * 60 * 24)))
       : null;
 
-    // Projected weeks to next 5-lb milestone based on current weekly loss
-    let nextMilestone = null;
-    let projectedWeeksToMilestone = null;
-    if (userLoss > 0 && typical > 0) {
-      const milestones = getMilestones();
-      const next = milestones.find(m => !m.achieved);
-      if (next && next.toGo > 0) {
-        nextMilestone = next.label;
-        projectedWeeksToMilestone = next.toGo / userLoss;
-      }
-    }
-
     if (userLoss <= 0) {
-      return { med: injectionMed, dose: doseLabel, typical, userLoss: 0, status: 'slower', daysOnMed, nextMilestone, projectedWeeksToMilestone };
+      return { med: injectionMed, dose: doseLabel, typical, userLoss: 0, status: 'slower', daysOnMed };
     }
     const ratio = userLoss / typical;
     let status = 'on_track';
     if (ratio >= 1.2) status = 'ahead';
     else if (ratio < 0.7) status = 'slower';
-    return { med: injectionMed, dose: doseLabel, typical, userLoss, status, daysOnMed, nextMilestone, projectedWeeksToMilestone };
+    return { med: injectionMed, dose: doseLabel, typical, userLoss, status, daysOnMed };
   };
 
   // Chart data: your cumulative weight loss vs typical — week 1 through current week + 1
@@ -2755,25 +2738,6 @@ const wipeAllData = () => {
       }
     }
     return points.length > 1 ? points : [];
-  };
-
-  // Milestones: 5 lb down, 10 lb down, ... from start weight toward goal
-  const getMilestones = () => {
-    const sorted = sortWeightByDateAsc(weightEntries);
-    if (sorted.length === 0) return [];
-    const startWeight = parseFloat(sorted[0].weight);
-    const currentWeight = parseFloat(stats.current);
-    if (stats.current === '-' || isNaN(currentWeight)) return [];
-    const goalWeight = userProfile?.goalWeight ? parseFloat(userProfile.goalWeight) : startWeight - 30;
-    const totalToLose = startWeight - goalWeight;
-    if (totalToLose <= 0) return [];
-    const list = [];
-    for (let lb = 5; lb <= Math.ceil(totalToLose / 5) * 5; lb += 5) {
-      const achieved = (startWeight - currentWeight) >= lb;
-      const toGo = achieved ? 0 : lb - (startWeight - currentWeight);
-      list.push({ label: `${lb} lb down`, lb, achieved, toGo });
-    }
-    return list;
   };
 
   const getNextInjections = () => {
@@ -4763,14 +4727,14 @@ const wipeAllData = () => {
                               <circle 
                                 cx={cx} 
                                 cy={cy} 
-                                r={2.75}
+                                r={1.75}
                                 fill="#101722"
                                 stroke="#34d399"
-                                strokeWidth={1.25}
+                                strokeWidth={0.75}
                               />
                             );
                           }}
-                          activeDot={{ r: 4, stroke: '#f59e0b', strokeWidth: 1.5, fill: '#101722' }}
+                          activeDot={{ r: 3, stroke: '#f59e0b', strokeWidth: 1, fill: '#101722' }}
                           connectNulls={false}
                           name="Weight"
                         />
@@ -4980,7 +4944,6 @@ const wipeAllData = () => {
                     const info = getOnTrackInfo();
                     const statusMsg = info.status === 'ahead' ? "You're ahead of typical loss — great progress." : info.status === 'slower' ? "You're losing slower than average. Normal early on or at lower doses." : "Your loss is in line with typical results for your medication.";
                     const statusColor = info.status === 'ahead' ? 'text-green-500' : info.status === 'slower' ? 'text-gold-400' : 'text-green-500';
-                    const milestones = getMilestones();
                     return (
                       <div className="space-y-2">
                         <p className="text-gray-300 text-sm">On {info.med} {info.dose}, people typically lose about <strong className="text-white">{info.typical} lb/week</strong>. You're averaging <strong className="text-white">{info.userLoss.toFixed(1)} lb/week</strong>.</p>
@@ -4990,56 +4953,9 @@ const wipeAllData = () => {
                             On this medication for <span className="text-gray-200 font-medium">{info.daysOnMed} day{info.daysOnMed !== 1 ? 's' : ''}</span>.
                           </p>
                         )}
-                        {milestones.length > 0 && info.userLoss > 0 && (
-                          <div className="pt-1 border-t border-white/[0.06] mt-2">
-                            <p className="text-gray-400 text-[11px] mb-1 font-medium">At this pace:</p>
-                            <ul className="space-y-0.5 text-[11px]">
-                              {milestones.map((m, idx) => {
-                                const weeksTo = m.achieved || m.toGo <= 0 ? 0 : m.toGo / info.userLoss;
-                                const isAchieved = m.achieved || m.toGo <= 0;
-                                const etaText = isAchieved
-                                  ? 'reached'
-                                  : weeksTo < 1
-                                    ? `${Math.max(1, Math.round(weeksTo * 7))} day${Math.max(1, Math.round(weeksTo * 7)) !== 1 ? 's' : ''}`
-                                    : `${weeksTo.toFixed(1)} week${weeksTo >= 2 ? 's' : ''}`;
-                                return (
-                                  <li key={idx} className="flex items-center gap-2">
-                                    {isAchieved ? (
-                                      <CheckCircle className="h-3 w-3 text-green-500 flex-shrink-0" />
-                                    ) : (
-                                      <span className="w-3 h-3 rounded-full border border-gray-500 flex-shrink-0" />
-                                    )}
-                                    <span className={`flex-1 ${isAchieved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
-                                      {m.label}
-                                    </span>
-                                    <span className={`text-right ${isAchieved ? 'text-green-500' : 'text-gray-400'}`}>
-                                      {isAchieved ? 'reached' : `~${etaText}`}
-                                    </span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </div>
-                        )}
                       </div>
                     );
                   })()}
-                </div>
-              )}
-
-              {/* Milestones — 5 lb down, 10 lb down, ... */}
-              {getMilestones().length > 0 && (
-                <div className="ui-card p-4">
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-gold-400" />Milestones</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {getMilestones().map((m, i) => (
-                      <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${m.achieved ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-slate-700/50 text-gray-400 border border-white/[0.04]'}`}>
-                        {m.achieved ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-gray-500 flex-shrink-0" />}
-                        <span>{m.label}</span>
-                        {!m.achieved && m.toGo > 0 && <span className="text-gray-500 text-xs">— {m.toGo.toFixed(0)} lb to go</span>}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 
