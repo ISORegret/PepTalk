@@ -35,7 +35,7 @@ const MEDICATIONS = [
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: '5-Amino-1MQ', category: 'Other', color: '#e99173', defaultSchedule: 1, halfLife: 7, peakHours: 2, effectDuration: 24 },
   { name: 'Cagrilintide', category: 'Other', color: '#ec8f72', defaultSchedule: 3.5, halfLife: 168, peakHours: 24, effectDuration: 168 },
-  { name: 'Tesamorelin / Ipamorelin', category: 'Peptide', color: '#f08f70', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 4, blendComponents: ['Tesamorelin', 'Ipamorelin'] },
+  { name: 'Tesamorelin / Ipamorelin', category: 'Peptide', color: '#f08f70', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 4, blendComponents: ['Tesamorelin', 'Ipamorelin'], vialComposition: { Tesamorelin: 10, Ipamorelin: 3 } },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
@@ -53,14 +53,25 @@ const MEDICATIONS = [
   { name: 'Melanotan II', category: 'Peptide', color: '#db2777', defaultSchedule: 7, halfLife: 33, peakHours: 12, effectDuration: 168 },
   { name: 'PT-141', category: 'Peptide', color: '#be185d', defaultSchedule: 0, halfLife: 3, peakHours: 1, effectDuration: 8 },
   { name: 'Enclomiphene (Enclo)', category: 'SERM', color: '#7c3aed', defaultSchedule: 1, halfLife: 10, peakHours: 24, effectDuration: 24 },
-  { name: 'KLOW', category: 'Peptide', color: '#0891b2', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
+  {
+    name: 'KLOW',
+    category: 'Peptide',
+    color: '#0891b2',
+    defaultSchedule: 1,
+    halfLife: 4,
+    peakHours: 2,
+    effectDuration: 24,
+    blendComponents: ['GHK-Cu', 'BPC-157', 'TB-500', 'KPV'],
+    vialComposition: { 'GHK-Cu': 50, 'BPC-157': 10, 'TB-500': 10, KPV: 10 },
+    reconstitutionMl: 2,
+  },
   { name: 'Kisspeptin', category: 'Peptide', color: '#a855f7', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Gonadorelin', category: 'Peptide', color: '#9333ea', defaultSchedule: 2, halfLife: 0.3, peakHours: 0.5, effectDuration: 4 },
-  { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6, blendComponents: ['Tesamorelin', 'Ipamorelin'] },
+  { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6, blendComponents: ['Tesamorelin', 'Ipamorelin'], vialComposition: { Tesamorelin: 5, Ipamorelin: 5 } },
   // Premixed CJC-1295 without DAC + Ipamorelin (vial total mg = sum of both; e.g. 10+10 mg + 2 mL BAC → 4 U ≈ ~200 mcg each — Tesamorelin 18 U is a separate vial)
-  { name: 'CJC/Ipa Blend (10mg/10mg)', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8, blendComponents: ['CJC-1295', 'Ipamorelin'] },
-  { name: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', category: 'Peptide', color: '#b45309', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 8, blendComponents: ['Tesamorelin', 'Ipamorelin', 'CJC-1295'] },
-  { name: 'BPC/TB Blend (5mg/5mg)', category: 'Peptide', color: '#ca8a04', defaultSchedule: 3, halfLife: 3, peakHours: 2, effectDuration: 48, blendComponents: ['BPC-157', 'TB-500'] },
+  { name: 'CJC/Ipa Blend (10mg/10mg)', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8, blendComponents: ['CJC-1295', 'Ipamorelin'], vialComposition: { 'CJC-1295': 10, Ipamorelin: 10 } },
+  { name: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', category: 'Peptide', color: '#b45309', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 8, blendComponents: ['Tesamorelin', 'Ipamorelin', 'CJC-1295'], vialComposition: { Tesamorelin: 6, Ipamorelin: 3, 'CJC-1295': 3 } },
+  { name: 'BPC/TB Blend (5mg/5mg)', category: 'Peptide', color: '#ca8a04', defaultSchedule: 3, halfLife: 3, peakHours: 2, effectDuration: 48, blendComponents: ['BPC-157', 'TB-500'], vialComposition: { 'BPC-157': 5, 'TB-500': 5 } },
   { name: 'Fragment 176-191', category: 'Peptide', color: '#06b6d4', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 12 },
   { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 1, peakHours: 0.5, effectDuration: 24 },
   { name: 'Semax', category: 'Peptide', color: '#6366f1', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 4 },
@@ -1701,9 +1712,28 @@ const PepTalk = () => {
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
       if (labData) setLabEntries(JSON.parse(labData));
-      if (blendConversionData) {
-        const parsed = JSON.parse(blendConversionData);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) setBlendConversions(parsed);
+      {
+        const parsed = blendConversionData ? JSON.parse(blendConversionData) : {};
+        const existing = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        const klowImportKey = 'peptalk-klow-80mg-2ml-conversion-v1';
+        let merged = existing;
+        if (localStorage.getItem(klowImportKey) !== 'done') {
+          merged = {
+            ...existing,
+            KLOW: {
+              'GHK-Cu': 0.25,
+              'BPC-157': 0.05,
+              'TB-500': 0.05,
+              KPV: 0.05,
+              __mixMl: 2,
+              __componentMg: { 'GHK-Cu': 50, 'BPC-157': 10, 'TB-500': 10, KPV: 10 },
+              ...(existing.KLOW || {}),
+            },
+          };
+          localStorage.setItem(klowImportKey, 'done');
+          saveData('health-blend-conversions', merged);
+        }
+        setBlendConversions(merged);
       }
       const sleepData = localStorage.getItem('health-sleep-entries');
       if (sleepData) {
@@ -3808,17 +3838,102 @@ const wipeAllData = () => {
     });
   };
 
-  const updateBlendConversion = (medName, component, rawValue) => {
-    const value = rawValue === '' ? '' : Number(rawValue);
+  const getBlendSetup = (medication, medName) => {
+    const saved = blendConversions[medName] || {};
+    const components = medication?.blendComponents || [];
+    const mixMl = saved.__mixMl ?? medication?.reconstitutionMl ?? '';
+    const componentMg = Object.fromEntries(components.map((component) => [
+      component,
+      saved.__componentMg?.[component] ?? medication?.vialComposition?.[component] ?? '',
+    ]));
+    return { mixMl, componentMg };
+  };
+
+  const updateBlendSetup = (medication, medName, { mixMl: rawMixMl, component, componentMg: rawComponentMg }) => {
+    const current = blendConversions[medName] || {};
+    const setup = getBlendSetup(medication, medName);
+    const nextMixMl = rawMixMl !== undefined ? rawMixMl : setup.mixMl;
+    const nextComponentMg = {
+      ...setup.componentMg,
+      ...(component ? { [component]: rawComponentMg } : {}),
+    };
+    const numericMixMl = Number(nextMixMl);
+    const rates = {};
+    (medication?.blendComponents || []).forEach((name) => {
+      const amountMg = Number(nextComponentMg[name]);
+      rates[name] = numericMixMl > 0 && amountMg > 0 ? amountMg / (numericMixMl * 100) : '';
+    });
     const next = {
       ...blendConversions,
       [medName]: {
-        ...(blendConversions[medName] || {}),
-        [component]: value,
+        ...current,
+        ...rates,
+        __mixMl: nextMixMl,
+        __componentMg: nextComponentMg,
       },
     };
     setBlendConversions(next);
     saveData('health-blend-conversions', next);
+  };
+
+  const renderBlendSetup = (medication, medName, latestEntry = null) => {
+    const components = medication?.blendComponents || [];
+    if (!components.length) return null;
+    const setup = getBlendSetup(medication, medName);
+    const ready = Number(setup.mixMl) > 0 && components.every((component) => Number(setup.componentMg[component]) > 0);
+    const totalMg = components.reduce((sum, component) => sum + (Number(setup.componentMg[component]) || 0), 0);
+    const totalMgPerIU = ready ? totalMg / (Number(setup.mixMl) * 100) : null;
+    const breakdown = latestEntry ? getBlendBreakdown(latestEntry).filter((item) => item.mg != null) : [];
+    return (
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h4 className="text-sm font-semibold text-white">Blend setup</h4>
+            <p className="text-[11px] text-gray-500 mt-0.5">Enter vial strength and mixing water once. PepTalk calculates each compound per IU.</p>
+          </div>
+          <span className={`text-[10px] rounded-full px-2 py-1 ${ready ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/10 text-amber-300'}`}>{ready ? 'Ready' : 'Needs mix'}</span>
+        </div>
+        <label className="block mb-3">
+          <span className="text-[11px] text-gray-400 block mb-1">Mixing water</span>
+          <div className="flex items-center rounded-lg bg-slate-800 border border-white/[0.08] overflow-hidden max-w-[160px]">
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              inputMode="decimal"
+              value={setup.mixMl}
+              onChange={(event) => updateBlendSetup(medication, medName, { mixMl: event.target.value })}
+              className="w-full min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
+              placeholder="0.0"
+            />
+            <span className="pr-2 text-[10px] text-gray-500">mL</span>
+          </div>
+        </label>
+        <div className={`grid gap-2 ${components.length > 2 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
+          {components.map((component) => (
+            <label key={component} className="block min-w-0">
+              <span className="text-[11px] text-gray-400 block truncate mb-1" title={component}>{component}</span>
+              <div className="flex items-center rounded-lg bg-slate-800 border border-white/[0.08] overflow-hidden">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={setup.componentMg[component]}
+                  onChange={(event) => updateBlendSetup(medication, medName, { component, componentMg: event.target.value })}
+                  className="w-full min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
+                  placeholder="0"
+                />
+                <span className="pr-2 text-[10px] text-gray-500">mg</span>
+              </div>
+              {ready && <span className="mt-1 block text-[10px] text-gold-400/80">{Number(blendConversions[medName]?.[component]).toFixed(3)} mg/IU</span>}
+            </label>
+          ))}
+        </div>
+        {ready && <p className="mt-3 text-[11px] text-gray-400">{totalMg.toFixed(totalMg % 1 ? 1 : 0)} mg total · {totalMgPerIU.toFixed(3)} mg/IU</p>}
+        {breakdown.length > 0 && <p className="mt-2 text-xs text-gold-400/90">{latestEntry.dose} {latestEntry.unit} = {breakdown.map((item) => `${item.component} ${item.mg.toFixed(3)} mg`).join(' + ')}</p>}
+      </div>
+    );
   };
 
   // Regimen-style detail data: one time-aware level curve and summary for each compound.
@@ -6228,42 +6343,7 @@ const wipeAllData = () => {
                             ))}
                           </div>
 
-                          {detail.medication.blendComponents?.length > 0 && (
-                            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
-                              <div className="flex items-start justify-between gap-3 mb-3">
-                                <div>
-                                  <h5 className="text-sm font-semibold text-white">Blend conversion</h5>
-                                  <p className="text-[11px] text-gray-500 mt-0.5">Enter mg delivered by 1 IU for each compound. Saved for future and imported doses.</p>
-                                </div>
-                                <span className={`text-[10px] rounded-full px-2 py-1 ${detail.blendConversionComplete ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/10 text-amber-300'}`}>{detail.blendConversionComplete ? 'Ready' : 'Needs mix'}</span>
-                              </div>
-                              <div className={`grid gap-2 ${detail.medication.blendComponents.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2'}`}>
-                                {detail.medication.blendComponents.map((component) => (
-                                  <label key={component} className="block min-w-0">
-                                    <span className="text-[11px] text-gray-400 block truncate mb-1" title={component}>{component}</span>
-                                    <div className="flex items-center rounded-lg bg-slate-800 border border-white/[0.08] overflow-hidden">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="0.001"
-                                        inputMode="decimal"
-                                        value={blendConversions[insight.medication]?.[component] ?? ''}
-                                        onChange={(event) => updateBlendConversion(insight.medication, component, event.target.value)}
-                                        className="w-full min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
-                                        placeholder="0.000"
-                                      />
-                                      <span className="pr-2 text-[10px] text-gray-500 whitespace-nowrap">mg/IU</span>
-                                    </div>
-                                  </label>
-                                ))}
-                              </div>
-                              {detail.blendConversionComplete && (() => {
-                                const latest = detail.entries[0];
-                                const breakdown = getBlendBreakdown(latest);
-                                return <p className="mt-3 text-xs text-gold-400/90">{latest.dose} {latest.unit} = {breakdown.map((item) => `${item.component} ${item.mg.toFixed(3)} mg`).join(' + ')}</p>;
-                              })()}
-                            </div>
-                          )}
+                          {renderBlendSetup(detail.medication, insight.medication, detail.entries[0])}
 
                           <div
                             className="rounded-2xl border border-white/[0.08] overflow-hidden"
@@ -7114,7 +7194,6 @@ const wipeAllData = () => {
                       const latest = entries[0];
                       const medication = MEDICATIONS.find((med) => med.name === medName);
                       const blendComponents = medication?.blendComponents || [];
-                      const blendReady = blendComponents.length > 0 && blendComponents.every((component) => Number(blendConversions[medName]?.[component]) > 0);
                       const color = getMedicationColor(medName);
                       const expanded = expandedInjectionMed === medName;
                       return (
@@ -7130,35 +7209,7 @@ const wipeAllData = () => {
                           {expanded && (
                             <div className="px-4 pb-3">
                               {blendComponents.length > 0 && (
-                                <div className="mb-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
-                                  <div className="flex items-start justify-between gap-3 mb-3">
-                                    <div>
-                                      <h4 className="text-sm font-semibold text-white">Blend conversion</h4>
-                                      <p className="text-[11px] text-gray-500 mt-0.5">Enter the mg delivered by 1 IU for each compound.</p>
-                                    </div>
-                                    <span className={`text-[10px] rounded-full px-2 py-1 ${blendReady ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/10 text-amber-300'}`}>{blendReady ? 'Ready' : 'Needs mix'}</span>
-                                  </div>
-                                  <div className={`grid gap-2 ${blendComponents.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2'}`}>
-                                    {blendComponents.map((component) => (
-                                      <label key={component} className="block min-w-0">
-                                        <span className="text-[11px] text-gray-400 block truncate mb-1" title={component}>{component}</span>
-                                        <div className="flex items-center rounded-lg bg-slate-800 border border-white/[0.08] overflow-hidden">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            step="0.001"
-                                            inputMode="decimal"
-                                            value={blendConversions[medName]?.[component] ?? ''}
-                                            onChange={(event) => updateBlendConversion(medName, component, event.target.value)}
-                                            className="w-full min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
-                                            placeholder="0.000"
-                                          />
-                                          <span className="pr-2 text-[10px] text-gray-500 whitespace-nowrap">mg/IU</span>
-                                        </div>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
+                                <div className="mb-3">{renderBlendSetup(medication, medName, latest)}</div>
                               )}
                               <div className="rounded-xl border border-white/[0.06] overflow-hidden bg-black/10">
                                 {entries.map((entry) => {
