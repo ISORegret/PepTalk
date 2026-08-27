@@ -35,7 +35,7 @@ const MEDICATIONS = [
   { name: 'Dulaglutide', category: 'GLP-1', color: '#0d9488', defaultSchedule: 7, halfLife: 120, peakHours: 48, effectDuration: 168 },
   { name: '5-Amino-1MQ', category: 'Other', color: '#e99173', defaultSchedule: 1, halfLife: 7, peakHours: 2, effectDuration: 24 },
   { name: 'Cagrilintide', category: 'Other', color: '#ec8f72', defaultSchedule: 3.5, halfLife: 168, peakHours: 24, effectDuration: 168 },
-  { name: 'Tesamorelin / Ipamorelin', category: 'Peptide', color: '#f08f70', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 4 },
+  { name: 'Tesamorelin / Ipamorelin', category: 'Peptide', color: '#f08f70', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.25, effectDuration: 4, blendComponents: ['Tesamorelin', 'Ipamorelin'] },
   // Retatrutide prefilled pen: dial "units" are 10 units = 1 mg (e.g. 50 units = 5 mg), not U-100 insulin syringe volume.
   { name: 'Retatrutide', category: 'Triple Agonist', color: '#8b5cf6', defaultSchedule: 7, halfLife: 144, peakHours: 48, effectDuration: 168 },
   { name: 'Testosterone Cypionate', category: 'Hormone', color: '#3b82f6', defaultSchedule: 7, halfLife: 192, peakHours: 48, effectDuration: 168, preConstituted: true, assumedConcentrationMgPerMl: 200 },
@@ -56,11 +56,11 @@ const MEDICATIONS = [
   { name: 'KLOW', category: 'Peptide', color: '#0891b2', defaultSchedule: 1, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Kisspeptin', category: 'Peptide', color: '#a855f7', defaultSchedule: 3, halfLife: 4, peakHours: 2, effectDuration: 24 },
   { name: 'Gonadorelin', category: 'Peptide', color: '#9333ea', defaultSchedule: 2, halfLife: 0.3, peakHours: 0.5, effectDuration: 4 },
-  { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6 },
+  { name: 'Tesa/Ipa Blend (5mg/5mg)', category: 'Peptide', color: '#f59e0b', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 6, blendComponents: ['Tesamorelin', 'Ipamorelin'] },
   // Premixed CJC-1295 without DAC + Ipamorelin (vial total mg = sum of both; e.g. 10+10 mg + 2 mL BAC → 4 U ≈ ~200 mcg each — Tesamorelin 18 U is a separate vial)
-  { name: 'CJC/Ipa Blend (10mg/10mg)', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8 },
-  { name: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', category: 'Peptide', color: '#b45309', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 8 },
-  { name: 'BPC/TB Blend (5mg/5mg)', category: 'Peptide', color: '#ca8a04', defaultSchedule: 3, halfLife: 3, peakHours: 2, effectDuration: 48 },
+  { name: 'CJC/Ipa Blend (10mg/10mg)', category: 'Peptide', color: '#ea580c', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 8, blendComponents: ['CJC-1295', 'Ipamorelin'] },
+  { name: 'Tesa/Ipa/CJC Blend (6mg/3mg/3mg)', category: 'Peptide', color: '#b45309', defaultSchedule: 1, halfLife: 2, peakHours: 0.5, effectDuration: 8, blendComponents: ['Tesamorelin', 'Ipamorelin', 'CJC-1295'] },
+  { name: 'BPC/TB Blend (5mg/5mg)', category: 'Peptide', color: '#ca8a04', defaultSchedule: 3, halfLife: 3, peakHours: 2, effectDuration: 48, blendComponents: ['BPC-157', 'TB-500'] },
   { name: 'Fragment 176-191', category: 'Peptide', color: '#06b6d4', defaultSchedule: 1, halfLife: 2, peakHours: 1, effectDuration: 12 },
   { name: 'GHK-Cu', category: 'Peptide', color: '#0ea5e9', defaultSchedule: 1, halfLife: 1, peakHours: 0.5, effectDuration: 24 },
   { name: 'Semax', category: 'Peptide', color: '#6366f1', defaultSchedule: 1, halfLife: 0.5, peakHours: 0.5, effectDuration: 4 },
@@ -1322,6 +1322,7 @@ const PepTalk = () => {
   const previousActiveTabRef = useRef(null);
   const [selectedVialId, setSelectedVialId] = useState(null);
   const [vials, setVials] = useState([]);
+  const [blendConversions, setBlendConversions] = useState({}); // { medication: { component: mgPerIU } }
   const [vialMedication, setVialMedication] = useState('Semaglutide');
   const [vialTotalMg, setVialTotalMg] = useState('');
   const [vialUnit, setVialUnit] = useState('mg');
@@ -1626,6 +1627,7 @@ const PepTalk = () => {
       const glucoseData = localStorage.getItem('health-glucose-entries');
       const a1cData = localStorage.getItem('health-a1c-entries');
       const labData = localStorage.getItem('health-lab-entries');
+      const blendConversionData = localStorage.getItem('health-blend-conversions');
       if (weightData) {
         const parsed = JSON.parse(weightData);
         setWeightEntries(sortWeightByDateAsc(parsed));
@@ -1699,6 +1701,10 @@ const PepTalk = () => {
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
       if (labData) setLabEntries(JSON.parse(labData));
+      if (blendConversionData) {
+        const parsed = JSON.parse(blendConversionData);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) setBlendConversions(parsed);
+      }
       const sleepData = localStorage.getItem('health-sleep-entries');
       if (sleepData) {
         try {
@@ -2320,7 +2326,8 @@ const PepTalk = () => {
       labEntries,
       sleepEntries,
       userProfile,
-      vials
+      vials,
+      blendConversions
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -2438,6 +2445,10 @@ const PepTalk = () => {
         if (imported.vials) {
           setVials(imported.vials);
           saveData('health-vials', imported.vials);
+        }
+        if (imported.blendConversions && typeof imported.blendConversions === 'object' && !Array.isArray(imported.blendConversions)) {
+          setBlendConversions(imported.blendConversions);
+          saveData('health-blend-conversions', imported.blendConversions);
         }
         
         alert('Data imported successfully!');
@@ -2614,6 +2625,7 @@ const wipeAllData = () => {
     'health-lab-entries',
     'health-user-profile',
     'health-vials',
+    'health-blend-conversions',
     'health-weekly-dose-weight-excluded-meds',
     'health-goals-user-stack',
     'health-sleep-entries',
@@ -2636,6 +2648,7 @@ const wipeAllData = () => {
   setA1cEntries([]);
   setLabEntries([]);
   setVials([]);
+  setBlendConversions({});
   setWeeklyDoseWeightExcludedMeds([]);
   setGoalUserStack([]);
   setSleepEntries([]);
@@ -3779,6 +3792,35 @@ const wipeAllData = () => {
     return data;
   };
 
+  const getBlendBreakdown = (entry) => {
+    const medication = MEDICATIONS.find((med) => med.name === entry?.type);
+    const components = medication?.blendComponents || [];
+    const conversion = blendConversions[entry?.type] || {};
+    const unit = String(entry?.unit || '').toLowerCase();
+    if (!components.length || !['iu', 'units'].includes(unit)) return [];
+    return components.map((component) => {
+      const mgPerIU = Number(conversion[component]);
+      return {
+        component,
+        mgPerIU: Number.isFinite(mgPerIU) && mgPerIU > 0 ? mgPerIU : null,
+        mg: Number.isFinite(mgPerIU) && mgPerIU > 0 ? Number(entry.dose) * mgPerIU : null,
+      };
+    });
+  };
+
+  const updateBlendConversion = (medName, component, rawValue) => {
+    const value = rawValue === '' ? '' : Number(rawValue);
+    const next = {
+      ...blendConversions,
+      [medName]: {
+        ...(blendConversions[medName] || {}),
+        [component]: value,
+      },
+    };
+    setBlendConversions(next);
+    saveData('health-blend-conversions', next);
+  };
+
   // Regimen-style detail data: one time-aware level curve and summary for each compound.
   const getCompoundDetailData = (medName, range = '1m') => {
     const medication = MEDICATIONS.find((med) => med.name === medName);
@@ -3788,6 +3830,17 @@ const wipeAllData = () => {
     if (!medication || entries.length === 0) return null;
 
     const now = new Date();
+    const blendComponents = medication.blendComponents || [];
+    const blendRates = blendConversions[medName] || {};
+    const blendConversionComplete = blendComponents.length > 0 && blendComponents.every((component) => Number(blendRates[component]) > 0);
+    const doseForLevel = (entry) => {
+      const unit = String(entry.unit || '').toLowerCase();
+      if (blendConversionComplete && ['iu', 'units'].includes(unit)) {
+        const totalMgPerIU = blendComponents.reduce((sum, component) => sum + Number(blendRates[component] || 0), 0);
+        return Number(entry.dose) * totalMgPerIU;
+      }
+      return toDoseMgForLevel(entry);
+    };
     const firstDoseAt = getEntryDateTime(entries[0]);
     const lastDoseAt = getEntryDateTime(entries[entries.length - 1]);
     const daysByRange = { '1w': 7, '1m': 30, '3m': 90, '6m': 180 };
@@ -3817,7 +3870,7 @@ const wipeAllData = () => {
         if (doseAt > timestamp) return;
         const hoursElapsed = (timestamp - doseAt) / (60 * 60 * 1000);
         const effectiveHours = getEffectiveHoursForDecay(entry, medication, hoursElapsed);
-        const remaining = toDoseMgForLevel(entry) * Math.pow(0.5, effectiveHours / medication.halfLife);
+        const remaining = doseForLevel(entry) * Math.pow(0.5, effectiveHours / medication.halfLife);
         if (Number.isFinite(remaining) && remaining > 0.0001) remainingMg += remaining;
       });
       const isFuture = timestamp > now.getTime();
@@ -3833,7 +3886,9 @@ const wipeAllData = () => {
 
     const schedule = schedules.find((item) => item.medication === medName);
     const loggedUnits = [...new Set(entries.map((entry) => String(entry.unit || 'mg').toLowerCase()))];
-    const levelUnit = loggedUnits.length === 1 && loggedUnits[0] === 'iu'
+    const levelUnit = blendConversionComplete
+      ? 'mg'
+      : loggedUnits.length === 1 && loggedUnits[0] === 'iu'
       ? 'IU'
       : loggedUnits.length === 1 && loggedUnits[0] === 'units'
         ? 'units'
@@ -3884,6 +3939,8 @@ const wipeAllData = () => {
       nextDoseAt,
       frequencyDays,
       levelUnit,
+      currentRemaining: points.find((point) => point.timestamp === now.getTime())?.actualMg || 0,
+      blendConversionComplete,
     };
   };
 
@@ -6149,7 +6206,7 @@ const wipeAllData = () => {
                       const range = insightsMedRanges[insight.medication] || '1m';
                       const detail = getCompoundDetailData(insight.medication, range);
                       if (!detail) return null;
-                      const remaining = Number(insight.currentRemainingMg || 0);
+                      const remaining = Number(detail.currentRemaining || 0);
                       const remainingLabel = remaining >= 10 ? remaining.toFixed(1) : remaining.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
                       const now = new Date();
                       const next = detail.nextDoseAt;
@@ -6170,6 +6227,43 @@ const wipeAllData = () => {
                               </button>
                             ))}
                           </div>
+
+                          {detail.medication.blendComponents?.length > 0 && (
+                            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <div>
+                                  <h5 className="text-sm font-semibold text-white">Blend conversion</h5>
+                                  <p className="text-[11px] text-gray-500 mt-0.5">Enter mg delivered by 1 IU for each compound. Saved for future and imported doses.</p>
+                                </div>
+                                <span className={`text-[10px] rounded-full px-2 py-1 ${detail.blendConversionComplete ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/10 text-amber-300'}`}>{detail.blendConversionComplete ? 'Ready' : 'Needs mix'}</span>
+                              </div>
+                              <div className={`grid gap-2 ${detail.medication.blendComponents.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2'}`}>
+                                {detail.medication.blendComponents.map((component) => (
+                                  <label key={component} className="block min-w-0">
+                                    <span className="text-[11px] text-gray-400 block truncate mb-1" title={component}>{component}</span>
+                                    <div className="flex items-center rounded-lg bg-slate-800 border border-white/[0.08] overflow-hidden">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.001"
+                                        inputMode="decimal"
+                                        value={blendConversions[insight.medication]?.[component] ?? ''}
+                                        onChange={(event) => updateBlendConversion(insight.medication, component, event.target.value)}
+                                        className="w-full min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
+                                        placeholder="0.000"
+                                      />
+                                      <span className="pr-2 text-[10px] text-gray-500 whitespace-nowrap">mg/IU</span>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                              {detail.blendConversionComplete && (() => {
+                                const latest = detail.entries[0];
+                                const breakdown = getBlendBreakdown(latest);
+                                return <p className="mt-3 text-xs text-gold-400/90">{latest.dose} {latest.unit} = {breakdown.map((item) => `${item.component} ${item.mg.toFixed(3)} mg`).join(' + ')}</p>;
+                              })()}
+                            </div>
+                          )}
 
                           <div
                             className="rounded-2xl border border-white/[0.08] overflow-hidden"
@@ -7018,6 +7112,9 @@ const wipeAllData = () => {
                     return names.map((medName) => {
                       const entries = byMed[medName].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
                       const latest = entries[0];
+                      const medication = MEDICATIONS.find((med) => med.name === medName);
+                      const blendComponents = medication?.blendComponents || [];
+                      const blendReady = blendComponents.length > 0 && blendComponents.every((component) => Number(blendConversions[medName]?.[component]) > 0);
                       const color = getMedicationColor(medName);
                       const expanded = expandedInjectionMed === medName;
                       return (
@@ -7032,8 +7129,41 @@ const wipeAllData = () => {
                           </button>
                           {expanded && (
                             <div className="px-4 pb-3">
+                              {blendComponents.length > 0 && (
+                                <div className="mb-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+                                  <div className="flex items-start justify-between gap-3 mb-3">
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-white">Blend conversion</h4>
+                                      <p className="text-[11px] text-gray-500 mt-0.5">Enter the mg delivered by 1 IU for each compound.</p>
+                                    </div>
+                                    <span className={`text-[10px] rounded-full px-2 py-1 ${blendReady ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/10 text-amber-300'}`}>{blendReady ? 'Ready' : 'Needs mix'}</span>
+                                  </div>
+                                  <div className={`grid gap-2 ${blendComponents.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2'}`}>
+                                    {blendComponents.map((component) => (
+                                      <label key={component} className="block min-w-0">
+                                        <span className="text-[11px] text-gray-400 block truncate mb-1" title={component}>{component}</span>
+                                        <div className="flex items-center rounded-lg bg-slate-800 border border-white/[0.08] overflow-hidden">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.001"
+                                            inputMode="decimal"
+                                            value={blendConversions[medName]?.[component] ?? ''}
+                                            onChange={(event) => updateBlendConversion(medName, component, event.target.value)}
+                                            className="w-full min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
+                                            placeholder="0.000"
+                                          />
+                                          <span className="pr-2 text-[10px] text-gray-500 whitespace-nowrap">mg/IU</span>
+                                        </div>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                               <div className="rounded-xl border border-white/[0.06] overflow-hidden bg-black/10">
-                                {entries.map((entry) => (
+                                {entries.map((entry) => {
+                                  const breakdown = getBlendBreakdown(entry).filter((item) => item.mg != null);
+                                  return (
                                   <div key={entry.id} className="px-3 py-3 border-b border-white/[0.06] last:border-0">
                                     <div className="flex items-start gap-3">
                                       <div className="min-w-0 flex-1">
@@ -7041,6 +7171,7 @@ const wipeAllData = () => {
                                           <span className="text-sm font-semibold text-white">{entry.dose} {entry.unit}</span>
                                           <span className="text-[11px] text-gray-500 shrink-0">{parseLocalDate(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                         </div>
+                                        {breakdown.length > 0 && <p className="text-xs text-gold-400/90 mt-1">{breakdown.map((item) => `${item.component} ${item.mg.toFixed(3)} mg`).join(' · ')}</p>}
                                         {(entry.route || entry.site) && <p className="text-xs text-gold-400/80 mt-1">{[entry.route, entry.site].filter(Boolean).join(' · ')}</p>}
                                         {entry.sideEffects?.length > 0 && <p className="text-[11px] text-orange-300/80 mt-1.5">Side effects: {entry.sideEffects.map((effect) => `${effect}${entry.sideEffectSeverity?.[effect] != null ? ` ${entry.sideEffectSeverity[effect]}/5` : ''}`).join(', ')}</p>}
                                         {entry.notes && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{entry.notes}</p>}
@@ -7051,7 +7182,8 @@ const wipeAllData = () => {
                                       </div>
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
