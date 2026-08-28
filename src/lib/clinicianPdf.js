@@ -15,6 +15,10 @@ export function downloadClinicianSummaryPdf(data) {
     glucoseEntries = [],
     sleepEntries = [],
     goalStack = [],
+    schedules = [],
+    titrationPlans = [],
+    vials = [],
+    medicationInsights = [],
   } = data;
 
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
@@ -50,6 +54,38 @@ export function downloadClinicianSummaryPdf(data) {
   if (goalStack?.length) {
     addLine('Goal stack (self-selected, not a prescription)', 11, true);
     addLine(goalStack.join(', '));
+    y += 6;
+  }
+
+  const activeProtocols = schedules.filter((schedule) => !schedule.paused);
+  addLine(`Active protocols (${activeProtocols.length})`, 11, true);
+  if (!activeProtocols.length) addLine('No active protocols saved.');
+  else activeProtocols.forEach((schedule) => {
+    const cadence = schedule.scheduleType === 'specific_days' && schedule.specificDays?.length
+      ? schedule.specificDays.map((day) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join('/')
+      : `every ${schedule.frequencyDays || 7} day(s)`;
+    addLine(`${schedule.medication}: ${schedule.dose} ${schedule.unit || ''} · ${cadence} · ${schedule.preferredTime || 'time not set'} · ${schedule.route || 'route not set'} · started ${schedule.startDate || '—'}`);
+  });
+  y += 6;
+
+  if (medicationInsights.length) {
+    addLine('Estimated levels and phases', 11, true);
+    medicationInsights.filter((item) => activeProtocols.some((schedule) => schedule.medication === item.medication)).forEach((item) => {
+      addLine(`${item.medication}: ${item.phase || 'phase unavailable'}${item.currentLevel != null ? ` · estimated level ${Number(item.currentLevel).toFixed(2)} mg` : ''}`);
+    });
+    addLine('Estimated levels are mathematical tracking estimates, not laboratory measurements.', 8);
+    y += 6;
+  }
+
+  if (titrationPlans.length) {
+    addLine('Titration plans', 11, true);
+    titrationPlans.forEach((plan) => addLine(`${plan.medication}: ${(plan.steps || []).map((step) => `${step.dose}${step.unit || ''} × ${step.weeks}wk`).join(' → ')}`));
+    y += 6;
+  }
+
+  if (vials.length) {
+    addLine('Inventory', 11, true);
+    vials.forEach((vial) => addLine(`${vial.medication}: ${Number((vial.remainingMg ?? vial.totalMg) || 0).toFixed(1)} of ${Number(vial.totalMg || 0).toFixed(1)} mg remaining${vial.expiry ? ` · expires ${vial.expiry}` : ''}`));
     y += 6;
   }
 
