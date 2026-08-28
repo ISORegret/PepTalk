@@ -1645,6 +1645,7 @@ const PepTalk = () => {
   const photoInputRef = useRef(null);
   const moreSectionRefs = useRef({});
   const undoTimerRef = useRef(null);
+  const webProtocolReminderTimersRef = useRef([]);
 
   useEffect(() => { loadData(); }, []);
 
@@ -1742,8 +1743,18 @@ const PepTalk = () => {
   useEffect(() => {
     if (!isLoading && notificationPermission === 'granted' && (notificationSettings.injectionReminders || notificationSettings.weightReminders || notificationSettings.dailySummary)) {
       scheduleLocalInjectionReminders();
+      scheduleProtocolWebReminders();
     }
-  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime, notificationSettings.dailySummary, notificationSettings.dailySummaryTime]);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && notificationPermission === 'granted') scheduleProtocolWebReminders();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      webProtocolReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
+      webProtocolReminderTimersRef.current = [];
+    };
+  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime, notificationSettings.dailySummary, notificationSettings.dailySummaryTime, schedules, injectionEntries]);
 
   // When on More tab, scroll the active section tab into view so Profile isn’t hidden off-screen
   useEffect(() => {
@@ -2147,7 +2158,7 @@ const PepTalk = () => {
   };
 
   // Schedule local (push-style) notifications on device for when app is closed (Android/iOS)
-  const scheduleLocalInjectionReminders = async (settingsOverride) => {
+  const scheduleLocalInjectionReminders = async (settingsOverride, schedulesOverride) => {
     try {
       if (!Capacitor.isNativePlatform()) return;
       const { LocalNotifications } = await import('@capacitor/local-notifications');
@@ -2158,23 +2169,22 @@ const PepTalk = () => {
         await LocalNotifications.cancel({ notifications: pending.notifications.map(n => ({ id: n.id })) });
       }
       const settings = settingsOverride ?? notificationSettings;
-      const [hr, min] = (settings.reminderTime || '09:00').split(':').map(Number);
       const notifications = [];
-      let id = 1;
+      let id = 100;
       if (settings.injectionReminders) {
-        const upcoming = getNextInjections();
+        const upcoming = getNextInjections(schedulesOverride ?? schedules);
         upcoming.forEach(injection => {
-          if (injection.daysUntil < 0 || injection.daysUntil > 14) return;
+          if (injection.reminderEnabled === false || injection.daysUntil < 0 || injection.daysUntil > 14) return;
+          const time = /^\d{2}:\d{2}$/.test(injection.preferredTime || '') ? injection.preferredTime : (settings.reminderTime || '09:00');
+          const [hr, min] = time.split(':').map(Number);
           const at = new Date();
           at.setDate(at.getDate() + injection.daysUntil);
           at.setHours(hr, min, 0, 0);
           if (at.getTime() <= Date.now()) return;
           notifications.push({
             id,
-            title: injection.isOverdue ? '⚠️ Injection Overdue' : '💉 Injection Reminder',
-            body: injection.isOverdue
-              ? `${injection.medication} is ${Math.abs(injection.daysUntil)} ${Math.abs(injection.daysUntil) === 1 ? 'day' : 'days'} overdue`
-              : `Time to inject ${injection.medication}!`,
+            title: `💉 ${injection.medication}`,
+            body: `Scheduled now${injection.dose != null ? ` · ${injection.dose} ${injection.unit || 'mg'}` : ''}`,
             schedule: { at, allowWhileIdle: true }
           });
           id++;
@@ -2209,6 +2219,36 @@ const PepTalk = () => {
     } catch (e) {
       console.warn('Local notifications:', e);
     }
+  };
+
+  const scheduleProtocolWebReminders = () => {
+    webProtocolReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
+    webProtocolReminderTimersRef.current = [];
+    if (Capacitor.isNativePlatform() || notificationPermission !== 'granted' || !notificationSettings.injectionReminders || typeof Notification === 'undefined') return;
+    const now = new Date();
+    getNextInjections().forEach((injection) => {
+      if (injection.reminderEnabled === false || injection.daysUntil < 0 || injection.daysUntil > 14) return;
+      const time = /^\d{2}:\d{2}$/.test(injection.preferredTime || '') ? injection.preferredTime : (notificationSettings.reminderTime || '09:00');
+      const [hour, minute] = time.split(':').map(Number);
+      const at = new Date(injection.nextDate);
+      at.setHours(hour, minute, 0, 0);
+      const reminderDay = formatDateLocal(at);
+      const sentKey = `peptalk-protocol-reminder-${reminderDay}-${injection.medication}`;
+      if (localStorage.getItem(sentKey) === 'sent') return;
+      const delay = Math.max(100, at.getTime() - now.getTime());
+      if (delay > 14 * 24 * 60 * 60 * 1000) return;
+      const timer = setTimeout(() => {
+        if (localStorage.getItem(sentKey) === 'sent') return;
+        localStorage.setItem(sentKey, 'sent');
+        showNotification({
+          title: at.getTime() < Date.now() - 60000 ? `⚠️ ${injection.medication} due` : `💉 ${injection.medication}`,
+          body: `Scheduled for ${formatDoseTime(time)}${injection.dose != null ? ` · ${injection.dose} ${injection.unit || 'mg'}` : ''}`,
+          tag: `protocol-${injection.medication}-${reminderDay}`,
+          requireInteraction: true,
+        });
+      }, delay);
+      webProtocolReminderTimersRef.current.push(timer);
+    });
   };
 
   // Notification functions
@@ -2318,6 +2358,67 @@ const PepTalk = () => {
     if (notificationPermission === 'granted') scheduleLocalInjectionReminders(updated);
   };
 
+  const updateProtocolReminder = (medication, changes) => {
+    const updatedSchedules = schedules.map((schedule) => schedule.medication === medication ? { ...schedule, ...changes, updatedAt: new Date().toISOString() } : schedule);
+    setSchedules(updatedSchedules);
+    saveData('health-schedules', updatedSchedules);
+    if (notificationPermission === 'granted') scheduleLocalInjectionReminders(notificationSettings, updatedSchedules);
+  };
+
+  const downloadProtocolCalendarAlerts = () => {
+    const active = schedules.filter((schedule) => !schedule.paused && schedule.reminderEnabled !== false);
+    if (!active.length) {
+      alert('Turn on at least one active protocol alert first.');
+      return;
+    }
+    const dayCodes = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+    const escapeCalendarText = (value) => String(value || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+    const calendarDateTime = (date) => `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}00`;
+    const now = new Date();
+    const events = active.map((schedule) => {
+      const start = parseLocalDate(schedule.startDate || getTodayLocal()) || new Date();
+      const first = new Date(Math.max(start.getTime(), new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()));
+      const [hour, minute] = (/^\d{2}:\d{2}$/.test(schedule.preferredTime || '') ? schedule.preferredTime : (notificationSettings.reminderTime || '09:00')).split(':').map(Number);
+      first.setHours(hour, minute, 0, 0);
+      let rule;
+      if (schedule.scheduleType === 'specific_days' && schedule.specificDays?.length) {
+        while (!schedule.specificDays.includes(first.getDay()) || first.getTime() <= now.getTime()) first.setDate(first.getDate() + 1);
+        rule = `FREQ=WEEKLY;BYDAY=${schedule.specificDays.map((day) => dayCodes[day]).join(',')}`;
+      } else {
+        const interval = Math.max(1, Number(schedule.frequencyDays) || 1);
+        const anchor = parseLocalDate(schedule.startDate || getTodayLocal()) || new Date();
+        anchor.setHours(hour, minute, 0, 0);
+        first.setTime(anchor.getTime());
+        while (first.getTime() <= now.getTime()) first.setDate(first.getDate() + interval);
+        rule = `FREQ=DAILY;INTERVAL=${interval}`;
+      }
+      return [
+        'BEGIN:VEVENT',
+        `UID:peptalk-${escapeCalendarText(schedule.id || schedule.medication)}@isoregret.github.io`,
+        `DTSTAMP:${calendarDateTime(now)}`,
+        `DTSTART:${calendarDateTime(first)}`,
+        `RRULE:${rule}`,
+        `SUMMARY:${escapeCalendarText(`PepTalk: ${schedule.medication}`)}`,
+        `DESCRIPTION:${escapeCalendarText(`${schedule.dose ?? ''} ${schedule.unit || 'mg'}${schedule.route ? ` · ${schedule.route}` : ''}`.trim())}`,
+        'BEGIN:VALARM',
+        'TRIGGER:PT0M',
+        'ACTION:DISPLAY',
+        `DESCRIPTION:${escapeCalendarText(`${schedule.medication} is scheduled now`)}`,
+        'END:VALARM',
+        'END:VEVENT',
+      ].join('\r\n');
+    });
+    const calendar = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PepTalk//Protocol Alerts//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...events, 'END:VCALENDAR'].join('\r\n');
+    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'PepTalk-protocol-alerts.ics';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const addOrUpdateInjection = () => {
     if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
     const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
@@ -2419,6 +2520,7 @@ const PepTalk = () => {
     }
     setSchedules(updated);
     saveData('health-schedules', updated);
+    if (notificationPermission === 'granted') scheduleLocalInjectionReminders(notificationSettings, updated);
   };
 
   const deleteSchedule = (id) => {
@@ -2446,6 +2548,7 @@ const PepTalk = () => {
       frequencyDays: Math.max(1, Number(existing?.frequencyDays || medication?.defaultSchedule || 1)),
       specificDays: Array.isArray(existing?.specificDays) ? existing.specificDays : [],
       preferredTime: existing?.preferredTime || lastEntry?.time || '09:00',
+      reminderEnabled: existing?.reminderEnabled !== false,
       startDate: existing?.startDate || toCalendarDay(lastEntry?.date) || getTodayLocal(),
       cycleOnWeeks: existing?.cycleOnWeeks ?? '',
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
@@ -2470,6 +2573,7 @@ const PepTalk = () => {
       frequencyDays: Math.max(1, Number(existing?.frequencyDays || medication?.defaultSchedule || 1)),
       specificDays: Array.isArray(existing?.specificDays) ? existing.specificDays : [],
       preferredTime: existing?.preferredTime || lastEntry?.time || '09:00',
+      reminderEnabled: existing?.reminderEnabled !== false,
       startDate: existing?.startDate || toCalendarDay(lastEntry?.date) || getTodayLocal(),
       cycleOnWeeks: existing?.cycleOnWeeks ?? '',
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
@@ -2512,6 +2616,7 @@ const PepTalk = () => {
       preferredDay: protocolDraft.specificDays[0] ?? existing?.preferredDay ?? 0,
       specificDays: protocolDraft.scheduleType === 'specific_days' ? [...protocolDraft.specificDays].sort() : [],
       preferredTime: protocolDraft.preferredTime || '09:00',
+      reminderEnabled: protocolDraft.reminderEnabled !== false,
       startDate: protocolDraft.startDate || getTodayLocal(),
       cycleOnWeeks: protocolDraft.cycleOnWeeks === '' ? null : Math.max(1, Number(protocolDraft.cycleOnWeeks) || 1),
       cycleOffWeeks: protocolDraft.cycleOffWeeks === '' ? null : Math.max(0, Number(protocolDraft.cycleOffWeeks) || 0),
@@ -2525,6 +2630,7 @@ const PepTalk = () => {
       : [...schedules, saved];
     setSchedules(updated);
     saveData('health-schedules', updated);
+    if (notificationPermission === 'granted') scheduleLocalInjectionReminders(notificationSettings, updated);
     if (!saved.paused) setInsightMedicationInactive(saved.medication, false);
     setProtocolEditorMed(null);
     setProtocolDraft(null);
@@ -3354,14 +3460,14 @@ const wipeAllData = () => {
     return list;
   };
 
-  const getNextInjections = () => {
+  const getNextInjections = (scheduleList = schedules) => {
     const upcoming = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = formatDateLocal(today);
     const msPerDay = 24 * 60 * 60 * 1000;
 
-    schedules.filter((item) => !item.paused).forEach(schedule => {
+    scheduleList.filter((item) => !item.paused).forEach(schedule => {
       const medicationInjections = injectionEntries
         .filter(e => e.type === schedule.medication)
         .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
@@ -3407,6 +3513,10 @@ const wipeAllData = () => {
 
       upcoming.push({
         medication: schedule.medication,
+        dose: schedule.dose,
+        unit: schedule.unit || 'mg',
+        preferredTime: schedule.preferredTime || notificationSettings.reminderTime || '09:00',
+        reminderEnabled: schedule.reminderEnabled !== false,
         nextDate,
         daysUntil,
         isOverdue: daysUntil < 0,
@@ -9324,17 +9434,34 @@ const wipeAllData = () => {
                         </div>
                         {notificationSettings.injectionReminders && (
                           <div>
-                            <label className="text-gray-400 text-sm block mb-1">Reminder Time</label>
+                            <label className="text-gray-400 text-sm block mb-1">Fallback time</label>
                             <input
                               type="time"
                               value={notificationSettings.reminderTime}
                               onChange={(e) => updateNotificationSettings({ reminderTime: e.target.value })}
                               className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
                             />
-                            <p className="text-gray-500 text-xs mt-1">You'll be notified at this time on injection days</p>
+                            <p className="text-gray-500 text-xs mt-1">Only used when a protocol does not have its own time.</p>
                           </div>
                         )}
                       </div>
+
+                      {notificationSettings.injectionReminders && schedules.length > 0 && (
+                        <div className="rounded-xl border border-white/[0.04] bg-slate-700/40 p-4">
+                          <div className="mb-3"><div className="font-medium text-white">Protocol alerts</div><div className="text-sm text-gray-400">Each active protocol alerts at its own saved time.</div></div>
+                          <div className="space-y-2">
+                            {schedules.map((schedule) => (
+                              <div key={schedule.id} className={`rounded-xl border border-white/[0.06] bg-black/10 p-3 ${schedule.paused ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0"><div className="truncate text-sm font-medium text-white">{schedule.medication}</div><div className="mt-0.5 text-[10px] text-gray-500">{schedule.paused ? 'Protocol paused' : schedule.reminderEnabled === false ? 'Alert off' : `Alerts at ${formatDoseTime(schedule.preferredTime || notificationSettings.reminderTime)}`}</div></div>
+                                  <button type="button" disabled={schedule.paused} onClick={() => updateProtocolReminder(schedule.medication, { reminderEnabled: schedule.reminderEnabled === false })} className={`relative h-6 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${schedule.reminderEnabled !== false && !schedule.paused ? 'bg-accent' : 'bg-slate-600'}`} aria-label={`Toggle ${schedule.medication} alert`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${schedule.reminderEnabled !== false && !schedule.paused ? 'right-1' : 'left-1'}`} /></button>
+                                </div>
+                                {!schedule.paused && schedule.reminderEnabled !== false && <input type="time" value={schedule.preferredTime || notificationSettings.reminderTime || '09:00'} onChange={(event) => updateProtocolReminder(schedule.medication, { preferredTime: event.target.value })} className="mt-2 w-full rounded-lg bg-slate-600 px-3 py-2 text-white" />}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Overdue Alerts */}
                       <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
@@ -9409,6 +9536,11 @@ const wipeAllData = () => {
                       </button>
                     </div>
                   )}
+                  <div className="mt-4 rounded-xl border border-sky-400/20 bg-sky-500/[0.06] p-4">
+                    <div className="flex items-start gap-3"><CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" /><div><div className="font-medium text-white">Reliable iPhone alerts</div><p className="mt-1 text-xs leading-relaxed text-gray-400">Because PepTalk is currently a web app, iPhone may suspend web alerts when it is closed. Add your active protocol schedule to Apple Calendar for alerts that still fire at 6:00 AM, 11:00 PM, or each protocol’s saved time.</p></div></div>
+                    <button type="button" onClick={downloadProtocolCalendarAlerts} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white hover:bg-sky-400"><Download className="h-4 w-4" />Add protocol alerts to Apple Calendar</button>
+                    <p className="mt-2 text-[10px] text-gray-500">On iPhone, open the downloaded PepTalk calendar file and choose Add All.</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -10317,6 +10449,10 @@ const wipeAllData = () => {
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <label className="block"><span className="text-xs font-medium text-gray-400">Preferred time</span><input type="time" value={protocolDraft.preferredTime} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, preferredTime: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
                     <label className="block"><span className="text-xs font-medium text-gray-400">Start date</span><input type="date" value={protocolDraft.startDate} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, startDate: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-white/[0.06] bg-slate-900/40 p-3">
+                    <div><div className="text-sm font-medium text-white">Protocol alert</div><div className="mt-0.5 text-[11px] text-gray-500">Alert at {formatDoseTime(protocolDraft.preferredTime)} on scheduled days.</div></div>
+                    <button type="button" onClick={() => setProtocolDraft((draft) => ({ ...draft, reminderEnabled: draft.reminderEnabled === false }))} className={`relative h-6 w-12 rounded-full transition-colors ${protocolDraft.reminderEnabled !== false ? 'bg-accent' : 'bg-slate-600'}`} aria-label="Toggle protocol reminder"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${protocolDraft.reminderEnabled !== false ? 'right-1' : 'left-1'}`} /></button>
                   </div>
                 </section>
 
