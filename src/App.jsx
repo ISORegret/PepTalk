@@ -17,7 +17,7 @@ import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '1.4.7';
+const APP_VERSION = '2.0.0';
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
   { id: 'weight', icon: Scale, label: 'Weight' },
@@ -1483,6 +1483,8 @@ const PepTalk = () => {
   const [weightGraphMode, setWeightGraphMode] = useState('both'); // trend | actual | both
   const [chartRangeWeeks, setChartRangeWeeks] = useState(0); // 0 = all, 4, 8, 12
   const [appleHealthImportHistory, setAppleHealthImportHistory] = useState([]);
+  const [appleWeightDailyStrategy, setAppleWeightDailyStrategy] = useState('morning');
+  const [lastBackupAt, setLastBackupAt] = useState(null);
   const [insightsExpandedMed, setInsightsExpandedMed] = useState(null); // medication name or null
   const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
   const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
@@ -1525,6 +1527,7 @@ const PepTalk = () => {
     weightReminderTime: '07:00'
   });
   const [dismissedAlerts, setDismissedAlerts] = useState([]); // Track dismissed alert IDs
+  const [doseActions, setDoseActions] = useState([]); // Per-day skip / take-later decisions
   
   // Injection form states
   const [injectionType, setInjectionType] = useState('Semaglutide');
@@ -1644,11 +1647,13 @@ const PepTalk = () => {
 
   // Calendar state
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(getTodayLocal());
 
   const photoInputRef = useRef(null);
   const moreSectionRefs = useRef({});
   const undoTimerRef = useRef(null);
   const webProtocolReminderTimersRef = useRef([]);
+  const webGeneralReminderTimersRef = useRef([]);
 
   useEffect(() => { loadData(); }, []);
 
@@ -1747,15 +1752,21 @@ const PepTalk = () => {
     if (!isLoading && notificationPermission === 'granted' && (schedules.some((schedule) => !schedule.paused && schedule.reminderEnabled !== false) || notificationSettings.weightReminders || notificationSettings.dailySummary || notificationSettings.weeklySummary)) {
       scheduleLocalInjectionReminders();
       scheduleProtocolWebReminders();
+      scheduleGeneralWebReminders();
     }
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && notificationPermission === 'granted') scheduleProtocolWebReminders();
+      if (document.visibilityState === 'visible' && notificationPermission === 'granted') {
+        scheduleProtocolWebReminders();
+        scheduleGeneralWebReminders();
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       webProtocolReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
       webProtocolReminderTimersRef.current = [];
+      webGeneralReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
+      webGeneralReminderTimersRef.current = [];
     };
   }, [isLoading, notificationPermission, notificationSettings.weightReminders, notificationSettings.weightReminderTime, notificationSettings.dailySummary, notificationSettings.dailySummaryTime, notificationSettings.weeklySummary, notificationSettings.weeklySummaryDay, notificationSettings.weeklySummaryTime, schedules, injectionEntries]);
 
@@ -1788,12 +1799,15 @@ const PepTalk = () => {
       const fastingData = localStorage.getItem('health-fasting-entries');
       const notificationSettingsData = localStorage.getItem('health-notification-settings');
       const appleHealthImportHistoryData = localStorage.getItem('health-apple-import-history');
+      const appleWeightStrategyData = localStorage.getItem('health-apple-weight-strategy');
+      const lastBackupData = localStorage.getItem('health-last-backup-at');
       const dailyTrackData = localStorage.getItem('health-daily-track');
       const glucoseData = localStorage.getItem('health-glucose-entries');
       const a1cData = localStorage.getItem('health-a1c-entries');
       const labData = localStorage.getItem('health-lab-entries');
       const blendConversionData = localStorage.getItem('health-blend-conversions');
       const inactiveInsightsData = localStorage.getItem('health-insights-inactive-meds');
+      const doseActionsData = localStorage.getItem('health-dose-actions');
       {
         const parsed = weightData ? JSON.parse(weightData) : [];
         const existing = Array.isArray(parsed) ? parsed : [];
@@ -1913,6 +1927,8 @@ const PepTalk = () => {
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
       if (notificationSettingsData) setNotificationSettings((current) => ({ ...current, ...JSON.parse(notificationSettingsData) }));
       if (appleHealthImportHistoryData) setAppleHealthImportHistory(JSON.parse(appleHealthImportHistoryData));
+      if (['morning', 'latest', 'lowest', 'average'].includes(appleWeightStrategyData)) setAppleWeightDailyStrategy(appleWeightStrategyData);
+      if (lastBackupData) setLastBackupAt(lastBackupData);
       if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
@@ -1944,6 +1960,12 @@ const PepTalk = () => {
         try {
           const parsed = JSON.parse(inactiveInsightsData);
           if (Array.isArray(parsed)) setInsightsInactiveMeds(parsed.filter((name) => typeof name === 'string'));
+        } catch (_) { /* ignore */ }
+      }
+      if (doseActionsData) {
+        try {
+          const parsed = JSON.parse(doseActionsData);
+          if (Array.isArray(parsed)) setDoseActions(parsed);
         } catch (_) { /* ignore */ }
       }
       const sleepData = localStorage.getItem('health-sleep-entries');
@@ -2273,6 +2295,30 @@ const PepTalk = () => {
     });
   };
 
+  const scheduleGeneralWebReminders = () => {
+    webGeneralReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
+    webGeneralReminderTimersRef.current = [];
+    if (Capacitor.isNativePlatform() || notificationPermission !== 'granted' || typeof Notification === 'undefined') return;
+    const queue = ({ id, title, body, time, weekday = null }) => {
+      const at = new Date();
+      const [hour, minute] = String(time).split(':').map(Number);
+      if (weekday != null) at.setDate(at.getDate() + ((weekday - at.getDay() + 7) % 7));
+      at.setHours(hour, minute, 0, 0);
+      if (at.getTime() <= Date.now()) at.setDate(at.getDate() + (weekday != null ? 7 : 1));
+      const sentKey = `peptalk-general-reminder-${id}-${formatDateLocal(at)}`;
+      if (localStorage.getItem(sentKey) === 'sent') return;
+      const timer = setTimeout(() => {
+        if (localStorage.getItem(sentKey) === 'sent') return;
+        localStorage.setItem(sentKey, 'sent');
+        showNotification({ title, body, tag: `general-${id}` });
+      }, Math.max(100, at.getTime() - Date.now()));
+      webGeneralReminderTimersRef.current.push(timer);
+    };
+    if (notificationSettings.weightReminders) queue({ id: 'weight', title: '⚖️ Log your weight', body: 'Add today’s weight to keep your trend current.', time: notificationSettings.weightReminderTime || '07:00' });
+    if (notificationSettings.dailySummary) queue({ id: 'daily', title: 'PepTalk — Today', body: 'Review today’s protocol schedule and mark doses taken.', time: notificationSettings.dailySummaryTime || '07:00' });
+    if (notificationSettings.weeklySummary) queue({ id: 'weekly', title: 'PepTalk — Weekly review', body: 'Review your weight trend, adherence, and dose history.', time: notificationSettings.weeklySummaryTime || '18:00', weekday: Math.min(6, Math.max(0, Number(notificationSettings.weeklySummaryDay) || 0)) });
+  };
+
   // Notification functions
   const requestNotificationPermission = async () => {
     try {
@@ -2363,6 +2409,12 @@ const PepTalk = () => {
         requireInteraction: false
       };
       const notification = new Notification(options.title, { ...defaultOptions, ...options });
+      notification.onclick = () => {
+        window.focus();
+        setActiveTab('summary');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        notification.close();
+      };
       if (!options.requireInteraction) {
         setTimeout(() => notification.close(), 5000);
       }
@@ -2377,7 +2429,9 @@ const PepTalk = () => {
     const updated = { ...notificationSettings, ...newSettings };
     setNotificationSettings(updated);
     saveData('health-notification-settings', updated);
-    if (notificationPermission === 'granted') scheduleLocalInjectionReminders(updated);
+    if (notificationPermission === 'granted') {
+      scheduleLocalInjectionReminders(updated);
+    }
   };
 
   const updateProtocolReminder = (medication, changes) => {
@@ -2475,8 +2529,30 @@ const PepTalk = () => {
   };
 
   const addOrUpdateInjection = () => {
-    if (!injectionDose || isNaN(parseFloat(injectionDose))) return;
+    if (!injectionDose || isNaN(parseFloat(injectionDose)) || Number(injectionDose) <= 0) {
+      alert('Enter a dose greater than zero.');
+      return;
+    }
+    const activeProtocol = schedules.find((schedule) => schedule.medication === injectionType && !schedule.paused);
+    if (activeProtocol?.unit && String(activeProtocol.unit).toLowerCase() !== String(injectionUnit).toLowerCase()) {
+      const proceed = window.confirm(`This protocol is saved in ${activeProtocol.unit}, but this dose is entered in ${injectionUnit}. Save it anyway?`);
+      if (!proceed) return;
+    }
+    const medicationConfig = MEDICATIONS.find((medication) => medication.name === injectionType);
+    if (medicationConfig?.blendComponents?.length && ['iu', 'units'].includes(String(injectionUnit).toLowerCase())) {
+      const conversion = blendConversions[injectionType] || {};
+      const ready = medicationConfig.blendComponents.every((component) => Number(conversion[component]) > 0);
+      if (!ready) {
+        alert('Finish the blend setup first so PepTalk can show the dose delivered for every compound.');
+        return;
+      }
+    }
     const doseMg = getDoseMgForVial(injectionDose, injectionUnit, selectedVialId, injectionType);
+    const selectedVial = vials.find((vial) => String(vial.id) === String(selectedVialId));
+    if (selectedVial && doseMg > Number(selectedVial.remainingMg ?? selectedVial.totalMg)) {
+      const proceed = window.confirm(`This dose is larger than the remaining ${Number(selectedVial.remainingMg ?? selectedVial.totalMg).toFixed(1)} mg in the selected vial. Save it anyway?`);
+      if (!proceed) return;
+    }
     const sev = {};
     selectedSideEffects.forEach((ef) => {
       const n = Number(sideEffectSeverity[ef]);
@@ -2651,6 +2727,10 @@ const PepTalk = () => {
       return;
     }
     const existing = schedules.find((schedule) => schedule.medication === protocolDraft.medication);
+    if (existing?.unit && String(existing.unit).toLowerCase() !== String(protocolDraft.unit || 'mg').toLowerCase()) {
+      const proceed = window.confirm(`Change this protocol from ${existing.unit} to ${protocolDraft.unit || 'mg'}? Existing dose history keeps its original units.`);
+      if (!proceed) return;
+    }
     const changeLog = [...(existing?.changeLog || [])];
     if (!existing) {
       changeLog.push({ date: protocolDraft.startDate || getTodayLocal(), type: 'started', label: 'Protocol started' });
@@ -2835,7 +2915,9 @@ const PepTalk = () => {
       vials,
       blendConversions,
       insightsInactiveMeds,
-      appleHealthImportHistory
+      appleHealthImportHistory,
+      appleWeightDailyStrategy,
+      doseActions
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -2856,6 +2938,9 @@ const PepTalk = () => {
           files: [result.uri],
           dialogTitle: 'Save backup (e.g. to Files or Drive)'
         });
+        const completedAt = new Date().toISOString();
+        setLastBackupAt(completedAt);
+        localStorage.setItem('health-last-backup-at', completedAt);
       } catch (err) {
         console.error('Export failed:', err);
         alert('Export failed: ' + (err?.message || String(err)));
@@ -2872,6 +2957,27 @@ const PepTalk = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    const completedAt = new Date().toISOString();
+    setLastBackupAt(completedAt);
+    localStorage.setItem('health-last-backup-at', completedAt);
+  };
+
+  const verifyBackupFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      try {
+        const data = JSON.parse(String(loadEvent.target?.result || ''));
+        if (!data.version || !data.exportDate || !Array.isArray(data.weightEntries) || !Array.isArray(data.injectionEntries)) throw new Error('Invalid backup');
+        alert(`Backup verified. ${data.weightEntries.length} weights, ${data.injectionEntries.length} doses, and ${(data.schedules || []).length} protocols are readable.`);
+      } catch (_) {
+        alert('This file is not a valid PepTalk backup.');
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Import data from JSON file
@@ -2966,6 +3072,14 @@ const PepTalk = () => {
           setAppleHealthImportHistory(imported.appleHealthImportHistory);
           saveData('health-apple-import-history', imported.appleHealthImportHistory);
         }
+        if (['morning', 'latest', 'lowest', 'average'].includes(imported.appleWeightDailyStrategy)) {
+          setAppleWeightDailyStrategy(imported.appleWeightDailyStrategy);
+          saveData('health-apple-weight-strategy', imported.appleWeightDailyStrategy);
+        }
+        if (Array.isArray(imported.doseActions)) {
+          setDoseActions(imported.doseActions);
+          saveData('health-dose-actions', imported.doseActions);
+        }
         
         alert('Data imported successfully!');
         e.target.value = ''; // Reset file input
@@ -3021,12 +3135,22 @@ const PepTalk = () => {
           alert('No Apple Health body-weight records were found in this file.');
           return;
         }
-        const firstReadingByDay = new Map();
+        const readingsByDay = new Map();
         candidates.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp))).forEach((item) => {
-          if (!firstReadingByDay.has(item.day)) firstReadingByDay.set(item.day, item);
+          readingsByDay.set(item.day, [...(readingsByDay.get(item.day) || []), item]);
+        });
+        const dailyReadings = [...readingsByDay.entries()].map(([day, readings]) => {
+          if (appleWeightDailyStrategy === 'latest') return readings[readings.length - 1];
+          if (appleWeightDailyStrategy === 'lowest') return readings.reduce((lowest, item) => item.weight < lowest.weight ? item : lowest, readings[0]);
+          if (appleWeightDailyStrategy === 'average') return { ...readings[0], day, weight: Number((readings.reduce((sum, item) => sum + item.weight, 0) / readings.length).toFixed(1)) };
+          const morning = readings.filter((item) => {
+            const match = String(item.timestamp).match(/T(\d{2}):/);
+            return match && Number(match[1]) < 12;
+          });
+          return morning[0] || readings[0];
         });
         const existingDays = new Set(weightEntries.map((entry) => toCalendarDay(entry.date)));
-        const imported = [...firstReadingByDay.values()]
+        const imported = dailyReadings
           .filter((item) => !existingDays.has(item.day))
           .map((item, index) => ({ id: Date.now() + index, weight: item.weight, date: item.day, source: 'Apple Health import' }));
         const merged = sortWeightByDateDesc([...weightEntries, ...imported]);
@@ -3036,9 +3160,10 @@ const PepTalk = () => {
           id: Date.now(),
           importedAt: new Date().toISOString(),
           fileName: file.name,
-          found: firstReadingByDay.size,
+          found: readingsByDay.size,
           added: imported.length,
-          skipped: firstReadingByDay.size - imported.length,
+          skipped: readingsByDay.size - imported.length,
+          strategy: appleWeightDailyStrategy,
         };
         const nextImportHistory = [importRecord, ...appleHealthImportHistory].slice(0, 10);
         setAppleHealthImportHistory(nextImportHistory);
@@ -3227,6 +3352,9 @@ const wipeAllData = () => {
     'health-goals-user-stack',
     'health-sleep-entries',
     'health-apple-import-history',
+    'health-apple-weight-strategy',
+    'health-last-backup-at',
+    'health-dose-actions',
     'peptalk-cloud-opt-out',
   ];
 
@@ -3252,6 +3380,9 @@ const wipeAllData = () => {
   setGoalUserStack([]);
   setSleepEntries([]);
   setAppleHealthImportHistory([]);
+  setAppleWeightDailyStrategy('morning');
+  setLastBackupAt(null);
+  setDoseActions([]);
   setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
 
   setShowWipeConfirm(false);
@@ -3422,6 +3553,15 @@ const wipeAllData = () => {
     }
     
     return { current: current.toFixed(1), change: change.toFixed(1), trend: change < 0 ? 'down' : change > 0 ? 'up' : 'neutral', bmi, percentChange: percentChange.toFixed(1), weeklyAvg: weeklyAvg.toFixed(1), toGoal: toGoal.toFixed(1), estimatedGoalDate };
+  };
+
+  const isWeightOutlier = (entry) => {
+    const sorted = sortWeightByDateAsc(weightEntries);
+    const index = sorted.findIndex((item) => item.id === entry.id);
+    if (index <= 0) return false;
+    const current = Number(entry.weight);
+    const previous = Number(sorted[index - 1].weight);
+    return Number.isFinite(current) && Number.isFinite(previous) && Math.abs(current - previous) >= 5;
   };
 
   // "On track?" — compare user's weekly loss to typical GLP-1 loss for their medication and dose (from trials)
@@ -4969,6 +5109,8 @@ const wipeAllData = () => {
       const dose = todayEntry?.dose ?? schedule.dose ?? currentStep?.dose ?? lastEntry?.dose ?? null;
       const unit = todayEntry?.unit || schedule.unit || currentStep?.unit || lastEntry?.unit || 'mg';
       const preferredTime = schedule.preferredTime || lastEntry?.time || '09:00';
+      const todayAction = doseActions.find((action) => action.medication === schedule.medication && action.date === todayStr);
+      const actionTime = todayAction?.status === 'later' && /^\d{2}:\d{2}$/.test(todayAction.time || '') ? todayAction.time : preferredTime;
       const startDay = toCalendarDay(schedule.startDate) || todayStr;
       const specificDays = schedule.scheduleType === 'specific_days' && schedule.specificDays?.length
         ? schedule.specificDays
@@ -4977,12 +5119,13 @@ const wipeAllData = () => {
       if (specificDays?.includes(todayDate.getDay())) {
         rows.push({
           medication: schedule.medication,
-          status: todayEntry ? 'done' : 'due',
-          preferredTime,
+          status: todayEntry ? 'done' : todayAction?.status === 'skipped' ? 'skipped' : 'due',
+          preferredTime: actionTime,
           dose,
           unit,
           entry: todayEntry || null,
           lastEntry,
+          action: todayAction || null,
         });
         return;
       }
@@ -5019,12 +5162,13 @@ const wipeAllData = () => {
       if (todayEntry || upcoming?.isDueToday || upcoming?.isOverdue) {
         rows.push({
           medication: schedule.medication,
-          status: todayEntry ? 'done' : upcoming?.isOverdue ? 'overdue' : 'due',
-          preferredTime,
+          status: todayEntry ? 'done' : todayAction?.status === 'skipped' ? 'skipped' : upcoming?.isOverdue ? 'overdue' : 'due',
+          preferredTime: actionTime,
           dose,
           unit,
           entry: todayEntry || null,
           lastEntry,
+          action: todayAction || null,
           overdueDays: upcoming?.isOverdue ? Math.abs(upcoming.daysUntil) : 0,
         });
       }
@@ -5037,6 +5181,25 @@ const wipeAllData = () => {
     });
   };
   const todayDoseRows = getTodayDoseRows();
+
+  const setTodayDoseAction = (row, status) => {
+    const today = getTodayLocal();
+    const remaining = doseActions.filter((action) => !(action.medication === row.medication && action.date === today));
+    let next = remaining;
+    if (status === 'skipped') {
+      next = [...remaining, { id: Date.now(), medication: row.medication, date: today, status: 'skipped' }];
+    } else if (status === 'later') {
+      const base = new Date();
+      const [hour, minute] = String(row.preferredTime || '09:00').split(':').map(Number);
+      base.setHours(Number.isFinite(hour) ? hour : base.getHours(), Number.isFinite(minute) ? minute : base.getMinutes(), 0, 0);
+      if (base.getTime() < Date.now()) base.setTime(Date.now());
+      base.setHours(base.getHours() + 1);
+      const time = `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`;
+      next = [...remaining, { id: Date.now(), medication: row.medication, date: today, status: 'later', time }];
+    }
+    setDoseActions(next);
+    saveData('health-dose-actions', next);
+  };
 
   const openTodayDoseForm = (row) => {
     const now = new Date();
@@ -5085,6 +5248,11 @@ const wipeAllData = () => {
     const updatedEntries = [newEntry, ...injectionEntries].sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
     if (!saveData('health-injection-entries', updatedEntries)) return;
     setInjectionEntries(updatedEntries);
+    const remainingActions = doseActions.filter((action) => !(action.medication === row.medication && action.date === getTodayLocal()));
+    if (remainingActions.length !== doseActions.length) {
+      setDoseActions(remainingActions);
+      saveData('health-dose-actions', remainingActions);
+    }
 
     const previousVials = vials;
     let updatedVials = vials;
@@ -5426,13 +5594,13 @@ const wipeAllData = () => {
               <h3 className="text-xl font-bold text-white flex items-center gap-2"><BookOpen className="h-6 w-6 text-gold-400" />Welcome to PepTalk</h3>
               <button type="button" onClick={dismissWelcomeModal} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
             </div>
-            <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} — How to use the app</p>
+            <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} — Redesigned around your protocols</p>
             <div className="text-gray-300 text-sm space-y-3 mb-4 pr-2">
-              <p><strong className="text-white">Summary</strong> — Your dashboard. Use &quot;Log weight&quot; and &quot;Log injection&quot; for quick entries, then review your current stats and upcoming injections.</p>
-              <p><strong className="text-white">Weight</strong> — Log and edit weight entries. See your trend and chart.</p>
-              <p><strong className="text-white">Injections</strong> — Log doses (medication, amount, date, SubQ/IM, site, side effects). Keeps a full history.</p>
-              <p><strong className="text-white">Insights</strong> — Medication levels over time, phases, and when to dose next. Tap a medication to expand details.</p>
-              <p><strong className="text-white">More</strong> — Profile, body measurements, progress photos, calendar, labs, wellness, Help, and <strong className="text-gold-400">Tools</strong> for schedules, vials, calculators, reminders, and backups.</p>
+              <p><strong className="text-white">Summary</strong> — Morning, evening, and completed doses with one-tap Taken, Take later, and Skip actions, plus your weekly review.</p>
+              <p><strong className="text-white">Weight</strong> — A prominent seven-day trend, clean Apple Health imports, and flags for readings worth reviewing.</p>
+              <p><strong className="text-white">Protocols</strong> — The source of truth for dose, schedule, alerts, phases, blends, cycles, and inventory.</p>
+              <p><strong className="text-white">Insights</strong> — Estimated medication levels, protocol phases, detailed history, and weekly dose-versus-weight analysis.</p>
+              <p><strong className="text-white">More</strong> — Dose logging and history, calendar, labs, general reminders, vial inventory, and verified backups.</p>
               {weightEntries.length === 0 && injectionEntries.length === 0 && (
                 <p className="bg-accent/10 border border-accent/20 rounded-lg p-2.5 text-gold-400 text-xs mt-2">Get started by logging your first weight or injection from Summary.</p>
               )}
@@ -5680,7 +5848,7 @@ const wipeAllData = () => {
       <div className="max-w-2xl mx-auto px-1">
         <header className="flex items-center justify-between gap-3 mb-5 py-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-11 w-11 rounded-2xl bg-accent text-slate-950 flex items-center justify-center shadow-[0_8px_30px_rgba(245,158,11,.22)] shrink-0">
+            <div className="h-11 w-11 rounded-2xl bg-accent text-slate-950 flex items-center justify-center shadow-[0_8px_30px_rgba(45,212,191,.24)] shrink-0">
               <Syringe className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -5752,42 +5920,39 @@ const wipeAllData = () => {
                 </div>
 
                 {todayDoseRows.length > 0 ? (
-                  <div className="mt-5 space-y-2.5">
-                    {todayDoseRows.map((row) => {
-                      const color = getMedicationColor(row.medication);
-                      const isDone = row.status === 'done';
-                      const isOverdue = row.status === 'overdue';
-                      return (
-                        <div key={`${row.medication}-${row.status}`} className={`rounded-2xl border p-3.5 ${isOverdue ? 'border-red-400/25 bg-red-500/[0.07]' : isDone ? 'border-green-400/15 bg-green-500/[0.05]' : 'border-white/[0.07] bg-black/15'}`}>
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}1f` }}>
-                              {isDone ? <CheckCircle className="h-5 w-5 text-green-400" /> : <Syringe className="h-5 w-5" style={{ color }} />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <h3 className="truncate text-sm font-semibold text-white">{row.medication}</h3>
-                                {isOverdue && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">Overdue</span>}
+                  <div className="mt-5 space-y-4">
+                    {[
+                      ['Morning', todayDoseRows.filter((row) => !['done', 'skipped'].includes(row.status) && Number(String(row.preferredTime || '09:00').split(':')[0]) < 12)],
+                      ['Evening', todayDoseRows.filter((row) => !['done', 'skipped'].includes(row.status) && Number(String(row.preferredTime || '09:00').split(':')[0]) >= 12)],
+                      ['Completed', todayDoseRows.filter((row) => ['done', 'skipped'].includes(row.status))],
+                    ].filter(([, rows]) => rows.length > 0).map(([group, rows]) => (
+                      <div key={group}>
+                        <div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">{group}</p><span className="text-[10px] text-gray-600">{rows.length}</span></div>
+                        <div className="space-y-2.5">
+                          {rows.map((row) => {
+                            const color = getMedicationColor(row.medication);
+                            const isDone = row.status === 'done';
+                            const isSkipped = row.status === 'skipped';
+                            const isOverdue = row.status === 'overdue';
+                            return (
+                              <div key={`${row.medication}-${row.status}`} className={`rounded-2xl border p-3.5 transition-all ${isOverdue ? 'border-rose-400/25 bg-rose-500/[0.07]' : isDone ? 'border-emerald-400/15 bg-emerald-500/[0.05]' : isSkipped ? 'border-white/[0.05] bg-white/[0.025] opacity-70' : 'border-white/[0.07] bg-black/15'}`}>
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}1f` }}>
+                                    {isDone ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : isSkipped ? <X className="h-5 w-5 text-gray-500" /> : <Syringe className="h-5 w-5" style={{ color }} />}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2"><h3 className="truncate text-sm font-semibold text-white">{row.medication}</h3>{isOverdue && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-300">Overdue</span>}{row.action?.status === 'later' && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300">Later</span>}</div>
+                                    <p className="mt-0.5 text-xs text-gray-500">{row.dose != null ? `${Number(row.dose).toFixed(2).replace(/\.00$/, '')} ${row.unit}` : 'Dose not set'}<span className="mx-1.5 text-gray-700">•</span>{isDone ? `Taken ${formatDoseTime(row.entry?.time)}` : isSkipped ? 'Skipped today' : isOverdue ? `${row.overdueDays} day${row.overdueDays === 1 ? '' : 's'} late` : formatDoseTime(row.preferredTime)}</p>
+                                  </div>
+                                  {isDone ? <button type="button" onClick={() => openTodayDoseForm(row)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-medium text-gray-400 hover:bg-white/[0.05] hover:text-white">Edit</button> : isSkipped ? <button type="button" onClick={() => setTodayDoseAction(row, null)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-medium text-gray-400 hover:bg-white/[0.05] hover:text-white">Restore</button> : <button type="button" onClick={() => markTodayDoseTaken(row)} className="shrink-0 rounded-xl bg-accent px-3.5 py-2.5 text-xs font-bold text-slate-950 shadow-[0_5px_20px_rgba(45,212,191,.2)]">Taken</button>}
+                                </div>
+                                {!isDone && !isSkipped && <div className="mt-2.5 flex items-center gap-2 pl-[52px]"><button type="button" onClick={() => setTodayDoseAction(row, 'later')} className="text-[11px] font-medium text-violet-300 hover:text-violet-200">Take 1h later</button><span className="text-gray-700">•</span><button type="button" onClick={() => setTodayDoseAction(row, 'skipped')} className="text-[11px] font-medium text-gray-500 hover:text-gray-300">Skip today</button><span className="text-gray-700">•</span><button type="button" onClick={() => openTodayDoseForm(row)} className="text-[11px] font-medium text-gray-500 hover:text-gold-400">Details</button></div>}
                               </div>
-                              <p className="mt-0.5 text-xs text-gray-500">
-                                {row.dose != null ? `${Number(row.dose).toFixed(2).replace(/\.00$/, '')} ${row.unit}` : 'Dose not set'}
-                                <span className="mx-1.5 text-gray-700">•</span>
-                                {isDone ? `Taken ${formatDoseTime(row.entry?.time)}` : isOverdue ? `${row.overdueDays} day${row.overdueDays === 1 ? '' : 's'} late` : formatDoseTime(row.preferredTime)}
-                              </p>
-                            </div>
-                            {isDone ? (
-                              <button type="button" onClick={() => openTodayDoseForm(row)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-medium text-gray-400 hover:bg-white/[0.05] hover:text-white">Edit</button>
-                            ) : (
-                              <button type="button" onClick={() => markTodayDoseTaken(row)} className="shrink-0 rounded-xl bg-accent px-3.5 py-2.5 text-xs font-bold text-slate-950 shadow-[0_5px_18px_rgba(245,158,11,.16)]">Taken</button>
-                            )}
-                          </div>
-                          {!isDone && (
-                            <button type="button" onClick={() => openTodayDoseForm(row)} className="mt-2.5 pl-[52px] text-[11px] font-medium text-gray-500 hover:text-gold-400">
-                              Change dose or add details
-                            </button>
-                          )}
+                            );
+                          })}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="mt-5 rounded-2xl border border-green-400/15 bg-green-500/[0.05] p-4 text-center">
@@ -6071,8 +6236,8 @@ const wipeAllData = () => {
                           yAxisId="weight" 
                           type="monotone" 
                           dataKey="weightTrend" 
-                          stroke="#f6c453"
-                          strokeWidth={4}
+                          stroke="#5EEAD4"
+                          strokeWidth={4.5}
                           dot={false} 
                           connectNulls={false}
                           name="7-day average"
@@ -6088,7 +6253,7 @@ const wipeAllData = () => {
                         <button key={mode} type="button" onClick={() => setWeightGraphMode(mode)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${weightGraphMode === mode ? 'bg-gold-400/15 text-gold-300' : 'text-gray-500 hover:text-gray-300'}`}>{label}</button>
                       ))}
                     </div>
-                    <p className="text-center text-[11px] text-gray-500">Gold = 7-day trend · gray = readings · purple = protocol change · green ring = injection day</p>
+                    <p className="text-center text-[11px] text-gray-500">Mint = 7-day trend · gray = readings · purple = protocol change · green ring = injection day</p>
                     {protocolEvents.length > 0 && (
                       <div className="flex max-w-full flex-wrap justify-center gap-1.5">
                         {protocolEvents.slice(-4).map((event, index) => <span key={`${event.date}-${event.medication}-${index}`} className="rounded-full bg-violet-400/10 px-2 py-1 text-[10px] text-violet-300">{event.medication}: {event.label}</span>)}
@@ -6105,14 +6270,17 @@ const wipeAllData = () => {
             {(() => {
               const d = getWeeklyDigest();
               return (
-                <div className="ui-card p-4 border-accent/20 bg-accent/5">
-                  <h3 className="text-gold-400 text-sm font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" />This week</h3>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-200 text-sm">
-                    <span><Scale className="h-3.5 w-3 inline mr-1 text-gray-400" />Weight {d.weightStr}</span>
-                    <span><Syringe className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.injStr} injections</span>
-                    <span><Droplets className="h-3.5 w-3 inline mr-1 text-gray-400" />{d.hydrationStr} hydrated</span>
+                <div className="ui-card overflow-hidden border-accent/20">
+                  <div className="border-b border-white/[0.06] bg-gradient-to-r from-accent/[0.09] to-violet-500/[0.07] p-4">
+                    <div className="flex items-center justify-between gap-3"><div><h3 className="text-white text-sm font-semibold flex items-center gap-2"><Calendar className="h-4 w-4 text-gold-400" />Weekly review</h3><p className="mt-1 text-[11px] text-gray-500">Your progress and protocol consistency at a glance.</p></div><button type="button" onClick={() => setActiveTab('insights')} className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-medium text-gray-300">Full insights</button></div>
                   </div>
-                  <p className="text-gray-500 text-[11px] mt-2 leading-relaxed border-t border-white/[0.06] pt-2">
+                  <div className="grid grid-cols-3 gap-2 p-4">
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/15 p-3"><Scale className="h-4 w-4 text-cyan-300" /><div className="mt-2 text-lg font-semibold text-white">{d.weightStr}</div><div className="mt-0.5 text-[10px] uppercase tracking-wider text-gray-600">Weight</div></div>
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/15 p-3"><Syringe className="h-4 w-4 text-violet-300" /><div className="mt-2 text-lg font-semibold text-white">{d.injStr}</div><div className="mt-0.5 text-[10px] uppercase tracking-wider text-gray-600">Doses</div></div>
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/15 p-3"><Droplets className="h-4 w-4 text-sky-300" /><div className="mt-2 text-lg font-semibold text-white">{d.hydrationStr.split(' ')[0]}</div><div className="mt-0.5 text-[10px] uppercase tracking-wider text-gray-600">Hydrated</div></div>
+                  </div>
+                  <div className="px-4 pb-3"><div className="flex flex-wrap gap-1.5">{schedules.filter((schedule) => !schedule.paused).slice(0, 6).map((schedule) => <span key={schedule.id} className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-1 text-[10px] text-gray-400">{schedule.medication}</span>)}</div></div>
+                  <p className="mx-4 mb-4 text-gray-500 text-[11px] leading-relaxed border-t border-white/[0.06] pt-3">
                     <span className="text-gray-400 font-medium">At a glance: </span>
                     {d.labsInWeek} lab entr{d.labsInWeek === 1 ? 'y' : 'ies'}
                     {d.sleepNights > 0 ? ` · ~${d.avgSleepHours}h sleep avg (${d.sleepNights} night${d.sleepNights !== 1 ? 's' : ''})` : ''}
@@ -7544,6 +7712,7 @@ const wipeAllData = () => {
                         <div>
                           <div className="text-white font-medium">{entry.weight} lbs</div>
                           <div className="text-gray-400 text-sm">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                          {isWeightOutlier(entry) && <div className="mt-1 text-[10px] font-medium text-amber-300">Large change — tap Edit to review</div>}
                         </div>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -9884,14 +10053,15 @@ const wipeAllData = () => {
                         const remMl = conc > 0 ? remMg / conc : null;
                         const totalMl = conc > 0 ? totalMg / conc : null;
                         const forecast = getVialForecast(v);
+                        const isRunningLow = Boolean(forecast && forecast.dosesRemaining <= 3);
                         return (
-                          <div key={v.id} className={`flex items-center justify-between rounded-lg p-3 gap-3 ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/50'}`}>
+                          <div key={v.id} className={`flex items-center justify-between rounded-2xl border p-3 gap-3 ${isLow ? 'border-rose-400/15 bg-rose-500/[0.04] opacity-70' : isRunningLow ? 'border-amber-300/20 bg-amber-400/[0.04]' : 'border-white/[0.05] bg-slate-700/40'}`}>
                             <div className="flex items-center gap-3 min-w-0">
                               {v.photoDataUrl && (
                                 <img src={v.photoDataUrl} alt="" className="h-10 w-10 rounded-md object-cover border border-white/10 shrink-0" />
                               )}
                               <div className="min-w-0">
-                              <span className="text-white font-medium">{v.medication}</span>
+                              <span className="text-white font-medium">{v.medication}</span>{isRunningLow && <span className="ml-2 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">Low · {forecast.dosesRemaining} doses</span>}
                               <span className="text-gray-400 text-sm ml-2">{remMg.toFixed(1)} / {totalMg.toFixed(1)} mg</span>
                               {conc > 0 && <span className="text-gray-500 text-xs ml-2">· {conc.toFixed(1)} mg/ml{remMl != null && totalMl != null ? ` · ${remMl.toFixed(1)} / ${totalMl.toFixed(1)} ml` : ''}</span>}
                               {v.expiry && <span className="text-gray-500 text-xs ml-2">· Exp {v.expiry}</span>}
@@ -9927,9 +10097,10 @@ const wipeAllData = () => {
                         <div className="rounded-xl bg-sky-400/10 p-2"><Activity className="h-5 w-5 text-sky-300" /></div>
                         <div className="min-w-0 flex-1">
                           <h4 className="font-medium text-white">Apple Health &amp; iPhone</h4>
-                          <p className="mt-1 text-xs leading-relaxed text-gray-400">Import body-weight history without replacing your PepTalk data. PepTalk keeps one early reading per day so graphs stay readable and skips dates already saved.</p>
+                          <p className="mt-1 text-xs leading-relaxed text-gray-400">Import body-weight history without replacing your PepTalk data. Choose how PepTalk reduces multiple same-day readings to one clean graph point.</p>
                         </div>
                       </div>
+                      <label className="mt-4 block"><span className="mb-1.5 block text-xs font-medium text-gray-400">Daily reading rule</span><select value={appleWeightDailyStrategy} onChange={(event) => { setAppleWeightDailyStrategy(event.target.value); saveData('health-apple-weight-strategy', event.target.value); }} className="w-full rounded-xl border border-white/[0.06] bg-slate-700 px-3 py-3 text-white"><option value="morning">First morning reading</option><option value="latest">Latest reading of the day</option><option value="lowest">Lowest reading of the day</option><option value="average">Daily average</option></select></label>
                       <label className="mt-4 flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white hover:bg-sky-400">
                         <Download className="h-4 w-4" /> Import Apple Health weights
                         <input type="file" accept=".xml,.csv,text/xml,text/csv" onChange={importAppleHealthWeights} className="hidden" />
@@ -9963,6 +10134,7 @@ const wipeAllData = () => {
                       <p className="text-gray-400 text-sm mb-3">
                         Choose the type of export you need, then tap Export.
                       </p>
+                      <div className="mb-3 flex items-center justify-between rounded-xl border border-white/[0.05] bg-black/10 px-3 py-2 text-xs"><span className="text-gray-500">Last full backup</span><span className={lastBackupAt ? 'text-emerald-300' : 'text-amber-300'}>{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : 'Not backed up yet'}</span></div>
                       <div className="mb-4">
                         <label className="text-gray-400 text-xs block mb-2">Export as</label>
                         <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 border border-white/[0.06]">
@@ -9984,6 +10156,7 @@ const wipeAllData = () => {
                         <FileDown className="h-5 w-5" />
                         {exportFormat === 'json' ? 'Export backup (JSON)' : `Download CSV${csvType !== 'full' ? ` (${csvType})` : ''}`}
                       </button>
+                      <label className="mt-2 flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.035] px-4 text-xs font-medium text-gray-300 hover:bg-white/[0.06]"><CheckCircle className="h-4 w-4 text-emerald-300" />Verify a backup file<input type="file" accept="application/json,.json" onChange={verifyBackupFile} className="hidden" /></label>
                       <div className="flex flex-col sm:flex-row gap-2 mt-3">
                         <button type="button" onClick={exportClinicianPdfFile} className="flex-1 py-2.5 rounded-lg font-medium text-sm bg-white/10 text-gray-100 hover:bg-white/15 flex items-center justify-center gap-2">
                           <FileText className="h-4 w-4" />
@@ -10350,7 +10523,7 @@ const wipeAllData = () => {
               
               <div className="grid grid-cols-7 gap-1">
                 {getCalendarDays().map((day, idx) => (
-                  <div key={idx} className={`min-h-16 p-1 rounded-lg border ${day.isToday ? 'border-accent bg-accent/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-[var(--bg-card)]/20'}`}>
+                  <button type="button" onClick={() => setSelectedCalendarDay(day.dateStr)} key={idx} className={`min-h-16 p-1 rounded-xl border text-left transition-all ${selectedCalendarDay === day.dateStr ? 'border-accent bg-accent/15 shadow-[0_0_20px_-12px_rgba(45,212,191,.8)]' : day.isToday ? 'border-accent/50 bg-accent/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-[var(--bg-card)]/20'}`}>
                     <div className={`text-xs ${day.isCurrentMonth ? 'text-white' : 'text-slate-600'}`}>{day.date.getDate()}</div>
                     {day.scheduled.length > 0 && (
                       <div className="mt-1 space-y-0.5">
@@ -10362,9 +10535,15 @@ const wipeAllData = () => {
                         {day.scheduled.length > 2 && <div className="text-[9px] text-gray-400 px-1">+{day.scheduled.length - 2}</div>}
                       </div>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
+              {(() => {
+                const selected = getCalendarDays().find((day) => day.dateStr === selectedCalendarDay);
+                if (!selected) return null;
+                const weights = weightEntries.filter((entry) => toCalendarDay(entry.date) === selected.dateStr);
+                return <div className="mt-4 rounded-2xl border border-white/[0.06] bg-black/15 p-3"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-white">{selected.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div><div className="mt-0.5 text-[11px] text-gray-500">{selected.scheduled.length} scheduled · {weights.length ? `${Number(weights[weights.length - 1].weight).toFixed(1)} lb` : 'No weight logged'}</div></div>{selected.isToday && <span className="rounded-full bg-accent/10 px-2 py-1 text-[10px] font-semibold text-gold-300">Today</span>}</div>{selected.scheduled.length > 0 ? <div className="mt-3 space-y-1.5">{selected.scheduled.map((item, index) => <div key={`${item.medication}-${index}`} className="flex items-center justify-between rounded-xl bg-white/[0.03] px-3 py-2"><span className="truncate text-xs text-gray-300">{item.medication}</span><span className={`text-[10px] font-semibold ${item.status === 'taken' ? 'text-emerald-300' : item.status === 'missed' ? 'text-rose-300' : item.status === 'paused' ? 'text-gray-500' : 'text-gold-300'}`}>{item.status}</span></div>)}</div> : <p className="mt-3 text-xs text-gray-500">No protocol doses scheduled.</p>}</div>;
+              })()}
               <div className="mt-3 flex flex-wrap gap-3 border-t border-white/[0.06] pt-3 text-[10px] text-gray-400"><span className="text-emerald-300">✓ Taken</span><span className="text-gold-300">• Scheduled</span><span className="text-red-300">! Missed</span><span>Ⅱ Paused</span></div>
             </div>
 
