@@ -1443,6 +1443,8 @@ const PepTalk = () => {
   const [expandedInjectionMed, setExpandedInjectionMed] = useState(null);
   const [weightHistoryFilterDate, setWeightHistoryFilterDate] = useState('');
   const [injectionHistoryFilterDate, setInjectionHistoryFilterDate] = useState('');
+  const [injectionHistorySearch, setInjectionHistorySearch] = useState('');
+  const [injectionHistoryStatus, setInjectionHistoryStatus] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -1478,8 +1480,9 @@ const PepTalk = () => {
 
   
   // Graph visibility state
-  const [visibleLines, setVisibleLines] = useState({ weight: true, trend: true });
+  const [weightGraphMode, setWeightGraphMode] = useState('both'); // trend | actual | both
   const [chartRangeWeeks, setChartRangeWeeks] = useState(0); // 0 = all, 4, 8, 12
+  const [appleHealthImportHistory, setAppleHealthImportHistory] = useState([]);
   const [insightsExpandedMed, setInsightsExpandedMed] = useState(null); // medication name or null
   const [insightsShowLevelsHelp, setInsightsShowLevelsHelp] = useState(false);
   const [insightsChartHiddenMeds, setInsightsChartHiddenMeds] = useState(() => new Set()); // medication names hidden from unified chart
@@ -1513,6 +1516,8 @@ const PepTalk = () => {
     injectionReminders: true,
     reminderTime: '09:00',
     overdueAlerts: true,
+    dailySummary: false,
+    dailySummaryTime: '07:00',
     weightReminders: false,
     weightReminderTime: '07:00'
   });
@@ -1735,10 +1740,10 @@ const PepTalk = () => {
 
   // Reschedule local (push) notifications when app loads and any reminder is on
   useEffect(() => {
-    if (!isLoading && notificationPermission === 'granted' && (notificationSettings.injectionReminders || notificationSettings.weightReminders)) {
+    if (!isLoading && notificationPermission === 'granted' && (notificationSettings.injectionReminders || notificationSettings.weightReminders || notificationSettings.dailySummary)) {
       scheduleLocalInjectionReminders();
     }
-  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime]);
+  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime, notificationSettings.dailySummary, notificationSettings.dailySummaryTime]);
 
   // When on More tab, scroll the active section tab into view so Profile isn’t hidden off-screen
   useEffect(() => {
@@ -1768,6 +1773,7 @@ const PepTalk = () => {
       const journalData = localStorage.getItem('health-journal');
       const fastingData = localStorage.getItem('health-fasting-entries');
       const notificationSettingsData = localStorage.getItem('health-notification-settings');
+      const appleHealthImportHistoryData = localStorage.getItem('health-apple-import-history');
       const dailyTrackData = localStorage.getItem('health-daily-track');
       const glucoseData = localStorage.getItem('health-glucose-entries');
       const a1cData = localStorage.getItem('health-a1c-entries');
@@ -1892,6 +1898,7 @@ const PepTalk = () => {
       if (journalData) setJournalEntries(JSON.parse(journalData));
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
       if (notificationSettingsData) setNotificationSettings(JSON.parse(notificationSettingsData));
+      if (appleHealthImportHistoryData) setAppleHealthImportHistory(JSON.parse(appleHealthImportHistoryData));
       if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
       if (a1cData) setA1cEntries(JSON.parse(a1cData));
@@ -2186,6 +2193,18 @@ const PepTalk = () => {
           schedule: { at, allowWhileIdle: true }
         });
       }
+      if (settings.dailySummary && (settings.dailySummaryTime || '07:00')) {
+        const [sh, sm] = (settings.dailySummaryTime || '07:00').split(':').map(Number);
+        const at = new Date();
+        at.setHours(sh, sm, 0, 0);
+        if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 1);
+        notifications.push({
+          id: 60,
+          title: 'PepTalk — Today',
+          body: 'Open your daily schedule to review doses and mark them taken.',
+          schedule: { at, allowWhileIdle: true }
+        });
+      }
       if (notifications.length) await LocalNotifications.schedule({ notifications });
     } catch (e) {
       console.warn('Local notifications:', e);
@@ -2471,6 +2490,17 @@ const PepTalk = () => {
       return;
     }
     const existing = schedules.find((schedule) => schedule.medication === protocolDraft.medication);
+    const changeLog = [...(existing?.changeLog || [])];
+    if (!existing) {
+      changeLog.push({ date: protocolDraft.startDate || getTodayLocal(), type: 'started', label: 'Protocol started' });
+    } else {
+      if (Number(existing.dose) !== numericDose || String(existing.unit || 'mg') !== String(protocolDraft.unit || 'mg')) {
+        changeLog.push({ date: getTodayLocal(), type: 'dose', label: `Dose ${numericDose} ${protocolDraft.unit || 'mg'}` });
+      }
+      if (Boolean(existing.paused) !== Boolean(protocolDraft.paused)) {
+        changeLog.push({ date: getTodayLocal(), type: protocolDraft.paused ? 'paused' : 'resumed', label: protocolDraft.paused ? 'Protocol paused' : 'Protocol resumed' });
+      }
+    }
     const saved = {
       ...(existing || { id: Date.now() }),
       medication: protocolDraft.medication,
@@ -2487,6 +2517,8 @@ const PepTalk = () => {
       cycleOffWeeks: protocolDraft.cycleOffWeeks === '' ? null : Math.max(0, Number(protocolDraft.cycleOffWeeks) || 0),
       protocolNotes: protocolDraft.notes || '',
       paused: Boolean(protocolDraft.paused),
+      updatedAt: new Date().toISOString(),
+      changeLog: changeLog.slice(-30),
     };
     const updated = existing
       ? schedules.map((schedule) => schedule.medication === saved.medication ? saved : schedule)
@@ -2638,7 +2670,8 @@ const PepTalk = () => {
       userProfile,
       vials,
       blendConversions,
-      insightsInactiveMeds
+      insightsInactiveMeds,
+      appleHealthImportHistory
     };
 
     const dataStr = JSON.stringify(allData, null, 2);
@@ -2765,6 +2798,10 @@ const PepTalk = () => {
           setInsightsInactiveMeds(imported.insightsInactiveMeds);
           saveData('health-insights-inactive-meds', imported.insightsInactiveMeds);
         }
+        if (Array.isArray(imported.appleHealthImportHistory)) {
+          setAppleHealthImportHistory(imported.appleHealthImportHistory);
+          saveData('health-apple-import-history', imported.appleHealthImportHistory);
+        }
         
         alert('Data imported successfully!');
         e.target.value = ''; // Reset file input
@@ -2831,6 +2868,17 @@ const PepTalk = () => {
         const merged = sortWeightByDateDesc([...weightEntries, ...imported]);
         setWeightEntries(merged);
         saveData('health-weight-entries', merged);
+        const importRecord = {
+          id: Date.now(),
+          importedAt: new Date().toISOString(),
+          fileName: file.name,
+          found: firstReadingByDay.size,
+          added: imported.length,
+          skipped: firstReadingByDay.size - imported.length,
+        };
+        const nextImportHistory = [importRecord, ...appleHealthImportHistory].slice(0, 10);
+        setAppleHealthImportHistory(nextImportHistory);
+        saveData('health-apple-import-history', nextImportHistory);
         alert(imported.length > 0 ? `Imported ${imported.length} daily weight records from Apple Health.` : 'Those Apple Health dates are already in PepTalk. Nothing was duplicated.');
       } catch (error) {
         console.error('Apple Health import failed:', error);
@@ -2906,6 +2954,10 @@ ${userProfile?.goalWeight ? `<p class="meta">Goal weight: ${userProfile.goalWeig
         glucoseEntries,
         sleepEntries,
         goalStack: goalUserStack,
+        schedules,
+        titrationPlans,
+        vials,
+        medicationInsights: getMedicationInsights(),
       });
     } catch (err) {
       console.error(err);
@@ -3010,6 +3062,7 @@ const wipeAllData = () => {
     'health-weekly-dose-weight-excluded-meds',
     'health-goals-user-stack',
     'health-sleep-entries',
+    'health-apple-import-history',
     'peptalk-cloud-opt-out',
   ];
 
@@ -3034,6 +3087,7 @@ const wipeAllData = () => {
   setWeeklyDoseWeightExcludedMeds([]);
   setGoalUserStack([]);
   setSleepEntries([]);
+  setAppleHealthImportHistory([]);
   setUserProfile({ height: 70, goalWeight: 200, hydrationGoalOz: 64 });
 
   setShowWipeConfirm(false);
@@ -3670,8 +3724,21 @@ const wipeAllData = () => {
       date.setDate(startDate.getDate() + i);
       const dateStr = formatDateLocal(date);
       const injections = injectionEntries.filter(inj => inj.date === dateStr);
+      const scheduled = schedules.flatMap((schedule) => {
+        const protocolStart = parseLocalDate(schedule.startDate || dateStr);
+        const dayStart = parseLocalDate(dateStr);
+        if (!protocolStart || !dayStart || dayStart < protocolStart) return [];
+        const dayDifference = Math.round((dayStart - protocolStart) / 86400000);
+        const isDue = schedule.scheduleType === 'specific_days' && Array.isArray(schedule.specificDays)
+          ? schedule.specificDays.includes(date.getDay())
+          : dayDifference % Math.max(1, Number(schedule.frequencyDays) || 7) === 0;
+        if (!isDue) return [];
+        const taken = injections.find((entry) => entry.type === schedule.medication);
+        const status = taken ? 'taken' : schedule.paused ? 'paused' : dateStr < getTodayLocal() ? 'missed' : 'scheduled';
+        return [{ medication: schedule.medication, dose: schedule.dose, unit: schedule.unit, status, taken }];
+      });
       const isCurrentMonth = date.getMonth() === month;
-      days.push({ date, dateStr, injections, isCurrentMonth, isToday: dateStr === getTodayLocal() });
+      days.push({ date, dateStr, injections, scheduled, isCurrentMonth, isToday: dateStr === getTodayLocal() });
     }
     return days;
   };
@@ -3914,6 +3981,22 @@ const wipeAllData = () => {
     if (u === 'ml' && vialId && conc > 0) return d * conc;
     if (u === 'units' && vialId && conc > 0) return (d / 100) * conc;
     return toDoseMg({ dose, unit: unit || 'mg', type: med });
+  };
+
+  const getVialForecast = (vial) => {
+    const remainingMg = Number(vial.remainingMg ?? vial.totalMg) || 0;
+    const schedule = schedules.find((item) => item.medication === vial.medication && !item.paused);
+    if (!schedule || remainingMg <= 0) return null;
+    const doseMg = getDoseMgForVial(schedule.dose, schedule.unit, vial.id, vial.medication);
+    if (!Number.isFinite(doseMg) || doseMg <= 0) return null;
+    const dosesRemaining = Math.max(0, Math.floor(remainingMg / doseMg));
+    const dosesPerWeek = schedule.scheduleType === 'specific_days' && Array.isArray(schedule.specificDays)
+      ? Math.max(1, schedule.specificDays.length)
+      : Math.max(0.25, 7 / Math.max(1, Number(schedule.frequencyDays) || 7));
+    const daysRemaining = Math.floor((dosesRemaining / dosesPerWeek) * 7);
+    const through = new Date();
+    through.setDate(through.getDate() + daysRemaining);
+    return { dosesRemaining, through: formatDateLocal(through) };
   };
 
   // For level/curve only: ml → mg using linked vial, inventory vial, or med-specific assumed mg/ml (TRT oil) when no vial is set.
@@ -5643,9 +5726,19 @@ const wipeAllData = () => {
               const wMin = weightValues.length ? Math.min(...weightValues) : 0;
               const wMax = weightValues.length ? Math.max(...weightValues) : 100;
               const yDomain = [Math.floor(wMin) - 2, Math.ceil(wMax) + 2];
-              const lastPointWithWeight = [...summaryData].reverse().find(p => p.weight != null);
-              const currentWeight = lastPointWithWeight?.weight;
-              const currentWeightDate = lastPointWithWeight?.fullDate;
+              const trendPoints = summaryData.filter((point) => point.weightTrend != null);
+              const lastTrendPoint = trendPoints[trendPoints.length - 1];
+              const priorTrendPoint = trendPoints[Math.max(0, trendPoints.length - 8)];
+              const weeklyTrendRate = lastTrendPoint && priorTrendPoint && lastTrendPoint !== priorTrendPoint
+                ? lastTrendPoint.weightTrend - priorTrendPoint.weightTrend
+                : null;
+              const chartDayLabels = new Map(summaryData.map((point) => [point.fullDate, point.date]));
+              const protocolEvents = schedules.flatMap((schedule) => {
+                const events = schedule.changeLog?.length
+                  ? schedule.changeLog
+                  : schedule.startDate ? [{ date: schedule.startDate, type: 'started', label: `${schedule.medication} started` }] : [];
+                return events.map((event) => ({ ...event, medication: schedule.medication }));
+              }).filter((event) => chartDayLabels.has(toCalendarDay(event.date))).slice(-8);
               return (
               <div className="ui-hero-panel overflow-hidden relative z-10">
                 <div className="ui-hero-panel__wash" aria-hidden />
@@ -5653,7 +5746,10 @@ const wipeAllData = () => {
                 <div className="relative">
                 <div className="px-2 sm:px-3 pt-5 pb-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                    <h3 className="text-gray-300 text-sm font-medium">Weight over time</h3>
+                    <div>
+                      <h3 className="text-gray-200 text-sm font-semibold">Weight trend</h3>
+                      {lastTrendPoint && <p className="mt-0.5 text-[11px] text-gray-500">7-day trend {lastTrendPoint.weightTrend.toFixed(1)} lb{weeklyTrendRate != null ? ` · ${weeklyTrendRate > 0 ? '+' : ''}${weeklyTrendRate.toFixed(1)} lb/week` : ''}</p>}
+                    </div>
                     <div className="flex items-center gap-1">
                       {[4, 8, 12, 0].map((w) => (
                         <button
@@ -5701,21 +5797,32 @@ const wipeAllData = () => {
                         allowDecimals={false}
                         tickCount={6}
                       />
-                      {currentWeight != null && (
+                      {lastTrendPoint?.weightTrend != null && (
                         <ReferenceLine 
                           yAxisId="weight"
-                          y={currentWeight} 
+                          y={lastTrendPoint.weightTrend}
                           stroke="#e8b84c" 
-                          strokeWidth={1.5} 
+                          strokeWidth={1}
                           strokeDasharray="4 4"
-                          strokeOpacity={0.8}
+                          strokeOpacity={0.55}
                           label={({ viewBox }) => viewBox && (
                             <text x={viewBox.x + 2} y={viewBox.y + 14} fill="#e8b84c" fontSize={11} textAnchor="start" fontWeight={500}>
-                              {currentWeight} lbs
+                              Trend {lastTrendPoint.weightTrend.toFixed(1)}
                             </text>
                           )}
                         />
                       )}
+                      {protocolEvents.map((event, index) => (
+                        <ReferenceLine
+                          key={`${event.medication}-${event.date}-${index}`}
+                          x={chartDayLabels.get(toCalendarDay(event.date))}
+                          stroke="#a78bfa"
+                          strokeWidth={1}
+                          strokeDasharray="2 4"
+                          strokeOpacity={0.45}
+                          label={{ value: index === protocolEvents.length - 1 ? 'Protocol' : '', position: 'insideTopRight', fill: '#a78bfa', fontSize: 9 }}
+                        />
+                      ))}
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'rgba(24, 24, 28, 0.96)', 
@@ -5752,7 +5859,7 @@ const wipeAllData = () => {
                           );
                         }}
                       />
-                      {visibleLines.weight && (
+                      {weightGraphMode !== 'trend' && (
                         <Area 
                           yAxisId="weight" 
                           type="monotone" 
@@ -5763,39 +5870,39 @@ const wipeAllData = () => {
                           connectNulls={false}
                         />
                       )}
-                      {visibleLines.weight && (
+                      {weightGraphMode !== 'trend' && (
                         <Line 
                           yAxisId="weight" 
                           type="monotone" 
                           dataKey="weight" 
-                          stroke="#e8b84c" 
-                          strokeWidth={2.5} 
+                          stroke="#94a3b8"
+                          strokeOpacity={0.5}
+                          strokeWidth={1.25}
                           dot={({ cx, cy, payload }) => {
-                            if (payload.weight == null || !payload.hasInjection) return null;
+                            if (payload.weight == null || chartRangeWeeks === 0) return null;
                             return (
                               <circle 
                                 cx={cx} 
                                 cy={cy} 
-                                r={1.75}
-                                fill="#101722"
-                                stroke="#34d399"
-                                strokeWidth={0.75}
+                                r={payload.hasInjection ? 2 : 1.25}
+                                fill={payload.hasInjection ? '#101722' : '#94a3b8'}
+                                stroke={payload.hasInjection ? '#34d399' : '#94a3b8'}
+                                strokeWidth={payload.hasInjection ? 0.75 : 0}
                               />
                             );
                           }}
-                          activeDot={{ r: 3, stroke: '#f59e0b', strokeWidth: 1, fill: '#101722' }}
+                          activeDot={{ r: 3, stroke: '#94a3b8', strokeWidth: 1, fill: '#101722' }}
                           connectNulls={false}
                           name="Weight"
                         />
                       )}
-                      {visibleLines.trend !== false && (
+                      {weightGraphMode !== 'actual' && (
                         <Line 
                           yAxisId="weight" 
                           type="monotone" 
                           dataKey="weightTrend" 
-                          stroke="#64748b" 
-                          strokeWidth={1.5} 
-                          strokeDasharray="6 4" 
+                          stroke="#f6c453"
+                          strokeWidth={4}
                           dot={false} 
                           connectNulls={false}
                           name="7-day average"
@@ -5806,23 +5913,17 @@ const wipeAllData = () => {
                 </div>
                 <div className="px-2 sm:px-3 pb-1">
                   <div className="flex flex-col items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
-                    <div className="flex items-center gap-6">
-                      <button 
-                        onClick={() => setVisibleLines(prev => ({ ...prev, weight: !prev.weight }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.weight ? 'bg-accent/15 text-gold-400' : 'text-gray-500'}`}
-                      >
-                        <span className={`w-2.5 h-2.5 rounded-full ${visibleLines.weight ? 'bg-gold-400' : 'bg-slate-600'}`} />
-                        Weight
-                      </button>
-                      <button 
-                        onClick={() => setVisibleLines(prev => ({ ...prev, trend: !prev.trend }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all ${visibleLines.trend !== false ? 'bg-slate-500/15 text-gray-300' : 'text-gray-500'}`}
-                      >
-                        <span className={`inline-block w-5 h-0.5 rounded-full ${visibleLines.trend !== false ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                        7-day average
-                      </button>
+                    <div className="inline-flex rounded-xl border border-white/[0.07] bg-black/15 p-1">
+                      {[['trend', 'Trend'], ['actual', 'Actual'], ['both', 'Both']].map(([mode, label]) => (
+                        <button key={mode} type="button" onClick={() => setWeightGraphMode(mode)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${weightGraphMode === mode ? 'bg-gold-400/15 text-gold-300' : 'text-gray-500 hover:text-gray-300'}`}>{label}</button>
+                      ))}
                     </div>
-                    <p className="text-gray-600 text-[11px]">Small green ring = injection day</p>
+                    <p className="text-center text-[11px] text-gray-500">Gold = 7-day trend · gray = readings · purple = protocol change · green ring = injection day</p>
+                    {protocolEvents.length > 0 && (
+                      <div className="flex max-w-full flex-wrap justify-center gap-1.5">
+                        {protocolEvents.slice(-4).map((event, index) => <span key={`${event.date}-${event.medication}-${index}`} className="rounded-full bg-violet-400/10 px-2 py-1 text-[10px] text-violet-300">{event.medication}: {event.label}</span>)}
+                      </div>
+                    )}
                   </div>
                 </div>
                 </div>
@@ -5935,12 +6036,14 @@ const wipeAllData = () => {
                     const remMl = conc > 0 ? remMg / conc : null;
                     const totalMl = conc > 0 ? totalMg / conc : null;
                     const isLow = remMg <= 0;
+                    const forecast = getVialForecast(v);
                     return (
                       <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
                         <span className="text-white font-medium">{v.medication}</span>
                         <span className="text-gray-400">
                           {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
                           {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">· {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
+                          {forecast && <span className="block text-[10px] text-gold-400/80">~{forecast.dosesRemaining} doses · through {parseLocalDate(forecast.through).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
                         </span>
                       </div>
                     );
@@ -7498,12 +7601,14 @@ const wipeAllData = () => {
                     const remMl = conc > 0 ? remMg / conc : null;
                     const totalMl = conc > 0 ? totalMg / conc : null;
                     const isLow = remMg <= 0;
+                    const forecast = getVialForecast(v);
                     return (
                       <div key={v.id} className={`flex justify-between items-center py-2 px-3 rounded-lg text-sm ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/30'}`}>
                         <span className="text-white font-medium">{v.medication}</span>
                         <span className="text-gray-400">
                           {remMg.toFixed(1)} / {totalMg.toFixed(1)} mg
                           {conc > 0 && remMl != null && totalMl != null && <span className="text-gray-500 ml-1">· {remMl.toFixed(1)} / {totalMl.toFixed(1)} ml</span>}
+                          {forecast && <span className="block text-[10px] text-gold-400/80">~{forecast.dosesRemaining} doses · through {parseLocalDate(forecast.through).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
                         </span>
                       </div>
                     );
@@ -7762,12 +7867,24 @@ const wipeAllData = () => {
                 </div>
                 {!showAddForm && <button onClick={() => setShowAddForm(true)} className="bg-accent hover:bg-gold-400 text-gray-900 p-2.5 rounded-xl shadow-gold-glow shrink-0"><Plus className="h-5 w-5" /></button>}
               </div>
+              <div className="grid gap-2 border-b border-white/[0.06] p-3 sm:grid-cols-[1fr_auto]">
+                <label className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" /><input value={injectionHistorySearch} onChange={(event) => setInjectionHistorySearch(event.target.value)} className="w-full rounded-xl border border-white/[0.06] bg-slate-800 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-600" placeholder="Search doses, sites, or notes" /></label>
+                <select value={injectionHistoryStatus} onChange={(event) => setInjectionHistoryStatus(event.target.value)} className="rounded-xl border border-white/[0.06] bg-slate-800 px-3 py-2.5 text-sm text-white"><option value="all">All stacks</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select>
+              </div>
               {injectionEntries.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 text-sm"><Syringe className="h-10 w-10 mx-auto mb-2 opacity-40" /><p>No doses logged</p></div>
               ) : (
                 <div>
                   {(() => {
                     let filtered = [...injectionEntries];
+                    const search = injectionHistorySearch.trim().toLowerCase();
+                    if (search) filtered = filtered.filter((entry) => [entry.type, entry.site, entry.route, entry.notes, entry.dose, entry.unit].some((value) => String(value || '').toLowerCase().includes(search)));
+                    if (injectionHistoryStatus !== 'all') filtered = filtered.filter((entry) => {
+                      const schedule = schedules.find((item) => item.medication === entry.type);
+                      if (injectionHistoryStatus === 'archived') return insightsInactiveMeds.includes(entry.type);
+                      if (injectionHistoryStatus === 'paused') return !!schedule?.paused && !insightsInactiveMeds.includes(entry.type);
+                      return !!schedule && !schedule.paused && !insightsInactiveMeds.includes(entry.type);
+                    });
                     if (injectionHistoryFilterDate) {
                       const selected = parseLocalDate(injectionHistoryFilterDate);
                       if (selected) {
@@ -9270,6 +9387,14 @@ const wipeAllData = () => {
                         )}
                       </div>
 
+                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <div><div className="text-white font-medium">Daily Schedule Summary</div><div className="text-gray-400 text-sm">A morning prompt to review today’s doses</div></div>
+                          <button onClick={() => updateNotificationSettings({ dailySummary: !notificationSettings.dailySummary })} className={`relative w-12 h-6 rounded-full transition-colors ${notificationSettings.dailySummary ? 'bg-sky-500' : 'bg-slate-600'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${notificationSettings.dailySummary ? 'right-1' : 'left-1'}`} /></button>
+                        </div>
+                        {notificationSettings.dailySummary && <div><label className="text-gray-400 text-sm block mb-1">Summary time</label><input type="time" value={notificationSettings.dailySummaryTime || '07:00'} onChange={(e) => updateNotificationSettings({ dailySummaryTime: e.target.value })} className="w-full bg-slate-600 text-white rounded-lg px-4 py-2" /></div>}
+                      </div>
+
                       {/* Test Notification */}
                       <button
                         onClick={() => showNotification({
@@ -9601,6 +9726,7 @@ const wipeAllData = () => {
                         })() : null;
                         const remMl = conc > 0 ? remMg / conc : null;
                         const totalMl = conc > 0 ? totalMg / conc : null;
+                        const forecast = getVialForecast(v);
                         return (
                           <div key={v.id} className={`flex items-center justify-between rounded-lg p-3 gap-3 ${isLow ? 'bg-slate-700/50 opacity-70' : 'bg-slate-700/50'}`}>
                             <div className="flex items-center gap-3 min-w-0">
@@ -9613,6 +9739,7 @@ const wipeAllData = () => {
                               {conc > 0 && <span className="text-gray-500 text-xs ml-2">· {conc.toFixed(1)} mg/ml{remMl != null && totalMl != null ? ` · ${remMl.toFixed(1)} / ${totalMl.toFixed(1)} ml` : ''}</span>}
                               {v.expiry && <span className="text-gray-500 text-xs ml-2">· Exp {v.expiry}</span>}
                               {v.reconstitutedDate && <span className="text-gray-500 text-xs ml-2 block">Recon {v.reconstitutedDate}{useBy ? ` · use by ${useBy}` : ''}</span>}
+                              {forecast && <span className="block text-xs text-gold-400/80">Inventory forecast: ~{forecast.dosesRemaining} doses · through {parseLocalDate(forecast.through).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
@@ -9654,6 +9781,19 @@ const wipeAllData = () => {
                         <span className="font-medium text-gray-300">On iPhone:</span> Health → your profile picture → Export All Health Data → save to Files. In Files, tap the ZIP once to unzip it, then choose <span className="text-gray-200">export.xml</span> here.
                       </div>
                       <p className="mt-2 text-[10px] leading-relaxed text-gray-500">Apple does not allow a web page to read HealthKit automatically. True background sync requires a native iPhone app; this importer is the private, no-cost web alternative.</p>
+                      {appleHealthImportHistory.length > 0 && (
+                        <div className="mt-3 border-t border-white/[0.06] pt-3">
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">Import history</div>
+                          <div className="space-y-1.5">
+                            {appleHealthImportHistory.slice(0, 3).map((item) => (
+                              <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg bg-black/10 px-3 py-2 text-[11px]">
+                                <div className="min-w-0"><div className="truncate text-gray-300">{item.fileName}</div><div className="text-gray-500">{new Date(item.importedAt).toLocaleString()}</div></div>
+                                <div className="shrink-0 text-right text-sky-300">+{item.added}<div className="text-[10px] text-gray-500">{item.skipped} skipped</div></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div className="mt-3 border-t border-white/[0.06] pt-3 text-[11px] text-gray-400"><span className="font-medium text-gray-300">Install PepTalk:</span> open it in Safari, tap Share, then “Add to Home Screen.”</div>
                     </div>
 
@@ -10055,29 +10195,30 @@ const wipeAllData = () => {
                 {getCalendarDays().map((day, idx) => (
                   <div key={idx} className={`min-h-16 p-1 rounded-lg border ${day.isToday ? 'border-accent bg-accent/10' : day.isCurrentMonth ? 'border-slate-700 bg-slate-700/30' : 'border-slate-800 bg-[var(--bg-card)]/20'}`}>
                     <div className={`text-xs ${day.isCurrentMonth ? 'text-white' : 'text-slate-600'}`}>{day.date.getDate()}</div>
-                    {day.injections.length > 0 && (
+                    {day.scheduled.length > 0 && (
                       <div className="mt-1 space-y-0.5">
-                        {day.injections.slice(0, 2).map((inj, i) => (
-                          <div key={i} className="text-[10px] px-1 py-0.5 rounded truncate" style={{ backgroundColor: `${getMedicationColor(inj.type)}40`, color: getMedicationColor(inj.type) }}>
-                            {inj.dose}{inj.unit}
+                        {day.scheduled.slice(0, 2).map((item, i) => (
+                          <div key={i} className={`text-[9px] px-1 py-0.5 rounded truncate ${item.status === 'missed' ? 'bg-red-500/15 text-red-300' : item.status === 'paused' ? 'bg-slate-600/40 text-gray-500' : item.status === 'taken' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gold-400/15 text-gold-300'}`} title={`${item.medication}: ${item.status}`}>
+                            {item.status === 'taken' ? '✓ ' : item.status === 'missed' ? '! ' : item.status === 'paused' ? 'Ⅱ ' : '• '}{item.medication.split(' ')[0]}
                           </div>
                         ))}
-                        {day.injections.length > 2 && <div className="text-[9px] text-gray-400 px-1">+{day.injections.length - 2}</div>}
+                        {day.scheduled.length > 2 && <div className="text-[9px] text-gray-400 px-1">+{day.scheduled.length - 2}</div>}
                       </div>
                     )}
                   </div>
                 ))}
               </div>
+              <div className="mt-3 flex flex-wrap gap-3 border-t border-white/[0.06] pt-3 text-[10px] text-gray-400"><span className="text-emerald-300">✓ Taken</span><span className="text-gold-300">• Scheduled</span><span className="text-red-300">! Missed</span><span>Ⅱ Paused</span></div>
             </div>
 
             <div className="ui-card p-4">
               <h3 className="text-white font-medium mb-3">Adherence Summary</h3>
               <div className="grid grid-cols-2 gap-3">
                 {schedules.map(schedule => {
-                  const scheduledDays = schedules.filter(s => s.medication === schedule.medication).length;
-                  const actualInjections = injectionEntries.filter(inj => inj.type === schedule.medication && parseLocalDate(inj.date).getMonth() === calendarMonth.getMonth()).length;
-                  const expectedInjections = Math.ceil(30 / schedule.frequencyDays);
-                  const adherence = expectedInjections > 0 ? Math.min(100, Math.round((actualInjections / expectedInjections) * 100)) : 0;
+                  const expectedItems = getCalendarDays().filter((day) => day.isCurrentMonth).flatMap((day) => day.scheduled).filter((item) => item.medication === schedule.medication && item.status !== 'paused');
+                  const expectedInjections = expectedItems.length;
+                  const takenInjections = expectedItems.filter((item) => item.status === 'taken').length;
+                  const adherence = expectedInjections > 0 ? Math.min(100, Math.round((takenInjections / expectedInjections) * 100)) : 0;
                   return (
                     <div key={schedule.id} className="bg-slate-700/50 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
@@ -10085,7 +10226,7 @@ const wipeAllData = () => {
                         <span className="text-white text-sm font-medium">{schedule.medication}</span>
                       </div>
                       <div className="text-2xl font-bold text-white">{adherence}%</div>
-                      <div className="text-xs text-gray-400">{actualInjections} of ~{expectedInjections} this month</div>
+                      <div className="text-xs text-gray-400">{takenInjections} of {expectedInjections} scheduled this month</div>
                     </div>
                   );
                 })}
