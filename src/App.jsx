@@ -5815,6 +5815,7 @@ const wipeAllData = () => {
                       {protocolEvents.map((event, index) => (
                         <ReferenceLine
                           key={`${event.medication}-${event.date}-${index}`}
+                          yAxisId="weight"
                           x={chartDayLabels.get(toCalendarDay(event.date))}
                           stroke="#a78bfa"
                           strokeWidth={1}
