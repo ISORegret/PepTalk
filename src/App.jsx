@@ -4535,6 +4535,167 @@ const wipeAllData = () => {
     if (inactive && insightsExpandedMed === medName) setInsightsExpandedMed(null);
   };
   const upcomingInjections = getNextInjections();
+  const formatDoseTime = (value) => {
+    const [hourRaw, minute = '00'] = String(value || '09:00').split(':');
+    const hour = Number(hourRaw);
+    if (!Number.isFinite(hour)) return value || 'Any time';
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minute} ${suffix}`;
+  };
+  const getTodayDoseRows = () => {
+    const todayStr = getTodayLocal();
+    const todayDate = parseLocalDate(todayStr);
+    const rows = [];
+
+    schedules.forEach((schedule) => {
+      const medEntries = injectionEntries
+        .filter((entry) => entry.type === schedule.medication)
+        .sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
+      const todayEntry = medEntries.find((entry) => toCalendarDay(entry.date) === todayStr);
+      const lastEntry = medEntries[0] || null;
+      const plan = titrationPlans.find((item) => item.medication === schedule.medication);
+      const currentStep = plan ? getCurrentTitrationDose(plan) : null;
+      const dose = todayEntry?.dose ?? currentStep?.dose ?? lastEntry?.dose ?? null;
+      const unit = todayEntry?.unit || currentStep?.unit || lastEntry?.unit || 'mg';
+      const preferredTime = schedule.preferredTime || lastEntry?.time || '09:00';
+      const startDay = toCalendarDay(schedule.startDate) || todayStr;
+      const specificDays = schedule.scheduleType === 'specific_days' && schedule.specificDays?.length
+        ? schedule.specificDays
+        : null;
+
+      if (specificDays?.includes(todayDate.getDay())) {
+        rows.push({
+          medication: schedule.medication,
+          status: todayEntry ? 'done' : 'due',
+          preferredTime,
+          dose,
+          unit,
+          entry: todayEntry || null,
+          lastEntry,
+        });
+        return;
+      }
+
+      if (specificDays) {
+        for (let offset = 1; offset <= 7; offset += 1) {
+          const expected = new Date(todayDate);
+          expected.setDate(expected.getDate() - offset);
+          if (!specificDays.includes(expected.getDay())) continue;
+          const expectedDay = formatDateLocal(expected);
+          if (expectedDay < startDay) break;
+          const fulfilled = medEntries.some((entry) => {
+            const day = toCalendarDay(entry.date);
+            return day >= expectedDay && day <= todayStr;
+          });
+          if (!fulfilled) {
+            rows.push({
+              medication: schedule.medication,
+              status: 'overdue',
+              preferredTime,
+              dose,
+              unit,
+              entry: null,
+              lastEntry,
+              overdueDays: offset,
+            });
+          }
+          break;
+        }
+        return;
+      }
+
+      const upcoming = upcomingInjections.find((item) => item.medication === schedule.medication);
+      if (todayEntry || upcoming?.isDueToday || upcoming?.isOverdue) {
+        rows.push({
+          medication: schedule.medication,
+          status: todayEntry ? 'done' : upcoming?.isOverdue ? 'overdue' : 'due',
+          preferredTime,
+          dose,
+          unit,
+          entry: todayEntry || null,
+          lastEntry,
+          overdueDays: upcoming?.isOverdue ? Math.abs(upcoming.daysUntil) : 0,
+        });
+      }
+    });
+
+    return rows.sort((a, b) => {
+      if (a.status === 'overdue' && b.status !== 'overdue') return -1;
+      if (b.status === 'overdue' && a.status !== 'overdue') return 1;
+      return String(a.preferredTime).localeCompare(String(b.preferredTime));
+    });
+  };
+  const todayDoseRows = getTodayDoseRows();
+
+  const openTodayDoseForm = (row) => {
+    const now = new Date();
+    const actualTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const source = row.entry || row.lastEntry || {};
+    setEditingInjection(row.entry || null);
+    setInjectionType(row.medication);
+    setInjectionDose(row.dose != null ? String(row.dose) : '');
+    setInjectionUnit(row.unit || 'mg');
+    setInjectionDate(getTodayLocal());
+    setInjectionTime(row.entry?.time || actualTime);
+    setInjectionRoute(source.route || 'SubQ');
+    setInjectionSite(source.site || getSuggestedInjectionSite(row.medication) || 'Stomach');
+    setInjectionNotes(source.notes || '');
+    setSelectedSideEffects(source.sideEffects || []);
+    setSideEffectSeverity(source.sideEffectSeverity || {});
+    setSelectedVialId(source.vialId || null);
+    setTrialTargetMg('');
+    setActiveTab('injections');
+    setShowAddForm(true);
+  };
+
+  const markTodayDoseTaken = (row) => {
+    if (row.status === 'done') return;
+    if (row.dose == null || isNaN(Number(row.dose))) {
+      openTodayDoseForm(row);
+      return;
+    }
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const source = row.lastEntry || {};
+    const linkedVial = source.vialId && vials.some((vial) => vial.id === source.vialId) ? source.vialId : null;
+    const newEntry = {
+      id: Date.now(),
+      type: row.medication,
+      dose: Number(row.dose),
+      unit: row.unit || 'mg',
+      date: getTodayLocal(),
+      time,
+      route: source.route || 'SubQ',
+      notes: 'Logged from Today',
+      sideEffects: [],
+      ...(linkedVial ? { vialId: linkedVial } : {}),
+    };
+    const previousEntries = injectionEntries;
+    const updatedEntries = [newEntry, ...injectionEntries].sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
+    if (!saveData('health-injection-entries', updatedEntries)) return;
+    setInjectionEntries(updatedEntries);
+
+    const previousVials = vials;
+    let updatedVials = vials;
+    if (linkedVial) {
+      const doseMg = getDoseMgForVial(newEntry.dose, newEntry.unit, linkedVial, newEntry.type);
+      updatedVials = pruneEmptyVials(vials.map((vial) => vial.id === linkedVial
+        ? { ...vial, remainingMg: Math.max(0, (vial.remainingMg ?? vial.totalMg) - doseMg) }
+        : vial));
+      setVials(updatedVials);
+      saveData('health-vials', updatedVials);
+    }
+
+    pushUndoToast(`${row.medication} marked taken`, () => {
+      setInjectionEntries(previousEntries);
+      saveData('health-injection-entries', previousEntries);
+      if (linkedVial) {
+        setVials(previousVials);
+        saveData('health-vials', previousVials);
+      }
+    });
+  };
   const measurementStats = getMeasurementStats();
 
   const dismissWelcomeModal = () => {
@@ -5123,7 +5284,7 @@ const wipeAllData = () => {
         </header>
 
         {/* Upcoming Injections Alert — single box for all due/overdue */}
-        {(() => {
+        {activeTab !== 'summary' && (() => {
           const dueOrOverdue = upcomingInjections.filter(inj => (inj.isDueToday || inj.isOverdue) && !dismissedAlerts.includes(`${inj.medication}-${inj.daysUntil}`));
           if (dueOrOverdue.length === 0) return null;
           const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
@@ -5158,6 +5319,84 @@ const wipeAllData = () => {
         {/* SUMMARY TAB */}
         {(activeTab === 'summary' || activeTab === 'cycles') && (
           <div key="summary" className="space-y-4 tab-enter">
+            {/* Today — the primary daily action surface */}
+            <section className="ui-hero-panel overflow-hidden">
+              <div className="ui-hero-panel__wash" aria-hidden />
+              <div className="ui-hero-panel__top-bar" aria-hidden />
+              <div className="ui-hero-panel__body">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-400">Today</p>
+                    <h2 className="mt-1 text-xl font-semibold text-white">
+                      {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-500">Your full dose schedule, in time order.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('weight'); setShowAddForm(true); }}
+                    className="shrink-0 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-xs font-medium text-gray-300 hover:bg-white/[0.08]"
+                  >
+                    <Scale className="mr-1.5 inline h-3.5 w-3.5" />Log weight
+                  </button>
+                </div>
+
+                {todayDoseRows.length > 0 ? (
+                  <div className="mt-5 space-y-2.5">
+                    {todayDoseRows.map((row) => {
+                      const color = getMedicationColor(row.medication);
+                      const isDone = row.status === 'done';
+                      const isOverdue = row.status === 'overdue';
+                      return (
+                        <div key={`${row.medication}-${row.status}`} className={`rounded-2xl border p-3.5 ${isOverdue ? 'border-red-400/25 bg-red-500/[0.07]' : isDone ? 'border-green-400/15 bg-green-500/[0.05]' : 'border-white/[0.07] bg-black/15'}`}>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}1f` }}>
+                              {isDone ? <CheckCircle className="h-5 w-5 text-green-400" /> : <Syringe className="h-5 w-5" style={{ color }} />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="truncate text-sm font-semibold text-white">{row.medication}</h3>
+                                {isOverdue && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400">Overdue</span>}
+                              </div>
+                              <p className="mt-0.5 text-xs text-gray-500">
+                                {row.dose != null ? `${Number(row.dose).toFixed(2).replace(/\.00$/, '')} ${row.unit}` : 'Dose not set'}
+                                <span className="mx-1.5 text-gray-700">•</span>
+                                {isDone ? `Taken ${formatDoseTime(row.entry?.time)}` : isOverdue ? `${row.overdueDays} day${row.overdueDays === 1 ? '' : 's'} late` : formatDoseTime(row.preferredTime)}
+                              </p>
+                            </div>
+                            {isDone ? (
+                              <button type="button" onClick={() => openTodayDoseForm(row)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-medium text-gray-400 hover:bg-white/[0.05] hover:text-white">Edit</button>
+                            ) : (
+                              <button type="button" onClick={() => markTodayDoseTaken(row)} className="shrink-0 rounded-xl bg-accent px-3.5 py-2.5 text-xs font-bold text-slate-950 shadow-[0_5px_18px_rgba(245,158,11,.16)]">Taken</button>
+                            )}
+                          </div>
+                          {!isDone && (
+                            <button type="button" onClick={() => openTodayDoseForm(row)} className="mt-2.5 pl-[52px] text-[11px] font-medium text-gray-500 hover:text-gold-400">
+                              Change dose or add details
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-2xl border border-green-400/15 bg-green-500/[0.05] p-4 text-center">
+                    <CheckCircle className="mx-auto h-6 w-6 text-green-400" />
+                    <p className="mt-2 text-sm font-semibold text-white">Nothing scheduled today</p>
+                    <p className="mt-1 text-xs text-gray-500">Your next scheduled dose will appear here.</p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
+                  className="mt-3 w-full rounded-xl border border-dashed border-white/[0.09] py-2.5 text-xs font-medium text-gray-500 hover:border-gold-400/30 hover:text-gold-400"
+                >
+                  <Plus className="mr-1.5 inline h-3.5 w-3.5" />Log an unscheduled dose
+                </button>
+              </div>
+            </section>
+
             {/* Time Range Selector */}
             <div className="ui-segmented">
               {[{ id: '1m', label: '1m' }, { id: '3m', label: '3m' }, { id: '6m', label: '6m' }, { id: '12m', label: '12m' }, { id: 'all', label: 'All' }].map(range => (
@@ -5169,26 +5408,6 @@ const wipeAllData = () => {
                   {range.label}
                 </button>
               ))}
-            </div>
-
-            {/* Quick actions — log from Summary */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => { setActiveTab('weight'); setShowAddForm(true); }}
-                className="flex-1 ui-btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
-              >
-                <Scale className="h-4 w-4" />
-                Log weight
-              </button>
-              <button
-                type="button"
-                onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
-                className="flex-1 ui-btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
-              >
-                <Syringe className="h-4 w-4" />
-                Log injection
-              </button>
             </div>
 
             {/* Vial low — directly above Weight Change (single in-page warning) */}
@@ -5515,38 +5734,6 @@ const wipeAllData = () => {
                   {streak.weeksInRow > 0 && streak.daysLoggedLast7 > 0 && ' · '}
                   {streak.weeksInRow > 0 && <span>{streak.weeksInRow} week{streak.weeksInRow !== 1 ? 's' : ''} in a row</span>}
                 </div>
-              );
-            })()}
-
-            {/* In-app reminder: all doses due today or overdue in one box */}
-            {upcomingInjections.some(inj => inj.isDueToday || inj.isOverdue) && (() => {
-              const dueOrOverdue = upcomingInjections.filter(inj => inj.isDueToday || inj.isOverdue);
-              if (dueOrOverdue.length === 0) return null;
-              const hasOverdue = dueOrOverdue.some(inj => inj.isOverdue);
-              return (
-                <button
-                  type="button"
-                  onClick={() => { setActiveTab('injections'); setShowAddForm(true); }}
-                  className="injection-reminder-card w-full ui-card p-4 text-left border-2 border-gold-500/50 bg-gold-500/10 hover:bg-gold-500/15 transition-colors animate-injection-reminder"
-                >
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-gold-400 flex-shrink-0 injection-reminder-bell" />
-                    <div className="flex-1 min-w-0">
-                      <span className={`font-semibold text-sm block ${hasOverdue ? 'text-red-400' : 'text-gold-400'}`}>
-                        {dueOrOverdue.length === 1
-                          ? (dueOrOverdue[0].isOverdue
-                              ? `${dueOrOverdue[0].medication} — ${Math.abs(dueOrOverdue[0].daysUntil)} day${Math.abs(dueOrOverdue[0].daysUntil) !== 1 ? 's' : ''} overdue`
-                              : `${dueOrOverdue[0].medication} due today`)
-                          : hasOverdue && dueOrOverdue.every(inj => inj.isOverdue)
-                            ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} — overdue`
-                            : dueOrOverdue.every(inj => inj.isDueToday)
-                              ? `${dueOrOverdue.map(inj => inj.medication).join(', ')} due today`
-                              : dueOrOverdue.map(inj => inj.isOverdue ? `${inj.medication} (${Math.abs(inj.daysUntil)}d overdue)` : `${inj.medication} (today)`).join(', ')}
-                      </span>
-                      <p className="text-gray-400 text-xs mt-0.5">Tap to log injection</p>
-                    </div>
-                  </div>
-                </button>
               );
             })()}
 
