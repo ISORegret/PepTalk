@@ -6040,14 +6040,21 @@ const wipeAllData = () => {
         {activeTab === 'insights' && (
           <div key="insights" className="space-y-4 tab-enter">
             <div className="flex items-end justify-between gap-3 pb-1">
-              <div>
-                <h2 className="text-xl font-bold text-white tracking-tight">Active stacks</h2>
-                <p className="text-gray-500 text-xs mt-1">Open one stack at a time for its level graph.</p>
-              </div>
-              <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{activeMedicationInsights.length} active</span>
+              {insightsExpandedMed ? (
+                <button type="button" onClick={() => setInsightsExpandedMed(null)} className="inline-flex items-center gap-2 text-left text-sm font-medium text-gray-300 hover:text-white">
+                  <ChevronLeft className="h-4 w-4" />
+                  All active stacks
+                </button>
+              ) : (
+                <div>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Active stacks</h2>
+                  <p className="text-gray-500 text-xs mt-1">Tap a stack for levels, phase, protocol, and dose history.</p>
+                </div>
+              )}
+              {!insightsExpandedMed && <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{activeMedicationInsights.length} active</span>}
             </div>
 
-            {inactiveMedicationInsights.length > 0 && (
+            {!insightsExpandedMed && inactiveMedicationInsights.length > 0 && (
               <div className="ui-card p-3">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div>
@@ -6666,13 +6673,13 @@ const wipeAllData = () => {
             ) : (
               <>
                 {/* Active Medications Overview */}
-                {activeMedicationInsights.map(insight => {
+                {activeMedicationInsights.filter((insight) => !insightsExpandedMed || insight.medication === insightsExpandedMed).map(insight => {
                   const isExpanded = insightsExpandedMed === insight.medication;
                   const levelNum = parseFloat(insight.currentLevel);
                   const statusLabel = levelNum >= 150 ? 'Steady state' : levelNum >= 100 ? 'Building up' : 'Single dose range';
                   const statusColor = levelNum >= 150 ? 'text-green-500' : levelNum >= 100 ? 'text-gold-400' : 'text-gray-400';
                   return (
-                  <div key={insight.medication} className="ui-card overflow-hidden">
+                  <div key={insight.medication} className={`ui-card overflow-hidden ${isExpanded ? 'border-gold-500/20 shadow-2xl shadow-black/20' : ''}`}>
                     {/* Compact header — always visible */}
                     <div className="flex items-center">
                     <button type="button" onClick={() => setInsightsExpandedMed(isExpanded ? null : insight.medication)} className="min-w-0 flex-1 px-4 py-4 pr-2 flex items-center gap-3 text-left hover:bg-white/[0.03] transition-colors">
@@ -6689,7 +6696,7 @@ const wipeAllData = () => {
                       </div>
                       <ChevronDown className={`h-5 w-5 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </button>
-                    <button
+                    {!isExpanded && <button
                       type="button"
                       onClick={() => {
                         if (window.confirm(`Mark ${insight.medication} inactive? Its dose history will stay saved.`)) setInsightMedicationInactive(insight.medication, true);
@@ -6697,7 +6704,7 @@ const wipeAllData = () => {
                       className="mr-2 h-7 w-7 shrink-0 rounded-lg text-gray-600 hover:bg-white/[0.04] hover:text-gray-300"
                       title={`Mark ${insight.medication} inactive`}
                       aria-label={`Mark ${insight.medication} inactive`}
-                    ><X className="h-3 w-3 mx-auto" /></button>
+                    ><X className="h-3 w-3 mx-auto" /></button>}
                     </div>
 
                     {/* Expanded content */}
@@ -6709,6 +6716,35 @@ const wipeAllData = () => {
                       {insight.nextInjection && (
                         <span className="text-gray-400 text-xs">Next: {new Date(insight.nextInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                       )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        onClick={() => openTodayDoseForm({ medication: insight.medication, dose: insight.lastDose, unit: insight.lastUnit || 'mg', scheduleTime: '', existing: null })}
+                        className="ui-btn-primary inline-flex min-h-11 items-center justify-center gap-2 px-3 text-sm"
+                      >
+                        <Syringe className="h-4 w-4" /> Log dose
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setTitrationMed(insight.medication); setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('titration'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 text-sm font-medium text-gray-200 hover:bg-white/[0.07]"
+                      >
+                        <Edit2 className="h-4 w-4" /> Edit protocol
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Archive ${insight.medication}? Its dose history will stay saved.`)) {
+                            setInsightMedicationInactive(insight.medication, true);
+                            setInsightsExpandedMed(null);
+                          }
+                        }}
+                        className="col-span-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/[0.06] px-3 text-xs font-medium text-gray-500 hover:border-red-500/20 hover:text-red-300 sm:col-span-1"
+                      >
+                        Archive stack
+                      </button>
                     </div>
 
                     {/* Per-compound level surface — inspired by the user's Regimen reference. */}
@@ -6812,12 +6848,19 @@ const wipeAllData = () => {
                               <div><h5 className="text-sm font-semibold text-white">Recent doses</h5><p className="text-[11px] text-gray-500">Latest history for this compound</p></div>
                               <button type="button" onClick={() => setActiveTab('injections')} className="text-[11px] font-medium text-gold-400">All doses</button>
                             </div>
-                            {detail.entries.slice(0, 5).map((entry) => (
-                              <div key={entry.id} className="px-4 py-2.5 flex items-start justify-between gap-3 border-b border-white/[0.05] last:border-0">
-                                <div><div className="text-sm font-semibold text-white">{entry.dose} {entry.unit || 'mg'}</div>{(entry.site || entry.route) && <div className="mt-0.5 text-[11px] text-gray-500">{[entry.site, entry.route].filter(Boolean).join(' · ')}</div>}</div>
-                                <div className="text-right text-[11px] text-gray-500">{getEntryDateTime(entry).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br />{getEntryDateTime(entry).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
-                              </div>
-                            ))}
+                            {detail.entries.slice(0, 5).map((entry) => {
+                              const blendDose = getBlendBreakdown(entry).filter((item) => item.mg != null);
+                              return (
+                                <div key={entry.id} className="px-4 py-2.5 flex items-start justify-between gap-3 border-b border-white/[0.05] last:border-0">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-white">{entry.dose} {entry.unit || 'mg'}</div>
+                                    {blendDose.length > 0 && <div className="mt-0.5 text-[10px] leading-relaxed text-gold-400/75">{blendDose.map((item) => `${item.component} ${item.mg.toFixed(3)} mg`).join(' · ')}</div>}
+                                    {(entry.site || entry.route) && <div className="mt-0.5 text-[11px] text-gray-500">{[entry.site, entry.route].filter(Boolean).join(' · ')}</div>}
+                                  </div>
+                                  <div className="shrink-0 text-right text-[11px] text-gray-500">{getEntryDateTime(entry).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}<br />{getEntryDateTime(entry).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
@@ -6842,101 +6885,37 @@ const wipeAllData = () => {
                       </div>
                     )}
 
-                    {/* Phase detail card — overhauled */}
+                    {/* Current phase — compact, useful, and easy to scan. */}
                     {insight.currentPhase && (
-                      <div className="ui-card overflow-hidden">
-                        {/* Header: phase name + injection date highlight */}
-                        <div className={`${insight.currentPhase.bgColor} ${insight.currentPhase.borderColor} border-b border-inherit px-4 py-3`}>
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl" aria-hidden>{insight.currentPhase.icon}</span>
-                              <h5 className={`${insight.currentPhase.color} font-semibold text-base`}>{insight.currentPhase.name}</h5>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="text-gray-400">Injection recorded</span>
-                              <span className="px-2 py-0.5 rounded-md bg-green-500/25 text-green-400 font-medium border border-green-500/40">
-                                {insight.lastInjection ? new Date(insight.lastInjection).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '—'}
-                              </span>
+                      <div className={`rounded-2xl border p-4 ${insight.currentPhase.borderColor} ${insight.currentPhase.bgColor}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-gray-500">Current phase</div>
+                            <div className="mt-1 flex items-center gap-2">
+                              <span aria-hidden>{insight.currentPhase.icon}</span>
+                              <h5 className={`font-semibold ${insight.currentPhase.color}`}>{insight.currentPhase.name}</h5>
                             </div>
                           </div>
+                          <span className="shrink-0 rounded-full border border-white/[0.08] bg-black/10 px-2.5 py-1 text-[10px] text-gray-400">
+                            {insight.lastInjection ? `Last dose ${new Date(insight.lastInjection).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'No dose date'}
+                          </span>
                         </div>
-                        <div className="p-4 space-y-4">
-                          <section>
-                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
-                              <Zap className="h-3.5 w-3 text-gold-400/80" />
-                              What&apos;s happening
-                            </h6>
-                            <ul className="space-y-1.5 pl-0.5">
-                              {(Array.isArray(insight.currentPhase.whatsHappening) ? insight.currentPhase.whatsHappening : []).map((item, i) => (
-                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
-                                  <span className="text-gold-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
-                                  <span>{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                          <section className="pt-3 border-t border-white/[0.06]">
-                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
-                              <Activity className="h-3.5 w-3 text-cyan-400/80" />
-                              What to expect
-                            </h6>
-                            <ul className="space-y-1.5 pl-0.5">
-                              {(Array.isArray(insight.currentPhase.whatToExpect) ? insight.currentPhase.whatToExpect : []).map((item, i) => (
-                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
-                                  <span className="text-cyan-400/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
-                                  <span>{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                          <section className="pt-3 border-t border-white/[0.06]">
-                            <h6 className="flex items-center gap-1.5 text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
-                              <CheckCircle className="h-3.5 w-3 text-green-500/80" />
-                              Tips for this phase
-                            </h6>
-                            <ul className="space-y-1.5 pl-0.5">
-                              {(Array.isArray(insight.currentPhase.tips) ? insight.currentPhase.tips : []).map((tip, i) => (
-                                <li key={i} className="text-gray-300 text-sm flex items-start gap-2">
-                                  <span className="text-green-500/70 mt-1.5 shrink-0 w-1 h-1 rounded-full bg-current" />
-                                  <span>{tip}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </section>
-                        </div>
+                        <p className="mt-3 text-sm leading-relaxed text-gray-300">{insight.currentPhase.description}</p>
+                        {Array.isArray(insight.currentPhase.whatToExpect) && insight.currentPhase.whatToExpect.length > 0 && (
+                          <div className="mt-3 border-t border-white/[0.06] pt-3">
+                            <div className="text-[10px] font-medium uppercase tracking-wider text-gray-500">What to expect</div>
+                            <p className="mt-1 text-xs leading-relaxed text-gray-400">{insight.currentPhase.whatToExpect.slice(0, 2).join(' · ')}</p>
+                          </div>
+                        )}
                       </div>
                     )}
-
-                    {/* Next dose reminder — one line */}
-                    {(() => {
-                      const medication = MEDICATIONS.find(m => m.name === insight.medication);
-                      if (!medication) return null;
-                      const hoursAgo = parseFloat(insight.hoursAgo);
-                      const expectedFrequencyHours = medication.defaultSchedule * 24;
-                      const hoursOverdue = hoursAgo - expectedFrequencyHours;
-                      const daysUntilTypical = (expectedFrequencyHours - hoursAgo) / 24;
-                      let urgencyColor = 'bg-green-500/10 border-green-500/20';
-                      let urgencyText = `Next dose in ~${Math.ceil(daysUntilTypical)} days`;
-                      if (hoursOverdue > 24) { urgencyColor = 'bg-red-500/10 border-red-500/30'; urgencyText = `Overdue by ${Math.ceil(hoursOverdue / 24)} day(s) — inject soon`; }
-                      else if (hoursOverdue > 0 || insight.phase === 'Trough') { urgencyColor = 'bg-red-500/10 border-red-500/30'; urgencyText = 'Inject today'; }
-                      else if (daysUntilTypical <= 1) { urgencyColor = 'bg-yellow-500/10 border-yellow-500/30'; urgencyText = 'Inject tomorrow or within 24h'; }
-                      else if (daysUntilTypical <= 2) { urgencyColor = 'bg-cyan-500/10 border-cyan-500/30'; urgencyText = `Plan in ${Math.ceil(daysUntilTypical)} days`; }
-                      return (
-                        <div className={`${urgencyColor} border rounded-lg px-3 py-2 text-sm text-gray-200`}>{urgencyText}</div>
-                      );
-                    })()}
-
-                    {/* One-line insight */}
-                    <p className="text-gray-400 text-xs">
-                      {levelNum >= 150 ? 'Steady state — optimal level.' : levelNum >= 100 ? 'Building up — keep consistent dosing.' : levelNum < 50 ? 'Levels low — plan next dose.' : 'Review your dose notes to spot patterns.'}
-                    </p>
                     </div>
                     )}
                   </div>
                     );
                 })}
 
-                {(() => {
+                {!insightsExpandedMed && (() => {
                   const { rows } = getWeeklyDoseAndWeightSummary();
                   if (!rows.length) return null;
                   return (
