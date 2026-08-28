@@ -21,7 +21,7 @@ const APP_VERSION = '1.4.7';
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
   { id: 'weight', icon: Scale, label: 'Weight' },
-  { id: 'injections', icon: Syringe, label: 'Doses' },
+  { id: 'protocols', icon: Layers, label: 'Protocols' },
   { id: 'insights', icon: Activity, label: 'Insights' },
   { id: 'more', icon: MoreHorizontal, label: 'More' },
 ];
@@ -1518,6 +1518,9 @@ const PepTalk = () => {
     overdueAlerts: true,
     dailySummary: false,
     dailySummaryTime: '07:00',
+    weeklySummary: false,
+    weeklySummaryDay: 0,
+    weeklySummaryTime: '18:00',
     weightReminders: false,
     weightReminderTime: '07:00'
   });
@@ -1741,7 +1744,7 @@ const PepTalk = () => {
 
   // Reschedule local (push) notifications when app loads and any reminder is on
   useEffect(() => {
-    if (!isLoading && notificationPermission === 'granted' && (notificationSettings.injectionReminders || notificationSettings.weightReminders || notificationSettings.dailySummary)) {
+    if (!isLoading && notificationPermission === 'granted' && (schedules.some((schedule) => !schedule.paused && schedule.reminderEnabled !== false) || notificationSettings.weightReminders || notificationSettings.dailySummary || notificationSettings.weeklySummary)) {
       scheduleLocalInjectionReminders();
       scheduleProtocolWebReminders();
     }
@@ -1754,7 +1757,7 @@ const PepTalk = () => {
       webProtocolReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
       webProtocolReminderTimersRef.current = [];
     };
-  }, [isLoading, notificationPermission, notificationSettings.injectionReminders, notificationSettings.reminderTime, notificationSettings.weightReminders, notificationSettings.weightReminderTime, notificationSettings.dailySummary, notificationSettings.dailySummaryTime, schedules, injectionEntries]);
+  }, [isLoading, notificationPermission, notificationSettings.weightReminders, notificationSettings.weightReminderTime, notificationSettings.dailySummary, notificationSettings.dailySummaryTime, notificationSettings.weeklySummary, notificationSettings.weeklySummaryDay, notificationSettings.weeklySummaryTime, schedules, injectionEntries]);
 
   // When on More tab, scroll the active section tab into view so Profile isn’t hidden off-screen
   useEffect(() => {
@@ -1908,7 +1911,7 @@ const PepTalk = () => {
       }
       if (journalData) setJournalEntries(JSON.parse(journalData));
       if (fastingData) setFastingEntries(JSON.parse(fastingData));
-      if (notificationSettingsData) setNotificationSettings(JSON.parse(notificationSettingsData));
+      if (notificationSettingsData) setNotificationSettings((current) => ({ ...current, ...JSON.parse(notificationSettingsData) }));
       if (appleHealthImportHistoryData) setAppleHealthImportHistory(JSON.parse(appleHealthImportHistoryData));
       if (dailyTrackData) setDailyTrackEntries(JSON.parse(dailyTrackData));
       if (glucoseData) setGlucoseEntries(JSON.parse(glucoseData));
@@ -2171,7 +2174,7 @@ const PepTalk = () => {
       const settings = settingsOverride ?? notificationSettings;
       const notifications = [];
       let id = 100;
-      if (settings.injectionReminders) {
+      if ((schedulesOverride ?? schedules).some((schedule) => !schedule.paused && schedule.reminderEnabled !== false)) {
         const upcoming = getNextInjections(schedulesOverride ?? schedules);
         upcoming.forEach(injection => {
           if (injection.reminderEnabled === false || injection.daysUntil < 0 || injection.daysUntil > 14) return;
@@ -2217,6 +2220,21 @@ const PepTalk = () => {
           schedule: { at, allowWhileIdle: true }
         });
       }
+      if (settings.weeklySummary && (settings.weeklySummaryTime || '18:00')) {
+        const [sh, sm] = (settings.weeklySummaryTime || '18:00').split(':').map(Number);
+        const targetDay = Math.min(6, Math.max(0, Number(settings.weeklySummaryDay) || 0));
+        const at = new Date();
+        const daysAhead = (targetDay - at.getDay() + 7) % 7;
+        at.setDate(at.getDate() + daysAhead);
+        at.setHours(sh, sm, 0, 0);
+        if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 7);
+        notifications.push({
+          id: 70,
+          title: 'PepTalk — Weekly summary',
+          body: 'Review your weight trend, protocol adherence, and dose history for the week.',
+          schedule: { at, allowWhileIdle: true }
+        });
+      }
       if (notifications.length) await LocalNotifications.schedule({ notifications });
     } catch (e) {
       console.warn('Local notifications:', e);
@@ -2226,7 +2244,7 @@ const PepTalk = () => {
   const scheduleProtocolWebReminders = () => {
     webProtocolReminderTimersRef.current.forEach((timer) => clearTimeout(timer));
     webProtocolReminderTimersRef.current = [];
-    if (Capacitor.isNativePlatform() || notificationPermission !== 'granted' || !notificationSettings.injectionReminders || typeof Notification === 'undefined') return;
+    if (Capacitor.isNativePlatform() || notificationPermission !== 'granted' || typeof Notification === 'undefined') return;
     const now = new Date();
     getNextInjections().forEach((injection) => {
       if (injection.reminderEnabled === false || injection.daysUntil < 0 || injection.daysUntil > 14) return;
@@ -2418,6 +2436,38 @@ const PepTalk = () => {
     const link = document.createElement('a');
     link.href = url;
     link.download = 'PepTalk-protocol-alerts.ics';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const downloadGeneralReminderCalendar = () => {
+    const reminders = [
+      notificationSettings.weightReminders && { id: 'weight', title: 'PepTalk: Log weight', body: 'Log your weight in PepTalk.', time: notificationSettings.weightReminderTime || '07:00', rule: 'FREQ=DAILY' },
+      notificationSettings.dailySummary && { id: 'daily-summary', title: 'PepTalk: Review today', body: 'Review today’s doses and schedule.', time: notificationSettings.dailySummaryTime || '07:00', rule: 'FREQ=DAILY' },
+      notificationSettings.weeklySummary && { id: 'weekly-summary', title: 'PepTalk: Weekly summary', body: 'Review your weight trend, protocol adherence, and dose history.', time: notificationSettings.weeklySummaryTime || '18:00', day: Math.min(6, Math.max(0, Number(notificationSettings.weeklySummaryDay) || 0)), rule: `FREQ=WEEKLY;BYDAY=${['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][Math.min(6, Math.max(0, Number(notificationSettings.weeklySummaryDay) || 0))]}` },
+    ].filter(Boolean);
+    if (!reminders.length) {
+      alert('Turn on at least one general reminder first.');
+      return;
+    }
+    const pad = (value) => String(value).padStart(2, '0');
+    const calendarDateTime = (date) => `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}T${pad(date.getHours())}${pad(date.getMinutes())}00`;
+    const now = new Date();
+    const events = reminders.map((reminder) => {
+      const first = new Date();
+      const [hour, minute] = reminder.time.split(':').map(Number);
+      if (reminder.day != null) first.setDate(first.getDate() + ((reminder.day - first.getDay() + 7) % 7));
+      first.setHours(hour, minute, 0, 0);
+      if (first.getTime() <= now.getTime()) first.setDate(first.getDate() + (reminder.day != null ? 7 : 1));
+      return ['BEGIN:VEVENT', `UID:peptalk-${reminder.id}@isoregret.github.io`, `DTSTAMP:${calendarDateTime(now)}`, `DTSTART:${calendarDateTime(first)}`, `RRULE:${reminder.rule}`, `SUMMARY:${reminder.title}`, `DESCRIPTION:${reminder.body}`, 'BEGIN:VALARM', 'TRIGGER:PT0M', 'ACTION:DISPLAY', `DESCRIPTION:${reminder.body}`, 'END:VALARM', 'END:VEVENT'].join('\r\n');
+    });
+    const calendar = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PepTalk//General Reminders//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', ...events, 'END:VCALENDAR'].join('\r\n');
+    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'PepTalk-general-reminders.ics';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -5754,7 +5804,7 @@ const wipeAllData = () => {
                 >
                   <Plus className="mr-1.5 inline h-3.5 w-3.5" />Log an unscheduled dose
                 </button>
-                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="mt-2 w-full py-2 text-xs font-medium text-gray-500 hover:text-gold-400">
+                <button type="button" onClick={() => { setActiveTab('protocols'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="mt-2 w-full py-2 text-xs font-medium text-gray-500 hover:text-gold-400">
                   Manage or add protocols
                 </button>
               </div>
@@ -7689,8 +7739,8 @@ const wipeAllData = () => {
         {activeTab === 'injections' && (
           <div key="injections" className="space-y-4 tab-enter">
             <div className="flex items-center justify-between gap-3">
-              <div><h2 className="text-xl font-bold tracking-tight text-white">Doses</h2><p className="mt-0.5 text-xs text-gray-500">Log administrations and manage your stack.</p></div>
-              <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-gray-200"><Layers className="h-4 w-4 text-gold-400" /> Protocols</button>
+              <div><h2 className="text-xl font-bold tracking-tight text-white">Doses</h2><p className="mt-0.5 text-xs text-gray-500">Log administrations and review dose history.</p></div>
+              <button type="button" onClick={() => { setActiveTab('protocols'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-gray-200"><Layers className="h-4 w-4 text-gold-400" /> Protocols</button>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {['GLP-1', 'Peptide', 'Hormone', 'Other'].map(cat => {
@@ -8628,12 +8678,14 @@ const wipeAllData = () => {
         )}
 
         {/* MORE TAB */}
-        {activeTab === 'more' && (
+        {(activeTab === 'more' || activeTab === 'protocols') && (
           <div key="more" className="space-y-4 tab-enter">
+            {activeTab === 'more' && (
             <div className="menu-3d grid grid-cols-3 sm:grid-cols-4 gap-2 rounded-2xl p-2.5 bg-[var(--bg-elevated)] backdrop-blur-sm">
               {[
                 { id: 'profile', icon: User, label: 'Profile' },
                 { id: 'body', icon: Ruler, label: 'Body' },
+                { id: 'doses', icon: Syringe, label: 'Doses' },
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' },
                 { id: 'labs', icon: Activity, label: 'Labs' },
@@ -8643,13 +8695,22 @@ const wipeAllData = () => {
                 <button
                   key={section.id}
                   ref={el => { moreSectionRefs.current[section.id] = el; }}
-                  onClick={() => setActiveMoreSection(section.id)}
+                  onClick={() => {
+                    if (section.id === 'doses') {
+                      setActiveTab('injections');
+                      setShowAddForm(false);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      return;
+                    }
+                    setActiveMoreSection(section.id);
+                  }}
                   className={`menu-3d-item min-h-16 flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl font-medium transition-all text-xs ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent/15 text-gold-400 border border-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
                 >
                   <section.icon className="h-4 w-4 flex-shrink-0" />{section.label}
                 </button>
               ))}
             </div>
+            )}
             {activeMoreSection === 'profile' && (
               <div className="space-y-4">
                 <div className="ui-card p-4 border border-cyan-500/20">
@@ -9037,15 +9098,16 @@ const wipeAllData = () => {
             </div>
           </div>
             )}
-            {activeMoreSection === 'tools' && (
+            {(activeMoreSection === 'tools' || activeTab === 'protocols') && (
           <div className="space-y-4">
             {/* Tool Section Selector - 3D */}
+            {activeTab !== 'protocols' && (
             <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
               {[
                 { id: 'calculator', label: 'Calculators' }, 
                 { id: 'schedule', label: 'Protocols' },
                 { id: 'titration', label: 'Titration' }, 
-                { id: 'notifications', label: 'Notifications' }, 
+                { id: 'notifications', label: 'Notifications' },
                 { id: 'vials', label: 'Vials' },
                 { id: 'data', label: 'Data' }
               ].map(section => (
@@ -9055,6 +9117,7 @@ const wipeAllData = () => {
                 </button>
               ))}
             </div>
+            )}
 
             {/* Calculators Section */}
             {activeToolSection === 'calculator' && (
@@ -9196,6 +9259,14 @@ const wipeAllData = () => {
                     <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{schedules.length}</span>
                   </div>
                   <button type="button" onClick={() => openProtocolEditor(MEDICATIONS.find((medication) => !schedules.some((schedule) => schedule.medication === medication.name))?.name || MEDICATIONS[0].name)} className="ui-btn-primary mt-4 flex min-h-11 w-full items-center justify-center gap-2 text-sm font-semibold"><Plus className="h-4 w-4" /> Add protocol</button>
+                </div>
+
+                <div className="ui-card p-4">
+                  <div className="flex items-start gap-3"><Bell className="mt-0.5 h-5 w-5 shrink-0 text-gold-400" /><div><div className="font-medium text-white">Protocol alert delivery</div><p className="mt-1 text-xs leading-relaxed text-gray-400">Days, medication time, and lead time are set inside each protocol. Apple Calendar is the most reliable option while PepTalk is a web app.</p></div></div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {notificationPermission !== 'granted' && notificationPermission !== 'denied' && <button type="button" onClick={requestNotificationPermission} className="min-h-11 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm font-semibold text-white">Enable web alerts</button>}
+                    <button type="button" onClick={downloadProtocolCalendarAlerts} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white hover:bg-sky-400"><Download className="h-4 w-4" />Add to Apple Calendar</button>
+                  </div>
                 </div>
 
                 {/* Stack Timeline: which compounds are active by month */}
@@ -9386,7 +9457,7 @@ const wipeAllData = () => {
                 <div className="ui-card p-4">
                   <h3 className="text-white font-medium mb-4 flex items-center gap-2">
                     <Bell className="h-5 w-5 text-gold-400" />
-                    Push Notifications
+                    General reminders
                   </h3>
 
                   {/* Permission Status */}
@@ -9399,9 +9470,9 @@ const wipeAllData = () => {
                       <div>
                         <div className="text-white font-medium">Notification Permission</div>
                         <div className="text-gray-400 text-sm">
-                          {notificationPermission === 'granted' && 'Notifications enabled! You\'ll receive injection reminders.'}
+                          {notificationPermission === 'granted' && 'Notifications are enabled.'}
                           {notificationPermission === 'denied' && (Capacitor.isNativePlatform() ? 'Notifications blocked. Enable in device Settings → Apps → PepTalk → Notifications.' : 'Notifications blocked. Enable in browser settings.')}
-                          {notificationPermission === 'default' && 'Allow notifications to get injection reminders.'}
+                          {notificationPermission === 'default' && 'Allow notifications for weight and summary reminders.'}
                         </div>
                       </div>
                       {notificationPermission !== 'granted' && notificationPermission !== 'denied' && (
@@ -9423,75 +9494,6 @@ const wipeAllData = () => {
                   {/* Notification Settings */}
                   {notificationPermission === 'granted' && (
                     <div className="space-y-4">
-                      {/* Injection Reminders */}
-                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <div className="text-white font-medium">Injection Reminders</div>
-                            <div className="text-gray-400 text-sm">Get notified when injections are due</div>
-                          </div>
-                          <button
-                            onClick={() => updateNotificationSettings({ injectionReminders: !notificationSettings.injectionReminders })}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                              notificationSettings.injectionReminders ? 'bg-accent' : 'bg-slate-600'
-                            }`}
-                          >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                              notificationSettings.injectionReminders ? 'right-1' : 'left-1'
-                            }`} />
-                          </button>
-                        </div>
-                        {notificationSettings.injectionReminders && (
-                          <div>
-                            <label className="text-gray-400 text-sm block mb-1">Fallback time</label>
-                            <input
-                              type="time"
-                              value={notificationSettings.reminderTime}
-                              onChange={(e) => updateNotificationSettings({ reminderTime: e.target.value })}
-                              className="w-full bg-slate-600 text-white rounded-lg px-4 py-2"
-                            />
-                            <p className="text-gray-500 text-xs mt-1">Only used when a protocol does not have its own time.</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {notificationSettings.injectionReminders && schedules.length > 0 && (
-                        <div className="rounded-xl border border-white/[0.04] bg-slate-700/40 p-4">
-                          <div className="mb-3"><div className="font-medium text-white">Protocol alerts</div><div className="text-sm text-gray-400">Each active protocol alerts at its own saved time.</div></div>
-                          <div className="space-y-2">
-                            {schedules.map((schedule) => (
-                              <div key={schedule.id} className={`rounded-xl border border-white/[0.06] bg-black/10 p-3 ${schedule.paused ? 'opacity-50' : ''}`}>
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0"><div className="truncate text-sm font-medium text-white">{schedule.medication}</div><div className="mt-0.5 text-[10px] text-gray-500">{schedule.paused ? 'Protocol paused' : schedule.reminderEnabled === false ? 'Alert off' : `${Math.max(0, Number(schedule.reminderMinutesBefore) || 0) ? `${Math.max(0, Number(schedule.reminderMinutesBefore) || 0)} min before` : 'At medication time'} · ${schedule.scheduleType === 'specific_days' && schedule.specificDays?.length ? schedule.specificDays.map((day) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ') : `Every ${Math.max(1, Number(schedule.frequencyDays) || 1)} day${Math.max(1, Number(schedule.frequencyDays) || 1) === 1 ? '' : 's'}`}`}</div></div>
-                                  <button type="button" disabled={schedule.paused} onClick={() => updateProtocolReminder(schedule.medication, { reminderEnabled: schedule.reminderEnabled === false })} className={`relative h-6 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${schedule.reminderEnabled !== false && !schedule.paused ? 'bg-accent' : 'bg-slate-600'}`} aria-label={`Toggle ${schedule.medication} alert`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${schedule.reminderEnabled !== false && !schedule.paused ? 'right-1' : 'left-1'}`} /></button>
-                                </div>
-                                {!schedule.paused && schedule.reminderEnabled !== false && <button type="button" onClick={() => openProtocolEditor(schedule.medication)} className="mt-2 w-full rounded-lg bg-slate-600 px-3 py-2 text-left text-xs font-medium text-white">Edit {formatDoseTime(schedule.preferredTime || notificationSettings.reminderTime || '09:00')} alert in protocol</button>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Overdue Alerts */}
-                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-white font-medium">Overdue Alerts</div>
-                            <div className="text-gray-400 text-sm">Get alerted when injections are overdue</div>
-                          </div>
-                          <button
-                            onClick={() => updateNotificationSettings({ overdueAlerts: !notificationSettings.overdueAlerts })}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                              notificationSettings.overdueAlerts ? 'bg-red-500' : 'bg-slate-600'
-                            }`}
-                          >
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                              notificationSettings.overdueAlerts ? 'right-1' : 'left-1'
-                            }`} />
-                          </button>
-                        </div>
-                      </div>
-
                       {/* Weight Log Reminders */}
                       <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
                         <div className="flex items-center justify-between mb-3">
@@ -9532,11 +9534,24 @@ const wipeAllData = () => {
                         {notificationSettings.dailySummary && <div><label className="text-gray-400 text-sm block mb-1">Summary time</label><input type="time" value={notificationSettings.dailySummaryTime || '07:00'} onChange={(e) => updateNotificationSettings({ dailySummaryTime: e.target.value })} className="w-full bg-slate-600 text-white rounded-lg px-4 py-2" /></div>}
                       </div>
 
+                      <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <div><div className="text-white font-medium">Weekly Summary</div><div className="text-gray-400 text-sm">Review weight trend, adherence, and dose history</div></div>
+                          <button onClick={() => updateNotificationSettings({ weeklySummary: !notificationSettings.weeklySummary })} className={`relative w-12 h-6 rounded-full transition-colors ${notificationSettings.weeklySummary ? 'bg-violet-500' : 'bg-slate-600'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${notificationSettings.weeklySummary ? 'right-1' : 'left-1'}`} /></button>
+                        </div>
+                        {notificationSettings.weeklySummary && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <label><span className="text-gray-400 text-sm block mb-1">Day</span><select value={notificationSettings.weeklySummaryDay ?? 0} onChange={(event) => updateNotificationSettings({ weeklySummaryDay: Number(event.target.value) })} className="w-full bg-slate-600 text-white rounded-lg px-3 py-2">{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
+                            <label><span className="text-gray-400 text-sm block mb-1">Time</span><input type="time" value={notificationSettings.weeklySummaryTime || '18:00'} onChange={(event) => updateNotificationSettings({ weeklySummaryTime: event.target.value })} className="w-full bg-slate-600 text-white rounded-lg px-3 py-2" /></label>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Test Notification */}
                       <button
                         onClick={() => showNotification({
                           title: '🎉 Test Notification',
-                          body: 'Notifications are working! You\'ll receive injection reminders like this.',
+                          body: 'Notifications are working. Weight and summary reminders will appear like this.',
                           tag: 'test'
                         })}
                         className="w-full btn-secondary text-white font-medium py-3 rounded-lg transform hover:scale-105 transition-all"
@@ -9546,8 +9561,8 @@ const wipeAllData = () => {
                     </div>
                   )}
                   <div className="mt-4 rounded-xl border border-sky-400/20 bg-sky-500/[0.06] p-4">
-                    <div className="flex items-start gap-3"><CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" /><div><div className="font-medium text-white">Reliable iPhone alerts</div><p className="mt-1 text-xs leading-relaxed text-gray-400">Because PepTalk is currently a web app, iPhone may suspend web alerts when it is closed. Add your active protocol schedule to Apple Calendar for alerts that still fire at 6:00 AM, 11:00 PM, or each protocol’s saved time.</p></div></div>
-                    <button type="button" onClick={downloadProtocolCalendarAlerts} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white hover:bg-sky-400"><Download className="h-4 w-4" />Add protocol alerts to Apple Calendar</button>
+                    <div className="flex items-start gap-3"><CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" /><div><div className="font-medium text-white">Reliable iPhone reminders</div><p className="mt-1 text-xs leading-relaxed text-gray-400">Because PepTalk is currently a web app, iPhone may suspend web notifications when it is closed. Add the enabled general reminders to Apple Calendar for reliable delivery.</p></div></div>
+                    <button type="button" onClick={downloadGeneralReminderCalendar} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white hover:bg-sky-400"><Download className="h-4 w-4" />Add general reminders to Apple Calendar</button>
                     <p className="mt-2 text-[10px] text-gray-500">On iPhone, open the downloaded PepTalk calendar file and choose Add All.</p>
                   </div>
                 </div>
@@ -10514,10 +10529,14 @@ const wipeAllData = () => {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id);
+                if (tab.id === 'protocols') {
+                  setActiveMoreSection('tools');
+                  setActiveToolSection('schedule');
+                }
                 setShowAddForm(false);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className={`ui-tab ${activeTab === tab.id ? 'ui-tab-active' : ''}`}
+              className={`ui-tab ${activeTab === tab.id || (tab.id === 'more' && activeTab === 'injections') ? 'ui-tab-active' : ''}`}
             >
               <tab.icon className="h-5 w-5 shrink-0" />
               <span>{tab.label}</span>
