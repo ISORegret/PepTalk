@@ -2180,11 +2180,13 @@ const PepTalk = () => {
           const at = new Date();
           at.setDate(at.getDate() + injection.daysUntil);
           at.setHours(hr, min, 0, 0);
+          const minutesBefore = Math.max(0, Number(injection.reminderMinutesBefore) || 0);
+          at.setMinutes(at.getMinutes() - minutesBefore);
           if (at.getTime() <= Date.now()) return;
           notifications.push({
             id,
             title: `💉 ${injection.medication}`,
-            body: `Scheduled now${injection.dose != null ? ` · ${injection.dose} ${injection.unit || 'mg'}` : ''}`,
+            body: `${minutesBefore ? `Scheduled in ${minutesBefore} minutes` : 'Scheduled now'}${injection.dose != null ? ` · ${injection.dose} ${injection.unit || 'mg'}` : ''}`,
             schedule: { at, allowWhileIdle: true }
           });
           id++;
@@ -2232,6 +2234,8 @@ const PepTalk = () => {
       const [hour, minute] = time.split(':').map(Number);
       const at = new Date(injection.nextDate);
       at.setHours(hour, minute, 0, 0);
+      const minutesBefore = Math.max(0, Number(injection.reminderMinutesBefore) || 0);
+      at.setMinutes(at.getMinutes() - minutesBefore);
       const reminderDay = formatDateLocal(at);
       const sentKey = `peptalk-protocol-reminder-${reminderDay}-${injection.medication}`;
       if (localStorage.getItem(sentKey) === 'sent') return;
@@ -2242,7 +2246,7 @@ const PepTalk = () => {
         localStorage.setItem(sentKey, 'sent');
         showNotification({
           title: at.getTime() < Date.now() - 60000 ? `⚠️ ${injection.medication} due` : `💉 ${injection.medication}`,
-          body: `Scheduled for ${formatDoseTime(time)}${injection.dose != null ? ` · ${injection.dose} ${injection.unit || 'mg'}` : ''}`,
+          body: `${minutesBefore ? `Scheduled in ${minutesBefore} minutes` : `Scheduled for ${formatDoseTime(time)}`}${injection.dose != null ? ` · ${injection.dose} ${injection.unit || 'mg'}` : ''}`,
           tag: `protocol-${injection.medication}-${reminderDay}`,
           requireInteraction: true,
         });
@@ -2379,6 +2383,7 @@ const PepTalk = () => {
       const start = parseLocalDate(schedule.startDate || getTodayLocal()) || new Date();
       const first = new Date(Math.max(start.getTime(), new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()));
       const [hour, minute] = (/^\d{2}:\d{2}$/.test(schedule.preferredTime || '') ? schedule.preferredTime : (notificationSettings.reminderTime || '09:00')).split(':').map(Number);
+      const minutesBefore = Math.max(0, Number(schedule.reminderMinutesBefore) || 0);
       first.setHours(hour, minute, 0, 0);
       let rule;
       if (schedule.scheduleType === 'specific_days' && schedule.specificDays?.length) {
@@ -2401,9 +2406,9 @@ const PepTalk = () => {
         `SUMMARY:${escapeCalendarText(`PepTalk: ${schedule.medication}`)}`,
         `DESCRIPTION:${escapeCalendarText(`${schedule.dose ?? ''} ${schedule.unit || 'mg'}${schedule.route ? ` · ${schedule.route}` : ''}`.trim())}`,
         'BEGIN:VALARM',
-        'TRIGGER:PT0M',
+        `TRIGGER:${minutesBefore ? `-PT${minutesBefore}M` : 'PT0M'}`,
         'ACTION:DISPLAY',
-        `DESCRIPTION:${escapeCalendarText(`${schedule.medication} is scheduled now`)}`,
+        `DESCRIPTION:${escapeCalendarText(minutesBefore ? `${schedule.medication} is scheduled in ${minutesBefore} minutes` : `${schedule.medication} is scheduled now`)}`,
         'END:VALARM',
         'END:VEVENT',
       ].join('\r\n');
@@ -2549,6 +2554,7 @@ const PepTalk = () => {
       specificDays: Array.isArray(existing?.specificDays) ? existing.specificDays : [],
       preferredTime: existing?.preferredTime || lastEntry?.time || '09:00',
       reminderEnabled: existing?.reminderEnabled !== false,
+      reminderMinutesBefore: Math.max(0, Number(existing?.reminderMinutesBefore) || 0),
       startDate: existing?.startDate || toCalendarDay(lastEntry?.date) || getTodayLocal(),
       cycleOnWeeks: existing?.cycleOnWeeks ?? '',
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
@@ -2574,6 +2580,7 @@ const PepTalk = () => {
       specificDays: Array.isArray(existing?.specificDays) ? existing.specificDays : [],
       preferredTime: existing?.preferredTime || lastEntry?.time || '09:00',
       reminderEnabled: existing?.reminderEnabled !== false,
+      reminderMinutesBefore: Math.max(0, Number(existing?.reminderMinutesBefore) || 0),
       startDate: existing?.startDate || toCalendarDay(lastEntry?.date) || getTodayLocal(),
       cycleOnWeeks: existing?.cycleOnWeeks ?? '',
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
@@ -2617,6 +2624,7 @@ const PepTalk = () => {
       specificDays: protocolDraft.scheduleType === 'specific_days' ? [...protocolDraft.specificDays].sort() : [],
       preferredTime: protocolDraft.preferredTime || '09:00',
       reminderEnabled: protocolDraft.reminderEnabled !== false,
+      reminderMinutesBefore: Math.max(0, Number(protocolDraft.reminderMinutesBefore) || 0),
       startDate: protocolDraft.startDate || getTodayLocal(),
       cycleOnWeeks: protocolDraft.cycleOnWeeks === '' ? null : Math.max(1, Number(protocolDraft.cycleOnWeeks) || 1),
       cycleOffWeeks: protocolDraft.cycleOffWeeks === '' ? null : Math.max(0, Number(protocolDraft.cycleOffWeeks) || 0),
@@ -3517,6 +3525,7 @@ const wipeAllData = () => {
         unit: schedule.unit || 'mg',
         preferredTime: schedule.preferredTime || notificationSettings.reminderTime || '09:00',
         reminderEnabled: schedule.reminderEnabled !== false,
+        reminderMinutesBefore: Math.max(0, Number(schedule.reminderMinutesBefore) || 0),
         nextDate,
         daysUntil,
         isOverdue: daysUntil < 0,
@@ -9453,10 +9462,10 @@ const wipeAllData = () => {
                             {schedules.map((schedule) => (
                               <div key={schedule.id} className={`rounded-xl border border-white/[0.06] bg-black/10 p-3 ${schedule.paused ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0"><div className="truncate text-sm font-medium text-white">{schedule.medication}</div><div className="mt-0.5 text-[10px] text-gray-500">{schedule.paused ? 'Protocol paused' : schedule.reminderEnabled === false ? 'Alert off' : `Alerts at ${formatDoseTime(schedule.preferredTime || notificationSettings.reminderTime)}`}</div></div>
+                                  <div className="min-w-0"><div className="truncate text-sm font-medium text-white">{schedule.medication}</div><div className="mt-0.5 text-[10px] text-gray-500">{schedule.paused ? 'Protocol paused' : schedule.reminderEnabled === false ? 'Alert off' : `${Math.max(0, Number(schedule.reminderMinutesBefore) || 0) ? `${Math.max(0, Number(schedule.reminderMinutesBefore) || 0)} min before` : 'At medication time'} · ${schedule.scheduleType === 'specific_days' && schedule.specificDays?.length ? schedule.specificDays.map((day) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]).join(', ') : `Every ${Math.max(1, Number(schedule.frequencyDays) || 1)} day${Math.max(1, Number(schedule.frequencyDays) || 1) === 1 ? '' : 's'}`}`}</div></div>
                                   <button type="button" disabled={schedule.paused} onClick={() => updateProtocolReminder(schedule.medication, { reminderEnabled: schedule.reminderEnabled === false })} className={`relative h-6 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${schedule.reminderEnabled !== false && !schedule.paused ? 'bg-accent' : 'bg-slate-600'}`} aria-label={`Toggle ${schedule.medication} alert`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${schedule.reminderEnabled !== false && !schedule.paused ? 'right-1' : 'left-1'}`} /></button>
                                 </div>
-                                {!schedule.paused && schedule.reminderEnabled !== false && <input type="time" value={schedule.preferredTime || notificationSettings.reminderTime || '09:00'} onChange={(event) => updateProtocolReminder(schedule.medication, { preferredTime: event.target.value })} className="mt-2 w-full rounded-lg bg-slate-600 px-3 py-2 text-white" />}
+                                {!schedule.paused && schedule.reminderEnabled !== false && <button type="button" onClick={() => openProtocolEditor(schedule.medication)} className="mt-2 w-full rounded-lg bg-slate-600 px-3 py-2 text-left text-xs font-medium text-white">Edit {formatDoseTime(schedule.preferredTime || notificationSettings.reminderTime || '09:00')} alert in protocol</button>}
                               </div>
                             ))}
                           </div>
@@ -10447,12 +10456,28 @@ const wipeAllData = () => {
                   )}
 
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <label className="block"><span className="text-xs font-medium text-gray-400">Preferred time</span><input type="time" value={protocolDraft.preferredTime} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, preferredTime: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
+                    <label className="block"><span className="text-xs font-medium text-gray-400">Medication time</span><input type="time" value={protocolDraft.preferredTime} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, preferredTime: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
                     <label className="block"><span className="text-xs font-medium text-gray-400">Start date</span><input type="date" value={protocolDraft.startDate} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, startDate: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
                   </div>
-                  <div className="mt-4 flex items-center justify-between rounded-xl border border-white/[0.06] bg-slate-900/40 p-3">
-                    <div><div className="text-sm font-medium text-white">Protocol alert</div><div className="mt-0.5 text-[11px] text-gray-500">Alert at {formatDoseTime(protocolDraft.preferredTime)} on scheduled days.</div></div>
-                    <button type="button" onClick={() => setProtocolDraft((draft) => ({ ...draft, reminderEnabled: draft.reminderEnabled === false }))} className={`relative h-6 w-12 rounded-full transition-colors ${protocolDraft.reminderEnabled !== false ? 'bg-accent' : 'bg-slate-600'}`} aria-label="Toggle protocol reminder"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${protocolDraft.reminderEnabled !== false ? 'right-1' : 'left-1'}`} /></button>
+                  <div className="mt-4 rounded-xl border border-white/[0.06] bg-slate-900/40 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div><div className="text-sm font-medium text-white">Protocol alert</div><div className="mt-0.5 text-[11px] text-gray-500">Uses this protocol’s selected dose days only.</div></div>
+                      <button type="button" onClick={() => setProtocolDraft((draft) => ({ ...draft, reminderEnabled: draft.reminderEnabled === false }))} className={`relative h-6 w-12 shrink-0 rounded-full transition-colors ${protocolDraft.reminderEnabled !== false ? 'bg-accent' : 'bg-slate-600'}`} aria-label="Toggle protocol reminder"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-all ${protocolDraft.reminderEnabled !== false ? 'right-1' : 'left-1'}`} /></button>
+                    </div>
+                    {protocolDraft.reminderEnabled !== false && (
+                      <label className="mt-3 block">
+                        <span className="text-xs font-medium text-gray-400">Alert me</span>
+                        <select value={String(protocolDraft.reminderMinutesBefore || 0)} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, reminderMinutesBefore: Number(event.target.value) }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white">
+                          <option value="0">At medication time</option>
+                          <option value="5">5 minutes before</option>
+                          <option value="10">10 minutes before</option>
+                          <option value="15">15 minutes before</option>
+                          <option value="30">30 minutes before</option>
+                          <option value="60">1 hour before</option>
+                        </select>
+                        <span className="mt-2 block text-[11px] text-gray-500">Alert: {Math.max(0, Number(protocolDraft.reminderMinutesBefore) || 0) ? `${Math.max(0, Number(protocolDraft.reminderMinutesBefore) || 0)} minutes before ${formatDoseTime(protocolDraft.preferredTime)}` : formatDoseTime(protocolDraft.preferredTime)} · scheduled dose days only</span>
+                      </label>
+                    )}
                   </div>
                 </section>
 
