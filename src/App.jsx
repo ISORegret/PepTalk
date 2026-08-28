@@ -1545,6 +1545,8 @@ const PepTalk = () => {
   const [scheduleStartDate, setScheduleStartDate] = useState(getTodayLocal());
   const [scheduleType, setScheduleType] = useState('recurring'); // 'recurring' or 'specific_days'
   const [selectedDays, setSelectedDays] = useState([]); // [0,1,2,3,4,5,6] for Sun-Sat
+  const [protocolEditorMed, setProtocolEditorMed] = useState(null);
+  const [protocolDraft, setProtocolDraft] = useState(null);
 
   // Titration form states
   const [titrationMed, setTitrationMed] = useState('Semaglutide');
@@ -2406,6 +2408,96 @@ const PepTalk = () => {
     saveData('health-schedules', updated);
   };
 
+  const openProtocolEditor = (medName = null) => {
+    const medicationName = medName || schedules[0]?.medication || MEDICATIONS[0].name;
+    const existing = schedules.find((schedule) => schedule.medication === medicationName);
+    const lastEntry = injectionEntries
+      .filter((entry) => entry.type === medicationName)
+      .sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a))[0];
+    const plan = titrationPlans.find((item) => item.medication === medicationName);
+    const currentStep = plan ? getCurrentTitrationDose(plan) : null;
+    const medication = MEDICATIONS.find((item) => item.name === medicationName);
+    setProtocolEditorMed(medicationName);
+    setProtocolDraft({
+      medication: medicationName,
+      dose: existing?.dose ?? currentStep?.dose ?? lastEntry?.dose ?? '',
+      unit: existing?.unit || currentStep?.unit || lastEntry?.unit || 'mg',
+      route: existing?.route || lastEntry?.route || 'SubQ',
+      scheduleType: existing?.scheduleType || 'recurring',
+      frequencyDays: Math.max(1, Number(existing?.frequencyDays || medication?.defaultSchedule || 1)),
+      specificDays: Array.isArray(existing?.specificDays) ? existing.specificDays : [],
+      preferredTime: existing?.preferredTime || lastEntry?.time || '09:00',
+      startDate: existing?.startDate || toCalendarDay(lastEntry?.date) || getTodayLocal(),
+      cycleOnWeeks: existing?.cycleOnWeeks ?? '',
+      cycleOffWeeks: existing?.cycleOffWeeks ?? '',
+      notes: existing?.protocolNotes || '',
+      paused: Boolean(existing?.paused),
+    });
+  };
+
+  const changeProtocolMedication = (medName) => {
+    const existing = schedules.find((schedule) => schedule.medication === medName);
+    const lastEntry = injectionEntries
+      .filter((entry) => entry.type === medName)
+      .sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a))[0];
+    const medication = MEDICATIONS.find((item) => item.name === medName);
+    setProtocolEditorMed(medName);
+    setProtocolDraft({
+      medication: medName,
+      dose: existing?.dose ?? lastEntry?.dose ?? '',
+      unit: existing?.unit || lastEntry?.unit || 'mg',
+      route: existing?.route || lastEntry?.route || 'SubQ',
+      scheduleType: existing?.scheduleType || 'recurring',
+      frequencyDays: Math.max(1, Number(existing?.frequencyDays || medication?.defaultSchedule || 1)),
+      specificDays: Array.isArray(existing?.specificDays) ? existing.specificDays : [],
+      preferredTime: existing?.preferredTime || lastEntry?.time || '09:00',
+      startDate: existing?.startDate || toCalendarDay(lastEntry?.date) || getTodayLocal(),
+      cycleOnWeeks: existing?.cycleOnWeeks ?? '',
+      cycleOffWeeks: existing?.cycleOffWeeks ?? '',
+      notes: existing?.protocolNotes || '',
+      paused: Boolean(existing?.paused),
+    });
+  };
+
+  const saveProtocol = () => {
+    if (!protocolDraft?.medication) return;
+    const numericDose = Number(protocolDraft.dose);
+    if (!Number.isFinite(numericDose) || numericDose <= 0) {
+      alert('Enter a dose greater than zero.');
+      return;
+    }
+    if (protocolDraft.scheduleType === 'specific_days' && protocolDraft.specificDays.length === 0) {
+      alert('Choose at least one dosing day.');
+      return;
+    }
+    const existing = schedules.find((schedule) => schedule.medication === protocolDraft.medication);
+    const saved = {
+      ...(existing || { id: Date.now() }),
+      medication: protocolDraft.medication,
+      dose: numericDose,
+      unit: protocolDraft.unit || 'mg',
+      route: protocolDraft.route || 'SubQ',
+      scheduleType: protocolDraft.scheduleType,
+      frequencyDays: Math.max(1, Number(protocolDraft.frequencyDays) || 1),
+      preferredDay: protocolDraft.specificDays[0] ?? existing?.preferredDay ?? 0,
+      specificDays: protocolDraft.scheduleType === 'specific_days' ? [...protocolDraft.specificDays].sort() : [],
+      preferredTime: protocolDraft.preferredTime || '09:00',
+      startDate: protocolDraft.startDate || getTodayLocal(),
+      cycleOnWeeks: protocolDraft.cycleOnWeeks === '' ? null : Math.max(1, Number(protocolDraft.cycleOnWeeks) || 1),
+      cycleOffWeeks: protocolDraft.cycleOffWeeks === '' ? null : Math.max(0, Number(protocolDraft.cycleOffWeeks) || 0),
+      protocolNotes: protocolDraft.notes || '',
+      paused: Boolean(protocolDraft.paused),
+    };
+    const updated = existing
+      ? schedules.map((schedule) => schedule.medication === saved.medication ? saved : schedule)
+      : [...schedules, saved];
+    setSchedules(updated);
+    saveData('health-schedules', updated);
+    if (!saved.paused) setInsightMedicationInactive(saved.medication, false);
+    setProtocolEditorMed(null);
+    setProtocolDraft(null);
+  };
+
   const saveTitrationPlan = () => {
     const validSteps = titrationSteps.filter(s => s.dose && !isNaN(parseFloat(s.dose)));
     if (validSteps.length === 0) return;
@@ -2685,6 +2777,71 @@ const PepTalk = () => {
     reader.readAsText(file);
   };
 
+  const importAppleHealthWeights = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      try {
+        const text = String(loadEvent.target?.result || '');
+        const candidates = [];
+        if (/\.xml$/i.test(file.name) || text.includes('HKQuantityTypeIdentifierBodyMass')) {
+          const recordPattern = /<Record\b[^>]*type="HKQuantityTypeIdentifierBodyMass"[^>]*>/g;
+          const records = text.match(recordPattern) || [];
+          records.forEach((record) => {
+            const readAttribute = (name) => record.match(new RegExp(`${name}="([^"]+)"`))?.[1] || '';
+            const rawValue = Number(readAttribute('value'));
+            const unit = readAttribute('unit').toLowerCase();
+            const startDate = readAttribute('startDate');
+            const day = startDate.slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(rawValue) || rawValue <= 0) return;
+            const pounds = unit === 'kg' ? rawValue * 2.2046226218 : rawValue;
+            candidates.push({ day, timestamp: startDate, weight: Number(pounds.toFixed(1)) });
+          });
+        } else {
+          const lines = text.split(/\r?\n/).filter(Boolean);
+          const headers = (lines.shift() || '').split(',').map((value) => value.trim().replace(/^"|"$/g, '').toLowerCase());
+          const dateIndex = headers.findIndex((value) => value.includes('date') || value.includes('start'));
+          const weightIndex = headers.findIndex((value) => value.includes('weight') || value.includes('value'));
+          const unitIndex = headers.findIndex((value) => value.includes('unit'));
+          lines.forEach((line) => {
+            const values = line.match(/("[^"]*"|[^,]+)/g)?.map((value) => value.trim().replace(/^"|"$/g, '')) || [];
+            const dateValue = values[dateIndex >= 0 ? dateIndex : 0] || '';
+            const rawValue = Number(values[weightIndex >= 0 ? weightIndex : 1]);
+            const unit = String(values[unitIndex] || 'lb').toLowerCase();
+            const parsed = new Date(dateValue);
+            const day = /^\d{4}-\d{2}-\d{2}/.test(dateValue) ? dateValue.slice(0, 10) : (isNaN(parsed.getTime()) ? '' : formatDateLocal(parsed));
+            if (!day || !Number.isFinite(rawValue) || rawValue <= 0) return;
+            candidates.push({ day, timestamp: dateValue, weight: Number((unit.includes('kg') ? rawValue * 2.2046226218 : rawValue).toFixed(1)) });
+          });
+        }
+
+        if (candidates.length === 0) {
+          alert('No Apple Health body-weight records were found in this file.');
+          return;
+        }
+        const firstReadingByDay = new Map();
+        candidates.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp))).forEach((item) => {
+          if (!firstReadingByDay.has(item.day)) firstReadingByDay.set(item.day, item);
+        });
+        const existingDays = new Set(weightEntries.map((entry) => toCalendarDay(entry.date)));
+        const imported = [...firstReadingByDay.values()]
+          .filter((item) => !existingDays.has(item.day))
+          .map((item, index) => ({ id: Date.now() + index, weight: item.weight, date: item.day, source: 'Apple Health import' }));
+        const merged = sortWeightByDateDesc([...weightEntries, ...imported]);
+        setWeightEntries(merged);
+        saveData('health-weight-entries', merged);
+        alert(imported.length > 0 ? `Imported ${imported.length} daily weight records from Apple Health.` : 'Those Apple Health dates are already in PepTalk. Nothing was duplicated.');
+      } catch (error) {
+        console.error('Apple Health import failed:', error);
+        alert('PepTalk could not read that Apple Health file. Choose export.xml or a weight CSV.');
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Print/save as PDF — Constitute calculator (opens print dialog; user can "Save as PDF")
   const printDoctorSummary = () => {
     const sortedWeights = sortWeightByDateAsc(weightEntries);
@@ -2952,7 +3109,7 @@ const wipeAllData = () => {
 
     const injectionsInWeek = injectionEntries.filter(e => e.date >= startStr && e.date <= todayStr);
     let expectedInjections = 0;
-    schedules.forEach(s => {
+    schedules.filter((schedule) => !schedule.paused).forEach(s => {
       if (s.scheduleType === 'specific_days' && s.specificDays?.length) expectedInjections += s.specificDays.length;
       else if (s.frequencyDays) expectedInjections += Math.min(7, Math.ceil(7 / s.frequencyDays));
     });
@@ -3150,7 +3307,7 @@ const wipeAllData = () => {
     const todayStr = formatDateLocal(today);
     const msPerDay = 24 * 60 * 60 * 1000;
 
-    schedules.forEach(schedule => {
+    schedules.filter((item) => !item.paused).forEach(schedule => {
       const medicationInjections = injectionEntries
         .filter(e => e.type === schedule.medication)
         .sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
@@ -4251,6 +4408,7 @@ const wipeAllData = () => {
       levelUnit,
       currentRemaining: points.find((point) => point.timestamp === now.getTime())?.actualMg || 0,
       blendConversionComplete,
+      paused: Boolean(schedule?.paused),
     };
   };
 
@@ -4548,7 +4706,7 @@ const wipeAllData = () => {
     const todayDate = parseLocalDate(todayStr);
     const rows = [];
 
-    schedules.forEach((schedule) => {
+    schedules.filter((schedule) => !schedule.paused).forEach((schedule) => {
       const medEntries = injectionEntries
         .filter((entry) => entry.type === schedule.medication)
         .sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a));
@@ -4556,8 +4714,8 @@ const wipeAllData = () => {
       const lastEntry = medEntries[0] || null;
       const plan = titrationPlans.find((item) => item.medication === schedule.medication);
       const currentStep = plan ? getCurrentTitrationDose(plan) : null;
-      const dose = todayEntry?.dose ?? currentStep?.dose ?? lastEntry?.dose ?? null;
-      const unit = todayEntry?.unit || currentStep?.unit || lastEntry?.unit || 'mg';
+      const dose = todayEntry?.dose ?? schedule.dose ?? currentStep?.dose ?? lastEntry?.dose ?? null;
+      const unit = todayEntry?.unit || schedule.unit || currentStep?.unit || lastEntry?.unit || 'mg';
       const preferredTime = schedule.preferredTime || lastEntry?.time || '09:00';
       const startDay = toCalendarDay(schedule.startDate) || todayStr;
       const specificDays = schedule.scheduleType === 'specific_days' && schedule.specificDays?.length
@@ -5393,6 +5551,9 @@ const wipeAllData = () => {
                   className="mt-3 w-full rounded-xl border border-dashed border-white/[0.09] py-2.5 text-xs font-medium text-gray-500 hover:border-gold-400/30 hover:text-gold-400"
                 >
                   <Plus className="mr-1.5 inline h-3.5 w-3.5" />Log an unscheduled dose
+                </button>
+                <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="mt-2 w-full py-2 text-xs font-medium text-gray-500 hover:text-gold-400">
+                  Manage or add protocols
                 </button>
               </div>
             </section>
@@ -6728,7 +6889,7 @@ const wipeAllData = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setTitrationMed(insight.medication); setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('titration'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        onClick={() => openProtocolEditor(insight.medication)}
                         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 text-sm font-medium text-gray-200 hover:bg-white/[0.07]"
                       >
                         <Edit2 className="h-4 w-4" /> Edit protocol
@@ -6758,7 +6919,7 @@ const wipeAllData = () => {
                       const next = detail.nextDoseAt;
                       const dayDiff = Math.round((new Date(next.getFullYear(), next.getMonth(), next.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / (24 * 60 * 60 * 1000));
                       const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Tomorrow' : next.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                      const nextLabel = `${dayLabel}, ${next.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                      const nextLabel = detail.paused ? 'Paused' : `${dayLabel}, ${next.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
                       return (
                         <div className="space-y-3">
                           <div className="flex flex-wrap gap-1.5">
@@ -7304,6 +7465,10 @@ const wipeAllData = () => {
         {/* INJECTIONS TAB */}
         {activeTab === 'injections' && (
           <div key="injections" className="space-y-4 tab-enter">
+            <div className="flex items-center justify-between gap-3">
+              <div><h2 className="text-xl font-bold tracking-tight text-white">Doses</h2><p className="mt-0.5 text-xs text-gray-500">Log administrations and manage your stack.</p></div>
+              <button type="button" onClick={() => { setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-gray-200"><Layers className="h-4 w-4 text-gold-400" /> Protocols</button>
+            </div>
             <div className="grid grid-cols-4 gap-2">
               {['GLP-1', 'Peptide', 'Hormone', 'Other'].map(cat => {
                 const count = injectionEntries.filter(e => {
@@ -8641,7 +8806,7 @@ const wipeAllData = () => {
             <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
               {[
                 { id: 'calculator', label: 'Calculators' }, 
-                { id: 'schedule', label: 'Schedules' }, 
+                { id: 'schedule', label: 'Protocols' },
                 { id: 'titration', label: 'Titration' }, 
                 { id: 'notifications', label: 'Notifications' }, 
                 { id: 'vials', label: 'Vials' },
@@ -8786,121 +8951,14 @@ const wipeAllData = () => {
             {activeToolSection === 'schedule' && (
               <div className="space-y-4">
                 <div className="ui-card p-4">
-                  <h3 className="text-white font-medium mb-4 flex items-center gap-2"><Bell className="h-5 w-5 text-gold-400" />Add Injection Schedule</h3>
-                  <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <label className="text-gray-400 text-sm block mb-1">Medication</label>
-                      <select
-                        value={scheduleMed}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setScheduleMed(v);
-                          const med = MEDICATIONS.find((m) => m.name === v);
-                          if (med) setScheduleFrequency(med.defaultSchedule);
-                          if (MON_FRI_SCHEDULE_HINT_MEDS.has(v)) {
-                            setScheduleType('specific_days');
-                            setSelectedDays([1, 2, 3, 4, 5]);
-                          }
-                        }}
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3"
-                      >
-                        {MEDICATIONS.map(med => <option key={med.name} value={med.name}>{med.name}</option>)}
-                      </select>
-                      {MEDICATION_EFFECT_PROFILES[scheduleMed]?.splitDoseTip && (
-                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
-                          <p className="text-gray-300 text-xs mb-2">{MEDICATION_EFFECT_PROFILES[scheduleMed].splitDoseTip}</p>
-                          <button
-                            type="button"
-                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 4]); setScheduleFrequency(3); }}
-                            className="text-xs font-medium text-gold-400 hover:text-gold-400"
-                          >
-                            Use twice weekly (split dose) → Mon & Thu
-                          </button>
-                        </div>
-                      )}
-                      {MON_FRI_SCHEDULE_HINT_MEDS.has(scheduleMed) && (
-                        <div className="mt-2 p-3 rounded-lg bg-slate-700/80 border border-white/5">
-                          <p className="text-gray-300 text-xs mb-2">Many protocols use weekdays on, weekend off (5 days on / 2 off).</p>
-                          <button
-                            type="button"
-                            onClick={() => { setScheduleType('specific_days'); setSelectedDays([1, 2, 3, 4, 5]); }}
-                            className="text-xs font-medium text-gold-400 hover:text-gold-400"
-                          >
-                            Set Mon–Fri (off Sat–Sun)
-                          </button>
-                        </div>
-                      )}
+                      <h3 className="flex items-center gap-2 font-semibold text-white"><Layers className="h-5 w-5 text-gold-400" />Protocols</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-400">Manage dose, units, timing, route, cycles, blend strength, and pauses in one place.</p>
                     </div>
-                    
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Start Date</label>
-                      <input type="date" value={scheduleStartDate} onChange={(e) => setScheduleStartDate(e.target.value)} 
-                        className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" />
-                    </div>
-                    
-                    <div>
-                      <label className="text-gray-400 text-sm block mb-1">Schedule Type</label>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => setScheduleType('recurring')}
-                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'recurring' ? 'bg-accent text-white' : 'bg-slate-700 text-gray-400'}`}
-                        >
-                          Every X Days
-                        </button>
-                        <button 
-                          onClick={() => setScheduleType('specific_days')}
-                          className={`flex-1 py-2 rounded-lg text-sm transition-all ${scheduleType === 'specific_days' ? 'bg-accent text-white' : 'bg-slate-700 text-gray-400'}`}
-                        >
-                          Specific Days
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {scheduleType === 'recurring' && (
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-1">Frequency (days)</label>
-                        <input type="number" value={scheduleFrequency} onChange={(e) => setScheduleFrequency(parseInt(e.target.value))} 
-                          className="w-full bg-slate-700 text-white rounded-lg px-4 py-3" placeholder="e.g., 7" />
-                        <p className="text-gray-500 text-xs mt-1">Inject every {scheduleFrequency} day{scheduleFrequency > 1 ? 's' : ''}</p>
-                      </div>
-                    )}
-                    
-                    {scheduleType === 'specific_days' && (
-                      <div>
-                        <label className="text-gray-400 text-sm block mb-2">Select Days of Week</label>
-                        <div className="grid grid-cols-7 gap-2">
-                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                if (selectedDays.includes(idx)) {
-                                  setSelectedDays(selectedDays.filter(d => d !== idx));
-                                } else {
-                                  setSelectedDays([...selectedDays, idx].sort());
-                                }
-                              }}
-                              className={`py-2 px-1 rounded-lg text-xs transition-all ${
-                                selectedDays.includes(idx) 
-                                  ? 'bg-accent text-white font-medium' 
-                                  : 'bg-slate-700 text-gray-400'
-                              }`}
-                            >
-                              {day}
-                            </button>
-                          ))}
-                        </div>
-                        {selectedDays.length > 0 && (
-                          <p className="text-gray-400 text-xs mt-2">
-                            Selected: {selectedDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    
-                    <button onClick={addSchedule} className="w-full bg-accent hover:bg-gold-600 text-white font-medium py-3 rounded-lg">
-                      Save Schedule
-                    </button>
+                    <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{schedules.length}</span>
                   </div>
+                  <button type="button" onClick={() => openProtocolEditor(MEDICATIONS.find((medication) => !schedules.some((schedule) => schedule.medication === medication.name))?.name || MEDICATIONS[0].name)} className="ui-btn-primary mt-4 flex min-h-11 w-full items-center justify-center gap-2 text-sm font-semibold"><Plus className="h-4 w-4" /> Add protocol</button>
                 </div>
 
                 {/* Stack Timeline: which compounds are active by month */}
@@ -8945,27 +9003,27 @@ const wipeAllData = () => {
 
                 {schedules.length > 0 && (
                   <div className="ui-card p-4">
-                    <h3 className="text-white font-medium mb-3">Active Schedules</h3>
+                    <h3 className="text-white font-medium mb-3">Saved protocols</h3>
                     <div className="space-y-2">
                       {schedules.map(schedule => (
-                        <div key={schedule.id} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
-                          <div className="flex items-center gap-3">
+                        <div key={schedule.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${schedule.paused ? 'border-white/[0.05] bg-slate-800/35 opacity-70' : 'border-white/[0.06] bg-slate-700/40'}`}>
+                          <button type="button" onClick={() => openProtocolEditor(schedule.medication)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                             <div className="p-2 rounded-lg" style={{ backgroundColor: `${getMedicationColor(schedule.medication)}20` }}>
                               <Syringe className="h-4 w-4" style={{ color: getMedicationColor(schedule.medication) }} />
                             </div>
-                            <div>
-                              <div className="text-white font-medium">{schedule.medication}</div>
-                              <div className="text-gray-400 text-sm">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{schedule.medication}</span>{schedule.paused && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-medium text-amber-300">Paused</span>}</div>
+                              <div className="mt-0.5 text-xs text-gray-400">
+                                {schedule.dose != null && `${schedule.dose} ${schedule.unit || 'mg'} · `}
                                 {schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0 
                                   ? `${schedule.specificDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`
                                   : `Every ${schedule.frequencyDays} days`}
+                                {schedule.preferredTime && ` · ${formatDoseTime(schedule.preferredTime)}`}
                               </div>
-                              {schedule.startDate && (
-                                <div className="text-gray-500 text-xs">Started: {new Date(schedule.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                              )}
+                              {(schedule.route || schedule.cycleOnWeeks) && <div className="mt-0.5 text-[10px] text-gray-500">{[schedule.route, schedule.cycleOnWeeks ? `${schedule.cycleOnWeeks} wk on${schedule.cycleOffWeeks != null ? ` / ${schedule.cycleOffWeeks} off` : ''}` : null].filter(Boolean).join(' · ')}</div>}
                             </div>
-                          </div>
-                          <button onClick={() => deleteSchedule(schedule.id)} className="p-2 text-gray-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                          </button>
+                          <button type="button" onClick={() => openProtocolEditor(schedule.medication)} className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-white/[0.05] hover:text-white" aria-label={`Edit ${schedule.medication} protocol`}><Edit2 className="h-4 w-4" /></button>
                         </div>
                       ))}
                     </div>
@@ -9580,6 +9638,25 @@ const wipeAllData = () => {
                   </h3>
                   
                   <div className="space-y-4">
+                    <div className="rounded-xl border border-sky-400/15 bg-sky-500/[0.05] p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-sky-400/10 p-2"><Activity className="h-5 w-5 text-sky-300" /></div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-medium text-white">Apple Health &amp; iPhone</h4>
+                          <p className="mt-1 text-xs leading-relaxed text-gray-400">Import body-weight history without replacing your PepTalk data. PepTalk keeps one early reading per day so graphs stay readable and skips dates already saved.</p>
+                        </div>
+                      </div>
+                      <label className="mt-4 flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white hover:bg-sky-400">
+                        <Download className="h-4 w-4" /> Import Apple Health weights
+                        <input type="file" accept=".xml,.csv,text/xml,text/csv" onChange={importAppleHealthWeights} className="hidden" />
+                      </label>
+                      <div className="mt-3 rounded-xl bg-black/10 p-3 text-[11px] leading-relaxed text-gray-400">
+                        <span className="font-medium text-gray-300">On iPhone:</span> Health → your profile picture → Export All Health Data → save to Files. In Files, tap the ZIP once to unzip it, then choose <span className="text-gray-200">export.xml</span> here.
+                      </div>
+                      <p className="mt-2 text-[10px] leading-relaxed text-gray-500">Apple does not allow a web page to read HealthKit automatically. True background sync requires a native iPhone app; this importer is the private, no-cost web alternative.</p>
+                      <div className="mt-3 border-t border-white/[0.06] pt-3 text-[11px] text-gray-400"><span className="font-medium text-gray-300">Install PepTalk:</span> open it in Safari, tap Share, then “Add to Home Screen.”</div>
+                    </div>
+
                     {/* Export — choose format then export */}
                     <div className="rounded-xl p-4 border border-white/[0.04] bg-slate-700/40">
                       <h4 className="text-white font-medium mb-2 flex items-center gap-2">
@@ -10019,6 +10096,113 @@ const wipeAllData = () => {
           </div>
         )}
       </div>
+      {protocolEditorMed && protocolDraft && (
+        <div className="fixed inset-0 z-[180] bg-slate-950/90 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Protocol editor">
+          <div className="mx-auto flex h-full max-w-2xl flex-col bg-[var(--bg-primary)] shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-slate-950/95 px-4 py-3 backdrop-blur-xl">
+              <div>
+                <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-gold-400/75">Protocol</div>
+                <h2 className="text-lg font-semibold text-white">{schedules.some((schedule) => schedule.medication === protocolDraft.medication) ? 'Edit protocol' : 'New protocol'}</h2>
+              </div>
+              <button type="button" onClick={() => { setProtocolEditorMed(null); setProtocolDraft(null); }} className="rounded-xl border border-white/[0.07] p-2 text-gray-400 hover:bg-white/[0.05] hover:text-white" aria-label="Close protocol editor">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
+              <div className="space-y-4">
+                <section className="ui-card p-4">
+                  <label className="block text-xs font-medium text-gray-400">Compound</label>
+                  <select value={protocolDraft.medication} onChange={(event) => changeProtocolMedication(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white">
+                    {MEDICATIONS.map((medication) => <option key={medication.name} value={medication.name}>{medication.name}</option>)}
+                  </select>
+
+                  <div className="mt-4 grid grid-cols-[1fr_7rem] gap-3">
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-400">Dose</span>
+                      <input type="number" min="0" step="any" inputMode="decimal" value={protocolDraft.dose} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, dose: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" placeholder="0" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-400">Unit</span>
+                      <select value={protocolDraft.unit} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, unit: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white">
+                        {['mg', 'mcg', 'IU', 'units', 'mL'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="mt-4 block">
+                    <span className="text-xs font-medium text-gray-400">Route</span>
+                    <select value={protocolDraft.route} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, route: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white">
+                      {['SubQ', 'IM', 'Oral', 'Nasal', 'Other'].map((route) => <option key={route} value={route}>{route}</option>)}
+                    </select>
+                  </label>
+                </section>
+
+                <section className="ui-card p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><h3 className="text-sm font-semibold text-white">Dose schedule</h3><p className="mt-0.5 text-[11px] text-gray-500">Controls what appears on Today.</p></div>
+                    <label className="flex items-center gap-2 text-xs text-gray-400">
+                      <input type="checkbox" checked={protocolDraft.paused} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, paused: event.target.checked }))} className="h-4 w-4 rounded border-white/20 bg-slate-800 accent-amber-500" />
+                      Paused
+                    </label>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-900/60 p-1">
+                    <button type="button" onClick={() => setProtocolDraft((draft) => ({ ...draft, scheduleType: 'recurring' }))} className={`rounded-lg px-3 py-2 text-xs font-medium ${protocolDraft.scheduleType === 'recurring' ? 'bg-gold-500 text-slate-950' : 'text-gray-400'}`}>Every X days</button>
+                    <button type="button" onClick={() => setProtocolDraft((draft) => ({ ...draft, scheduleType: 'specific_days' }))} className={`rounded-lg px-3 py-2 text-xs font-medium ${protocolDraft.scheduleType === 'specific_days' ? 'bg-gold-500 text-slate-950' : 'text-gray-400'}`}>Specific days</button>
+                  </div>
+
+                  {protocolDraft.scheduleType === 'recurring' ? (
+                    <label className="mt-4 block">
+                      <span className="text-xs font-medium text-gray-400">Repeat every</span>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <input type="number" min="1" step="1" inputMode="numeric" value={protocolDraft.frequencyDays} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, frequencyDays: event.target.value }))} className="w-24 rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" />
+                        <span className="text-sm text-gray-400">day{Number(protocolDraft.frequencyDays) === 1 ? '' : 's'}</span>
+                      </div>
+                    </label>
+                  ) : (
+                    <div className="mt-4">
+                      <div className="text-xs font-medium text-gray-400">Dose on</div>
+                      <div className="mt-2 grid grid-cols-7 gap-1.5">
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => {
+                          const selected = protocolDraft.specificDays.includes(index);
+                          return <button key={`${day}-${index}`} type="button" onClick={() => setProtocolDraft((draft) => ({ ...draft, specificDays: selected ? draft.specificDays.filter((value) => value !== index) : [...draft.specificDays, index].sort() }))} className={`aspect-square rounded-xl text-xs font-semibold ${selected ? 'bg-gold-500 text-slate-950' : 'border border-white/[0.07] bg-slate-800 text-gray-500'}`}>{day}</button>;
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <label className="block"><span className="text-xs font-medium text-gray-400">Preferred time</span><input type="time" value={protocolDraft.preferredTime} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, preferredTime: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
+                    <label className="block"><span className="text-xs font-medium text-gray-400">Start date</span><input type="date" value={protocolDraft.startDate} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, startDate: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" /></label>
+                  </div>
+                </section>
+
+                <section className="ui-card p-4">
+                  <h3 className="text-sm font-semibold text-white">Cycle</h3>
+                  <p className="mt-0.5 text-[11px] text-gray-500">Optional. Leave blank for a continuous protocol.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <label className="block"><span className="text-xs font-medium text-gray-400">Weeks on</span><input type="number" min="1" step="1" value={protocolDraft.cycleOnWeeks} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, cycleOnWeeks: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" placeholder="Continuous" /></label>
+                    <label className="block"><span className="text-xs font-medium text-gray-400">Weeks off</span><input type="number" min="0" step="1" value={protocolDraft.cycleOffWeeks} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, cycleOffWeeks: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" placeholder="0" /></label>
+                  </div>
+                </section>
+
+                {renderBlendSetup(MEDICATIONS.find((medication) => medication.name === protocolDraft.medication), protocolDraft.medication, injectionEntries.filter((entry) => entry.type === protocolDraft.medication).sort((a, b) => getEntryDateTime(b) - getEntryDateTime(a))[0])}
+
+                <section className="ui-card p-4">
+                  <label className="block"><span className="text-xs font-medium text-gray-400">Protocol notes</span><textarea rows="3" value={protocolDraft.notes} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, notes: event.target.value }))} className="mt-1.5 w-full resize-none rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-3 text-white" placeholder="Prescriber instructions, timing notes, or cycle details" /></label>
+                  <button type="button" onClick={() => { setTitrationMed(protocolDraft.medication); setProtocolEditorMed(null); setProtocolDraft(null); setActiveTab('more'); setActiveMoreSection('tools'); setActiveToolSection('titration'); }} className="mt-3 text-xs font-medium text-gray-400 hover:text-gold-400">Open separate titration plan →</button>
+                </section>
+              </div>
+            </div>
+
+            <div className="absolute inset-x-0 bottom-0 mx-auto max-w-2xl border-t border-white/[0.08] bg-slate-950/95 p-4 backdrop-blur-xl">
+              <button type="button" onClick={saveProtocol} className="ui-btn-primary flex min-h-12 w-full items-center justify-center gap-2 text-sm font-semibold"><CheckCircle className="h-4 w-4" /> Save protocol</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="peptalk-bottom-nav" aria-label="Main navigation">
         <div className="max-w-2xl mx-auto grid grid-cols-5 gap-1 px-2 pt-2">
           {MAIN_TABS.map((tab) => (
