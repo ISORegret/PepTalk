@@ -1,19 +1,19 @@
 {
   "name": "health-tracker-app",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/stamp-version.js && vite build",
     "postinstall": "patch-package",
-    "build:android": "vite build --mode android && npx cap sync android",
+    "build:android": "node scripts/stamp-version.js && vite build --mode android && npx cap sync android",
     "build:apk": "node scripts/build-apk.js",
     "build:apk:ci": "node scripts/build-apk.js --no-bump",
-    "build:ios": "vite build && npx cap sync ios",
+    "build:ios": "node scripts/stamp-version.js && vite build && npx cap sync ios",
     "preview": "vite preview"
   },
   "dependencies": {
