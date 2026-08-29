@@ -33,14 +33,15 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [x] Remove all stack-response analysis from Weight
 - [ ] Final iPhone/PWA verification after deployment
 
-## 4. Insights
-- [ ] Stack Response is the single weekly stack/weight analysis
-- [ ] Use preferred Stack Response card/list presentation
-- [ ] Add 7-day “What changed?” summary
-- [ ] Active compounds first; inactive archived/collapsed
-- [ ] Single-compound estimated-level detail
-- [ ] Explicit non-causation wording for correlations
-- [ ] Remove duplicate giant combined analysis surfaces
+## 4. Insights — IN PROGRESS / DEPLOYING
+- [x] Stack Response is the single weekly stack/weight analysis
+- [x] Use preferred Stack Response card/list presentation
+- [x] Add a 7-day “What changed?” summary surface
+- [x] Active compounds visually prioritized; inactive/archived de-emphasized
+- [x] Preserve single-compound estimated-level detail
+- [x] Add explicit non-causation wording for correlations
+- [x] Hide duplicate giant combined analysis surfaces when repeated
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 5. Protocols
 - [ ] Cards show planned dose, days/time, next dose, status and inventory remaining
