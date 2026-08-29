@@ -1,10 +1,21 @@
-/* PepTalk 2.3 DOM-level QOL helpers.
- * These are intentionally presentation/accessibility only: no health data or protocol state is changed here.
+/* PepTalk QOL helpers.
+ * Presentation/accessibility only: no health data or protocol state is changed here.
  */
 
 const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
 const RELEASE_CHANGES = {
+  '2.4.0': [
+    'Structural redesign pass across Summary, Doses, Protocols, Calendar, More, Weight and Insights',
+    'Summary now opens in a focused view with an option to reveal supporting cards',
+    'More is now a settings-style list with descriptions instead of equal-sized tiles',
+    'Doses now separates Dose History and Inventory into dedicated views',
+    'Calendar now separates Month and Adherence views',
+    'Protocols adds All, Active and Paused filtering',
+    'Weight and Insights add quick-jump section navigation',
+    'Cleaner page rhythm, stronger hierarchy and less information shown at once',
+    'No stored weight, dose, protocol, vial or history data was changed',
+  ],
   '2.3.0': [
     'Improved readability and contrast across the app',
     'Larger helper text and easier-to-tap controls on iPhone',
@@ -87,8 +98,8 @@ function improveUpdatePrompts() {
     if (!looksLikeUpdate) return;
 
     const versionMatch = cleanText(modal.textContent).match(/\b(\d+\.\d+\.\d+)\b/g);
-    const version = versionMatch?.[versionMatch.length - 1] || '2.3.0';
-    const changes = RELEASE_CHANGES[version] || RELEASE_CHANGES['2.3.0'];
+    const version = versionMatch?.[versionMatch.length - 1] || '2.4.0';
+    const changes = RELEASE_CHANGES[version] || RELEASE_CHANGES['2.4.0'];
     if (!changes?.length) return;
 
     const actionButton = Array.from(modal.querySelectorAll('button, a')).find((node) => /update|download|install/i.test(cleanText(node.textContent)));
