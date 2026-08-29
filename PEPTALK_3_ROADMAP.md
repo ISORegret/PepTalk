@@ -67,13 +67,15 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [ ] Undo after accidental manual delete; existing schedule/taken actions already use undo where technically safe
 - [ ] Final iPhone/PWA verification after deployment
 
-## 7. Inventory
-- [ ] Dedicated Inventory screen
-- [ ] Remaining amount and doses remaining
-- [ ] Projected run-out date
-- [ ] Opened/reconstituted/expiration status
-- [ ] Low supply warnings surfaced only when useful
-- [ ] Source vial visible from dose history where available
+## 7. Inventory — IN PROGRESS / DEPLOYING
+- [x] Dedicated Inventory screen accessible from More
+- [x] Remaining amount and informational doses remaining when protocol dose is stored in mg
+- [x] Projected run-out date from stored protocol frequency and current vial supply
+- [x] Reconstituted/opened and expiration status surfaced per vial
+- [x] Low supply warnings limited to low-dose-count / low-remaining cases
+- [x] Source vial indicator already surfaced from Dose History when a recorded entry has a vial reference
+- [ ] Native Inventory component extraction and direct edit/add actions
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 8. Calendar
 - [ ] Agenda-first mobile view
