@@ -29,7 +29,6 @@
 .app-shell .text-slate-600,
 .app-frame .text-slate-600 { color: var(--pt-text-dim-strong) !important; }
 
-/* PepTalk had accumulated a lot of 9–11px helper text. Keep it compact, but readable on iPhone. */
 .app-shell [class*="text-[9px]"],
 .app-frame [class*="text-[9px]"],
 .app-shell [class*="text-[10px]"],
@@ -68,7 +67,6 @@
 .app-shell textarea,
 .app-frame textarea { min-height: 88px; }
 
-/* Touch targets: icon buttons remain compact visually but get a reliable hit area. */
 .app-shell button,
 .app-frame button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
@@ -96,7 +94,6 @@
 .ui-hero-panel h2,
 .ui-hero-panel h3 { letter-spacing: -0.015em; }
 
-/* Stronger hierarchy between cards without adding more boxes. */
 .app-shell .space-y-4 > .ui-card + .ui-card,
 .app-frame .space-y-4 > .ui-card + .ui-card { margin-top: 18px; }
 
@@ -161,7 +158,7 @@
   box-shadow: inset 0 0 0 1px rgba(94,234,212,.16), 0 10px 24px -20px rgba(94,234,212,.9) !important;
 }
 
-/* ---------- More: cleaner settings-style launcher ---------- */
+/* ---------- More ---------- */
 .more-menu {
   gap: 8px !important;
   padding: 8px !important;
@@ -202,12 +199,47 @@
   border-radius: 13px !important;
 }
 
-/* Calendar status chips need to remain small even after the global tiny-text lift. */
 .app-shell .grid.grid-cols-7 > button.min-h-16 [class*="text-[9px]"],
 .app-frame .grid.grid-cols-7 > button.min-h-16 [class*="text-[9px]"] {
   font-size: 10px !important;
   line-height: 1.2 !important;
 }
+
+/* ---------- Update / What's New ---------- */
+.pt-release-notes {
+  margin: 14px 0;
+  padding: 14px;
+  max-height: min(42vh, 340px);
+  overflow-y: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(94,234,212,.18);
+  background: linear-gradient(145deg, rgba(94,234,212,.075), rgba(167,139,250,.055));
+  text-align: left;
+}
+
+.pt-release-notes__eyebrow {
+  color: var(--pt-mint);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.pt-release-notes__title {
+  margin-top: 2px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.pt-release-notes ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pt-release-notes li + li { margin-top: 5px; }
 
 /* ---------- Data / danger zone ---------- */
 .app-shell .bg-red-500\/10,
@@ -223,7 +255,6 @@
 .peptalk-scroll-panel::-webkit-scrollbar-track { background: rgba(15,23,42,.5); border-radius: 999px; }
 .peptalk-scroll-panel::-webkit-scrollbar-thumb { background: rgba(100,116,139,.58); border-radius: 999px; }
 
-/* Keep intentionally disabled content visually distinct. */
 .app-shell [disabled], .app-frame [disabled],
 .app-shell .opacity-50, .app-frame .opacity-50 { opacity: .58; }
 
