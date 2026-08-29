@@ -55,14 +55,17 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [x] No invented medical dosing recommendations; Step 5 additions are organization and stored-data math only
 - [ ] Final iPhone/PWA verification after deployment
 
-## 6. Dose History
-- [ ] Rename/position as History
-- [ ] Today / Yesterday / date grouping
-- [ ] Search and filter chips
-- [ ] Compact rows with compound, amount, time, route/site
-- [ ] Edit/delete always available on iPhone
+## 6. Dose History — IN PROGRESS / DEPLOYING
+- [x] Rename/position Doses as History in the active screen
+- [ ] Native Today / Yesterday / date grouping during component extraction
+- [x] Search by compound, dose, route, site and notes
+- [x] Today / 7D / 30D / All quick range filters where rendered rows can be matched to stored entries
+- [x] Compact history-row treatment and clearer hierarchy
+- [x] Edit/delete touch targets enlarged for iPhone
+- [x] Linked-vial indicator surfaced when a recorded entry has a vial reference
 - [ ] Copy/repeat last unscheduled dose
-- [ ] Undo after accidental log/delete/skip where technically safe
+- [ ] Undo after accidental manual delete; existing schedule/taken actions already use undo where technically safe
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 7. Inventory
 - [ ] Dedicated Inventory screen
