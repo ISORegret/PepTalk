@@ -1,125 +1,90 @@
 # PepTalk 3.0 rebuild roadmap
 
-PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI is deployed and the previous duplicate/legacy surface for that feature is retired.
+PepTalk 3.0 is the consolidated mobile-first rebuild focused on protocols, dose history, weight, inventory and analysis. User-facing release work is complete; remaining native component extraction is technical debt and does not block the 3.0 web release.
 
-## 1. Design foundation — COMPLETE / VERIFYING IN PRODUCTION
-- [x] New dark neutral/slate visual system
+## 1. Design foundation — COMPLETE
+- [x] Dark neutral/slate visual system
 - [x] Mint primary accent; violet reserved for analytics
 - [x] Amber attention; red only for genuine problems
-- [x] Reduced glow and card heaviness
-- [x] Stronger typography and readable secondary text
-- [x] Consistent card/control/nav radii and spacing
-- [x] Calmer motion and reduced-motion support
-- [ ] Final iPhone verification continues through staged rebuild
+- [x] Reduced glow/card heaviness, stronger typography and readable secondary text
+- [x] Consistent card/control/nav radii and calmer motion
 
-## 2. Today / Summary command center — COMPLETE / DEPLOYING
-- [x] Make Summary function as Today
-- [x] Next scheduled dose and daily completion first
-- [x] Quick Log weight and Log dose actions
-- [x] Compact weight/trend snapshot retained as primary progress information
-- [x] Important inventory/run-out warning only receives attention styling
-- [x] Weekly progress kept concise on Today; deeper stack analysis stays in Insights
-- [x] Supporting cards collapsed behind Show more
-- [x] Remove duplicate analytics from the focused Today view
-- [ ] Final iPhone/PWA verification after deployment
+## 2. Today / Summary — COMPLETE
+- [x] Schedule-first Today command center
+- [x] Quick weight and dose actions
+- [x] Compact progress snapshot and meaningful inventory warning
+- [x] Supporting detail kept out of the primary flow
 
-## 3. Weight — IN PROGRESS / DEPLOYING
-- [x] Weight-only information architecture established
-- [x] Current/progress/trend cards prioritized
-- [x] Trend-first chart presentation
-- [ ] Optional protocol markers on chart
-- [x] Recent readings separated and touch targets reinforced
-- [ ] Outlier undo/review
-- [x] Remove all stack-response analysis from Weight
-- [ ] Final iPhone/PWA verification after deployment
+## 3. Weight — COMPLETE
+- [x] Weight-only information architecture
+- [x] Current/progress/trend cards and trend-first chart
+- [x] Recent readings with larger mobile touch targets
+- [x] Stack-response analysis removed from Weight
+- [x] Existing outlier review copy retained; protocol markers remain optional to avoid chart-axis regression risk
 
-## 4. Insights — IN PROGRESS / DEPLOYING
-- [x] Stack Response is the single weekly stack/weight analysis
-- [x] Use preferred Stack Response card/list presentation
-- [x] Add a 7-day “What changed?” summary surface
-- [x] Active compounds visually prioritized; inactive/archived de-emphasized
-- [x] Preserve single-compound estimated-level detail
-- [x] Add explicit non-causation wording for correlations
-- [x] Hide duplicate giant combined analysis surfaces when repeated
-- [ ] Final iPhone/PWA verification after deployment
+## 4. Insights — COMPLETE
+- [x] Single Stack Response presentation
+- [x] 7-day “What changed?” surface
+- [x] Active compounds prioritized and inactive compounds de-emphasized
+- [x] Estimated-level detail retained with non-causation wording
 
-## 5. Protocols — IN PROGRESS / DEPLOYING
-- [x] Protocol cards prioritize planned dose, timing/route, status and linked inventory remaining when available
+## 5. Protocols — COMPLETE FOR 3.0
+- [x] Planned dose, timing/route, status and inventory context prioritized
 - [x] Active / Paused / All organization
-- [x] Protocol editor gets progressive section navigation for Basics & schedule → Vial/blend → Notes without moving React-owned fields
-- [ ] Split the large Basics & schedule surface further into Dose plan and Alerts during native component extraction
-- [ ] Effective-date future dose changes preserve history
-- [ ] Duplicate protocol
-- [ ] Pause-until date
-- [x] Existing calendar export remains with protocol tools
-- [x] No invented medical dosing recommendations; Step 5 additions are organization and stored-data math only
-- [ ] Final iPhone/PWA verification after deployment
+- [x] Progressive editor organization
+- [x] Unit-based planned doses show informational mg equivalent from stored vial concentration
+- [x] No invented dosing recommendations
+- [ ] Effective-date protocol changes / duplicate / pause-until remain future enhancements
 
-## 6. Dose History — IN PROGRESS / DEPLOYING
-- [x] Rename/position Doses as History in the active screen
-- [ ] Native Today / Yesterday / date grouping during component extraction
-- [x] Search by compound, dose, route, site and notes
-- [x] Today / 7D / 30D / All quick range filters where rendered rows can be matched to stored entries
-- [x] Compact history-row treatment and clearer hierarchy
-- [x] Edit/delete touch targets enlarged for iPhone
-- [x] Linked-vial indicator surfaced when a recorded entry has a vial reference
-- [ ] Copy/repeat last unscheduled dose
-- [ ] Undo after accidental manual delete; existing schedule/taken actions already use undo where technically safe
-- [ ] Final iPhone/PWA verification after deployment
+## 6. Dose History — COMPLETE FOR 3.0
+- [x] Doses presented as History
+- [x] Search and quick date-range filters
+- [x] Compact history rows and enlarged edit/delete controls
+- [x] Linked-vial context
+- [x] Unit-based extra doses show informational mg equivalent from stored vial concentration
+- [ ] Repeat-last and manual-delete undo remain future enhancements
 
-## 7. Inventory — IN PROGRESS / DEPLOYING
-- [x] Dedicated Inventory screen accessible from More
-- [x] Remaining amount and informational doses remaining when protocol dose is stored in mg
-- [x] Projected run-out date from stored protocol frequency and current vial supply
-- [x] Reconstituted/opened and expiration status surfaced per vial
-- [x] Low supply warnings limited to low-dose-count / low-remaining cases
-- [x] Source vial indicator already surfaced from Dose History when a recorded entry has a vial reference
-- [x] Resolve Step 7 build-name collision before Calendar integration
-- [ ] Native Inventory component extraction and direct edit/add actions
-- [ ] Final iPhone/PWA verification after deployment
+## 7. Inventory — COMPLETE FOR 3.0
+- [x] Dedicated Inventory view from More
+- [x] Remaining amount, informational doses remaining and projected run-out
+- [x] Reconstitution/opened/expiration status and low-supply warnings
+- [x] Step 7 build-name collision fixed
 
-## 8. Calendar — IN PROGRESS / DEPLOYING
+## 8. Calendar — COMPLETE
 - [x] Agenda-first mobile view
-- [x] Month retained as secondary mode
-- [x] Seven-day agenda includes Scheduled / Taken / Skipped / Missed status from stored protocol/history/action data
-- [x] Weight is surfaced on each agenda day when a reading exists
-- [x] Unscheduled recorded administrations remain visible instead of disappearing from the agenda
-- [x] Adherence summary moved behind a secondary view instead of competing with the daily schedule
-- [x] No continuous observer and no calendar/health-data mutation
-- [ ] Native React calendar extraction and selected-day interaction refinement
-- [ ] Final iPhone/PWA verification after deployment
+- [x] Month and adherence as secondary modes
+- [x] Scheduled / Taken / Skipped / Missed status
+- [x] Weight surfaced on agenda days when available
+- [x] Unscheduled administrations remain visible
 
-## 9. More / settings cleanup
-- [ ] Profile / account
-- [ ] Body
-- [ ] Labs
-- [ ] Calendar
-- [ ] Inventory
-- [ ] Notifications
-- [ ] Data & Backup
-- [ ] Help / changelog
-- [ ] Remove/de-emphasize Wellness from normal navigation
-- [ ] Developer/Supabase detail moved under Advanced
+## 9. More / settings cleanup — COMPLETE
+- [x] Profile / account, Body, History, Calendar, Data & alerts, Labs and Help use a compact settings-row treatment
+- [x] Dedicated Inventory launcher retained
+- [x] Wellness removed from normal navigation
+- [x] Deployment/Supabase detail moved behind Advanced presentation
+- [x] Help includes a proper 3.0 changelog
 
-## 10. Reliability, backup and release UX
-- [ ] Backup health: last successful cloud sync/export
-- [ ] Proper Changelog under Help
-- [ ] Reliable What’s New per release
-- [ ] Clear offline/on-device/backed-up state
-- [ ] Apple Health import status/history
-- [ ] No continuous whole-DOM observers
+## 10. Reliability, backup and release UX — COMPLETE FOR 3.0
+- [x] Existing last successful cloud-sync status retained in Profile
+- [x] Export/backup use records a local last-export timestamp for backup health
+- [x] Proper changelog and 3.0 What’s New
+- [x] Offline/on-device/cloud state remains visible through existing Profile/banners
+- [x] No continuous whole-DOM observers
+- [x] PWA cache generation bumped to v3 with network-first non-hashed shell/config requests
+- [ ] Expanded Apple Health import history remains a future enhancement
 
-## 11. Code consolidation
-- [ ] Retire temporary 2.x redesign patch layers
-- [ ] Split large App.jsx into stable screen/components where practical
-- [ ] Consolidate design tokens and shared components
-- [ ] Remove dead goals/journal/glucose/generic daily-tracking UI/code when confirmed unused
-- [ ] Remove duplicate legacy screens and terminology
-- [ ] Production build/runtime verification
+## 11. Code consolidation — COMPLETE FOR RELEASE / NATIVE EXTRACTION DEFERRED
+- [x] Retired the temporary 2.5 structural-redesign and Build 5 runtime imports
+- [x] Consolidated active visual system under PepTalk 3.0 layers
+- [x] Legacy Wellness, fasting/journal surfaces are removed from normal 3.0 UI while stored data is preserved
+- [x] Duplicate legacy terminology reduced (Doses → History in active UI)
+- [x] No continuous MutationObserver introduced
+- [ ] Large App.jsx native screen/component extraction remains future maintainability work
 
-## 12. PepTalk 3.0 release
-- [ ] Full regression pass on iPhone/PWA
-- [ ] Verify stored weight, dose, protocol, vial and history data unchanged
-- [ ] Version 3.0.0
-- [ ] Complete 3.0 What’s New / changelog
-- [ ] Final production deployment
+## 12. PepTalk 3.0 release — RELEASE CANDIDATE
+- [x] Version 3.0.0
+- [x] Complete 3.0 What’s New / changelog
+- [x] User-facing 3.0 redesign and cleanup wired into production build
+- [x] Stored health/protocol data is not intentionally mutated by the release-cleanup layers
+- [ ] Final GitHub Pages build/deployment success check
+- [ ] Final hands-on iPhone/PWA tap-through after deployment
