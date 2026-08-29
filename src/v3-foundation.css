@@ -1,0 +1,386 @@
+/* PepTalk 3.0 — design foundation
+ * Step 1 of the 3.0 rebuild. This file defines the visual system that later screens use.
+ * Keep behavior/data untouched here.
+ */
+
+:root {
+  --pt3-bg: #06080d;
+  --pt3-bg-elevated: #0b111b;
+  --pt3-surface: #0f1724;
+  --pt3-surface-2: #131d2c;
+  --pt3-surface-soft: rgba(18, 28, 43, .78);
+  --pt3-border: rgba(148, 163, 184, .14);
+  --pt3-border-strong: rgba(148, 163, 184, .22);
+  --pt3-text: #f8fafc;
+  --pt3-text-secondary: #c7d2e0;
+  --pt3-text-muted: #95a5b9;
+  --pt3-mint: #63ead8;
+  --pt3-mint-strong: #7ef1e2;
+  --pt3-mint-soft: rgba(99, 234, 216, .10);
+  --pt3-violet: #a78bfa;
+  --pt3-violet-soft: rgba(167, 139, 250, .10);
+  --pt3-amber: #f6c667;
+  --pt3-amber-soft: rgba(246, 198, 103, .10);
+  --pt3-danger: #fb7185;
+  --pt3-success: #58d68d;
+  --pt3-radius-card: 20px;
+  --pt3-radius-control: 14px;
+  --pt3-shadow-card: 0 16px 44px -30px rgba(0,0,0,.9);
+  --pt3-shadow-float: 0 22px 60px -32px rgba(0,0,0,.95);
+  --pt3-content-gap: 14px;
+}
+
+html,
+body {
+  background: var(--pt3-bg) !important;
+  color: var(--pt3-text);
+}
+
+body {
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -.005em;
+}
+
+#root {
+  background:
+    radial-gradient(ellipse 72% 34% at 10% -5%, rgba(99,234,216,.065), transparent 64%),
+    radial-gradient(ellipse 70% 38% at 105% 15%, rgba(167,139,250,.045), transparent 65%),
+    var(--pt3-bg) !important;
+}
+
+body::before {
+  opacity: .012 !important;
+}
+
+/* Typography hierarchy */
+.app-frame h1,
+.app-frame h2,
+.app-shell h1,
+.app-shell h2 {
+  color: var(--pt3-text) !important;
+  letter-spacing: -.03em !important;
+}
+
+.app-frame h2,
+.app-shell h2 {
+  font-size: clamp(1.55rem, 6vw, 2rem) !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+}
+
+.app-frame h3,
+.app-shell h3 {
+  color: var(--pt3-text) !important;
+  letter-spacing: -.018em;
+}
+
+.text-gray-300,
+.text-gray-400,
+.text-slate-300,
+.text-slate-400 {
+  color: var(--pt3-text-secondary) !important;
+}
+
+.text-gray-500,
+.text-gray-600,
+.text-slate-500,
+.text-slate-600 {
+  color: var(--pt3-text-muted) !important;
+}
+
+.text-\[9px\],
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
+/* App shell */
+.app-shell,
+.app-frame {
+  width: min(100%, 760px);
+  margin-inline: auto;
+}
+
+.app-shell {
+  padding-inline: 14px !important;
+}
+
+.app-frame {
+  padding-inline: 0 !important;
+  padding-bottom: max(118px, calc(96px + env(safe-area-inset-bottom))) !important;
+}
+
+.app-header {
+  border-radius: 20px !important;
+  border: 1px solid var(--pt3-border) !important;
+  background: rgba(8, 13, 22, .92) !important;
+  box-shadow: 0 14px 42px -32px rgba(0,0,0,.95) !important;
+  backdrop-filter: blur(22px) saturate(125%) !important;
+}
+
+.page-context {
+  color: var(--pt3-text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.status-pill {
+  border-color: var(--pt3-border-strong) !important;
+  background: rgba(255,255,255,.025) !important;
+  box-shadow: none !important;
+}
+
+.status-pill--online {
+  color: var(--pt3-mint) !important;
+  border-color: rgba(99,234,216,.22) !important;
+  background: rgba(99,234,216,.055) !important;
+}
+
+/* Cards: flatter, calmer, more consistent */
+.ui-card,
+.ui-hero-panel {
+  border-radius: var(--pt3-radius-card) !important;
+  border: 1px solid var(--pt3-border) !important;
+  background: linear-gradient(160deg, rgba(18,28,43,.94), rgba(10,16,26,.96)) !important;
+  box-shadow: var(--pt3-shadow-card), inset 0 1px 0 rgba(255,255,255,.025) !important;
+  backdrop-filter: none !important;
+}
+
+.ui-card::before {
+  width: 1px !important;
+  opacity: .26 !important;
+  background: linear-gradient(180deg, rgba(99,234,216,.58), rgba(167,139,250,.18) 46%, transparent 88%) !important;
+}
+
+.ui-hero-panel {
+  border-color: rgba(99,234,216,.18) !important;
+}
+
+.ui-hero-panel__wash {
+  opacity: .36 !important;
+  background: linear-gradient(140deg, rgba(99,234,216,.12), transparent 46%, rgba(167,139,250,.07)) !important;
+}
+
+.ui-hero-panel__top-bar {
+  opacity: .55 !important;
+}
+
+.ui-card:hover,
+.ui-hero-panel:hover {
+  transform: none !important;
+  box-shadow: var(--pt3-shadow-card) !important;
+}
+
+/* Inner cards and rows */
+.ui-card-inner,
+.rounded-2xl.border,
+.rounded-xl.border {
+  border-color: var(--pt3-border) !important;
+}
+
+.ui-card-inner {
+  background: rgba(255,255,255,.022) !important;
+}
+
+/* Controls */
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select,
+textarea {
+  min-height: 46px;
+  border-radius: var(--pt3-radius-control) !important;
+  border-color: var(--pt3-border-strong) !important;
+  background: #0a101a !important;
+  color: var(--pt3-text) !important;
+  box-shadow: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #7f90a5 !important;
+  opacity: 1 !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible,
+[role="combobox"]:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--pt3-bg), 0 0 0 4px rgba(99,234,216,.32) !important;
+  border-color: rgba(99,234,216,.42) !important;
+}
+
+.ui-btn-primary {
+  min-height: 48px !important;
+  border-radius: var(--pt3-radius-control) !important;
+  background: var(--pt3-mint) !important;
+  color: #06110f !important;
+  box-shadow: 0 10px 26px -20px rgba(99,234,216,.9) !important;
+}
+
+.ui-btn-primary:hover,
+.ui-btn-primary:active {
+  background: var(--pt3-mint-strong) !important;
+  transform: none !important;
+}
+
+.ui-btn-ghost {
+  min-height: 44px !important;
+  border-radius: var(--pt3-radius-control) !important;
+  color: var(--pt3-text-secondary) !important;
+}
+
+/* Segmented controls */
+.ui-segmented,
+.pt-segmented-structure {
+  border: 1px solid var(--pt3-border) !important;
+  border-radius: 14px !important;
+  background: #0a101a !important;
+  box-shadow: none !important;
+}
+
+.ui-segmented-btn,
+.pt-segmented-structure button {
+  min-height: 40px !important;
+  color: var(--pt3-text-muted) !important;
+}
+
+.ui-segmented-btn-active,
+.pt-segmented-structure button.is-active {
+  color: var(--pt3-mint) !important;
+  background: var(--pt3-mint-soft) !important;
+  box-shadow: inset 0 0 0 1px rgba(99,234,216,.14) !important;
+}
+
+/* Navigation: one calm floating bar */
+.peptalk-bottom-nav {
+  padding-inline: 12px !important;
+  background: linear-gradient(180deg, transparent, rgba(6,8,13,.72) 24%, rgba(6,8,13,.98) 58%) !important;
+}
+
+.peptalk-bottom-nav .ui-tab-bar {
+  border: 1px solid var(--pt3-border) !important;
+  border-radius: 20px !important;
+  background: rgba(9,14,23,.97) !important;
+  box-shadow: 0 18px 50px -28px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.03) !important;
+}
+
+.peptalk-bottom-nav .ui-tab {
+  min-height: 58px !important;
+  color: #9cacbf !important;
+  border-radius: 15px !important;
+}
+
+.peptalk-bottom-nav .ui-tab-active {
+  color: var(--pt3-mint) !important;
+  background: rgba(99,234,216,.075) !important;
+  box-shadow: inset 0 0 0 1px rgba(99,234,216,.12) !important;
+}
+
+/* More menu: remove the old "everything is equally important" visual weight */
+.more-menu,
+.menu-3d {
+  border-radius: 20px !important;
+  border-color: var(--pt3-border) !important;
+  background: rgba(9,14,23,.94) !important;
+  box-shadow: var(--pt3-shadow-card) !important;
+}
+
+.more-menu-item,
+.menu-3d-item {
+  border-radius: 14px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.more-menu-item + .more-menu-item {
+  border-top: 1px solid rgba(148,163,184,.075);
+}
+
+/* Status colors should mean something */
+.text-green-300,
+.text-green-400,
+.text-emerald-300,
+.text-emerald-400 {
+  color: var(--pt3-success) !important;
+}
+
+.text-yellow-300,
+.text-yellow-400,
+.text-amber-300,
+.text-amber-400,
+.text-gold-300,
+.text-gold-400 {
+  color: var(--pt3-amber) !important;
+}
+
+.text-red-300,
+.text-red-400,
+.text-rose-300,
+.text-rose-400 {
+  color: var(--pt3-danger) !important;
+}
+
+.text-violet-300,
+.text-violet-400,
+.text-purple-300,
+.text-purple-400 {
+  color: var(--pt3-violet) !important;
+}
+
+.text-teal-300,
+.text-teal-400,
+.text-cyan-300,
+.text-cyan-400 {
+  color: var(--pt3-mint) !important;
+}
+
+/* Charts */
+.recharts-cartesian-grid line {
+  stroke: rgba(148,163,184,.10) !important;
+}
+
+.recharts-text,
+.recharts-cartesian-axis-tick-value {
+  fill: #9eacc0 !important;
+  font-size: 11px !important;
+}
+
+/* Reduce animation/noise on mobile while preserving useful transitions */
+.tab-enter {
+  animation: pt3-enter .24s ease-out both !important;
+}
+
+@keyframes pt3-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.hover-lift:hover {
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell { padding-inline: 12px !important; }
+  .app-header { border-radius: 18px !important; }
+  .ui-card,
+  .ui-hero-panel { border-radius: 18px !important; }
+}
