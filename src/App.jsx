@@ -17,7 +17,7 @@ import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
   { id: 'weight', icon: Scale, label: 'Weight' },
@@ -5476,7 +5476,7 @@ const wipeAllData = () => {
   }
 
   return (
-    <div className="min-h-screen px-3 pt-2 pb-32 transition-all duration-300 bg-[var(--bg-base)]">
+    <div className="app-shell min-h-screen pb-32 bg-[var(--bg-base)]">
       {storageQuotaWarning && (
         <div className="sticky top-0 z-40 mb-2 -mt-1">
           <div className="flex items-start gap-2 rounded-xl border border-orange-500/35 bg-orange-500/10 px-3 py-2.5 text-orange-100/95 text-sm">
@@ -5594,7 +5594,7 @@ const wipeAllData = () => {
               <h3 className="text-xl font-bold text-white flex items-center gap-2"><BookOpen className="h-6 w-6 text-gold-400" />Welcome to PepTalk</h3>
               <button type="button" onClick={dismissWelcomeModal} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
             </div>
-            <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} — Redesigned around your protocols</p>
+            <p className="text-gold-400 text-sm font-medium mb-3">v{APP_VERSION} — A clearer, fully modernized PepTalk</p>
             <div className="text-gray-300 text-sm space-y-3 mb-4 pr-2">
               <p><strong className="text-white">Summary</strong> — Morning, evening, and completed doses with one-tap Taken, Take later, and Skip actions, plus your weekly review.</p>
               <p><strong className="text-white">Weight</strong> — A prominent seven-day trend, clean Apple Health imports, and flags for readings worth reviewing.</p>
@@ -5729,29 +5729,27 @@ const wipeAllData = () => {
         }
         .animate-celebrate { animation: celebrate 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
         
-        /* Smooth transitions for all interactive elements */
-        button, .transition-all { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-        button:active { transform: scale(0.95); }
-        button:hover { transform: translateY(-1px); }
-        
-        /* Enhanced button styles with shadows */
+        /* Legacy named actions inherit the new tactile button system. */
         .btn-primary {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+          background: linear-gradient(135deg, #7cf7e4 0%, #4dd8c8 100%);
+          color: #071612;
+          box-shadow: 0 10px 30px -16px rgba(94, 234, 212, 0.8);
         }
         .btn-primary:hover {
-          box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+          box-shadow: 0 14px 34px -16px rgba(94, 234, 212, 0.9);
         }
         .btn-primary:active {
-          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+          box-shadow: 0 6px 20px -12px rgba(94, 234, 212, 0.75);
         }
         
         .btn-secondary {
-          background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+          background: linear-gradient(135deg, rgba(167,139,250,.22), rgba(94,234,212,.14));
+          border: 1px solid rgba(167,139,250,.32);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 30px -22px rgba(139,92,246,.8);
         }
         .btn-secondary:hover {
-          box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+          border-color: rgba(167,139,250,.55);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 14px 34px -20px rgba(139,92,246,.9);
         }
         
         .btn-amber {
@@ -5845,18 +5843,20 @@ const wipeAllData = () => {
         }
       `}</style>
       
-      <div className="max-w-2xl mx-auto px-1">
-        <header className="flex items-center justify-between gap-3 mb-5 py-2">
+      <div className="app-frame max-w-2xl mx-auto">
+        <header className="app-header flex items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-11 w-11 rounded-2xl bg-accent text-slate-950 flex items-center justify-center shadow-[0_8px_30px_rgba(45,212,191,.24)] shrink-0">
+            <div className="brand-mark h-11 w-11 text-slate-950 flex items-center justify-center shrink-0">
               <Syringe className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-white tracking-tight">PepTalk</h1>
-              <p className="text-gray-500 text-xs mt-0.5 font-medium">Health tracking, without the clutter</p>
+              <h1 className="text-[1.35rem] font-bold text-white tracking-tight">PepTalk</h1>
+              <p className="page-context text-xs mt-0.5 font-medium">
+                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Weight & trend' : activeTab === 'protocols' ? 'Protocols' : activeTab === 'insights' ? 'Insights' : activeTab === 'injections' ? 'Dose history' : 'More'}
+              </p>
             </div>
           </div>
-          <div className={`h-9 px-3 rounded-full border flex items-center gap-2 text-[11px] font-semibold shrink-0 ${user ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-300' : 'border-white/10 bg-white/[0.04] text-gray-500'}`}>
+          <div className={`status-pill h-9 px-3 flex items-center gap-2 text-[11px] font-semibold shrink-0 ${user ? 'status-pill--online' : ''}`}>
             <Cloud className="h-3.5 w-3.5" />{user ? 'Backed up' : 'On device'}
           </div>
         </header>
@@ -8850,7 +8850,7 @@ const wipeAllData = () => {
         {(activeTab === 'more' || activeTab === 'protocols') && (
           <div key="more" className="space-y-4 tab-enter">
             {activeTab === 'more' && (
-            <div className="menu-3d grid grid-cols-3 sm:grid-cols-4 gap-2 rounded-2xl p-2.5 bg-[var(--bg-elevated)] backdrop-blur-sm">
+            <div className="menu-3d more-menu grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5">
               {[
                 { id: 'profile', icon: User, label: 'Profile' },
                 { id: 'body', icon: Ruler, label: 'Body' },
@@ -8873,9 +8873,9 @@ const wipeAllData = () => {
                     }
                     setActiveMoreSection(section.id);
                   }}
-                  className={`menu-3d-item min-h-16 flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl font-medium transition-all text-xs ${activeMoreSection === section.id ? 'menu-3d-item-active bg-accent/15 text-gold-400 border border-accent/20' : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
+                  className={`menu-3d-item more-menu-item min-h-16 flex items-center gap-3 py-3 px-3 font-medium text-sm ${activeMoreSection === section.id ? 'menu-3d-item-active' : ''}`}
                 >
-                  <section.icon className="h-4 w-4 flex-shrink-0" />{section.label}
+                  <span className="more-menu-icon"><section.icon className="h-4 w-4 flex-shrink-0" /></span><span>{section.label}</span>
                 </button>
               ))}
             </div>
@@ -9271,7 +9271,7 @@ const wipeAllData = () => {
           <div className="space-y-4">
             {/* Tool Section Selector - 3D */}
             {activeTab !== 'protocols' && (
-            <div className="menu-3d flex rounded-xl p-1.5 overflow-x-auto bg-[var(--bg-elevated)] backdrop-blur-sm">
+            <div className="menu-3d tool-menu flex p-1.5 overflow-x-auto">
               {[
                 { id: 'calculator', label: 'Calculators' }, 
                 { id: 'schedule', label: 'Protocols' },
@@ -9281,7 +9281,7 @@ const wipeAllData = () => {
                 { id: 'data', label: 'Data' }
               ].map(section => (
                 <button key={section.id} onClick={() => setActiveToolSection(section.id)}
-                  className={`menu-3d-item flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-lg transition-all ${activeToolSection === section.id ? 'menu-3d-item-active bg-accent text-gray-900' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                  className={`menu-3d-item tool-menu-item flex-1 whitespace-nowrap px-4 py-2.5 text-sm font-medium ${activeToolSection === section.id ? 'menu-3d-item-active' : ''}`}>
                   {section.label}
                 </button>
               ))}
@@ -10701,7 +10701,7 @@ const wipeAllData = () => {
       )}
 
       <nav className="peptalk-bottom-nav" aria-label="Main navigation">
-        <div className="max-w-2xl mx-auto grid grid-cols-5 gap-1 px-2 pt-2">
+        <div className="bottom-nav-shell max-w-2xl mx-auto grid grid-cols-5 gap-1">
           {MAIN_TABS.map((tab) => (
             <button
               type="button"
