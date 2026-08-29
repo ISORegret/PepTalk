@@ -12,6 +12,7 @@ import './v3-today.css'
 import './v3-weight.css'
 import './v3-insights.css'
 import './v3-protocols.css'
+import './v3-history.css'
 import './qol-enhancements.js'
 import './structural-redesign.js'
 import './insights-build5.js'
@@ -19,6 +20,7 @@ import './v3-today.js'
 import './v3-weight.js'
 import './v3-insights.js'
 import './v3-protocols.js'
+import './v3-history.js'
 
 /**
  * GitHub Pages and other static hosts often build without VITE_* secrets.
