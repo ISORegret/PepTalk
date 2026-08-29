@@ -9752,8 +9752,8 @@ const wipeAllData = () => {
                 <div className="ui-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="flex items-center gap-2 font-semibold text-white"><Layers className="h-5 w-5 text-gold-400" />Protocols</h3>
-                      <p className="mt-1 text-xs leading-relaxed text-gray-400">Manage dose, units, timing, route, cycles, blend strength, and pauses in one place.</p>
+                      <h3 className="flex items-center gap-2 font-semibold text-white"><Layers className="h-5 w-5 text-gold-400" />Your regimen</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-400">Set each medication’s dose, U-100 draw, schedule, route, and pause status in one place.</p>
                     </div>
                     <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{schedules.length}</span>
                   </div>
