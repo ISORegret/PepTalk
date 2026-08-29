@@ -1,5 +1,5 @@
-/* PepTalk 2.4 structural redesign.
- * This layer reorganizes existing UI surfaces without changing health, protocol, vial, or weight data.
+/* PepTalk 2.5 structural redesign.
+ * Safe, bounded DOM organization only. No continuous MutationObserver and no top jump rail.
  */
 
 const txt = (node) => String(node?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -15,120 +15,119 @@ function findPageByHeading(label) {
   return heading?.parentElement?.parentElement || heading?.parentElement || null;
 }
 
+function removeWeightDuplicate() {
+  if (activeMainPage() !== 'weight') return;
+  const scope = document.querySelector('.app-frame') || document.querySelector('.app-shell');
+  if (!scope) return;
+  Array.from(scope.querySelectorAll('.ui-card, .ui-hero-panel')).forEach((card) => {
+    const text = lower(card);
+    const duplicate = text.includes('stack response') && text.includes('weekly weight & protocols');
+    if (duplicate) {
+      card.hidden = true;
+      card.setAttribute('aria-hidden', 'true');
+      card.dataset.ptDuplicateRemoved = 'weekly-stack-weight';
+    }
+  });
+}
+
 function ensureSummaryStructure() {
   if (activeMainPage() !== 'summary') return;
   const scope = document.querySelector('.app-frame') || document.querySelector('.app-shell');
-  if (!scope) return;
+  if (!scope || scope.querySelector('.pt-summary-view-toggle')) return;
 
-  const cards = Array.from(scope.querySelectorAll('.ui-card, .ui-hero-panel'));
-  cards.forEach((card) => card.classList.remove('pt-summary-primary', 'pt-summary-secondary'));
+  const cards = Array.from(scope.querySelectorAll('.ui-card, .ui-hero-panel')).filter((card) => !card.closest('[role="dialog"]'));
+  if (cards.length < 5) return;
 
   let firstSecondary = null;
   cards.forEach((card, index) => {
-    const t = lower(card);
-    const primary = index < 2 || t.includes('current weight') || t.includes('weight trend') || t.includes('weekly review') || t.includes('today');
+    const text = lower(card);
+    const primary = index < 3 || text.includes('today') || text.includes('current weight') || text.includes('weight trend') || text.includes('weekly review');
     card.classList.add(primary ? 'pt-summary-primary' : 'pt-summary-secondary');
     if (!primary && !firstSecondary) firstSecondary = card;
   });
+  if (!firstSecondary) return;
 
-  if (!document.documentElement.dataset.ptSummaryView) document.documentElement.dataset.ptSummaryView = 'focus';
-
-  if (firstSecondary && !scope.querySelector('.pt-summary-view-toggle')) {
-    const row = document.createElement('div');
-    row.className = 'pt-summary-view-toggle';
-    row.innerHTML = `
-      <div>
-        <div class="pt-structure-eyebrow">SUMMARY VIEW</div>
-        <div class="pt-structure-copy">Keep the dashboard focused or show every supporting card.</div>
-      </div>
-      <button type="button" class="pt-structure-pill" aria-pressed="false">Show all</button>
-    `;
-    const button = row.querySelector('button');
-    button.addEventListener('click', () => {
-      const full = document.documentElement.dataset.ptSummaryView === 'full';
-      document.documentElement.dataset.ptSummaryView = full ? 'focus' : 'full';
-      button.textContent = full ? 'Show all' : 'Focus view';
-      button.setAttribute('aria-pressed', String(!full));
-    });
-    firstSecondary.parentElement?.insertBefore(row, firstSecondary);
-  }
+  document.documentElement.dataset.ptSummaryView = document.documentElement.dataset.ptSummaryView || 'focus';
+  const row = document.createElement('div');
+  row.className = 'pt-summary-view-toggle';
+  row.innerHTML = `
+    <div>
+      <div class="pt-structure-eyebrow">SUMMARY</div>
+      <div class="pt-structure-copy">Today and progress first. Supporting detail stays one tap away.</div>
+    </div>
+    <button type="button" class="pt-structure-pill" aria-pressed="false">Show more</button>
+  `;
+  const button = row.querySelector('button');
+  button.addEventListener('click', () => {
+    const showingAll = document.documentElement.dataset.ptSummaryView === 'full';
+    document.documentElement.dataset.ptSummaryView = showingAll ? 'focus' : 'full';
+    button.textContent = showingAll ? 'Show more' : 'Show less';
+    button.setAttribute('aria-pressed', String(!showingAll));
+  });
+  firstSecondary.parentElement?.insertBefore(row, firstSecondary);
 }
 
 function ensureMoreStructure() {
   const menu = document.querySelector('.more-menu');
-  if (!menu) return;
-
+  if (!menu || menu.dataset.ptStructured === '1') return;
   const meta = {
-    Doses: ['TRACKING', 'Dose history and administrations', 1],
-    Calendar: ['TRACKING', 'Schedule, taken and missed doses', 2],
-    Body: ['TRACKING', 'Measurements and progress photos', 3],
-    Labs: ['TRACKING', 'Bloodwork history and trends', 4],
-    Wellness: ['TRACKING', 'Optional wellness tracking', 5],
-    Profile: ['ACCOUNT', 'Account, cloud backup and preferences', 6],
-    Tools: ['SYSTEM', 'Inventory, notifications, reports and data', 7],
-    Help: ['SUPPORT', 'Help and app information', 8],
+    Profile: ['ACCOUNT & BACKUP', 'Cloud sync, profile and preferences', 1],
+    Body: ['PROGRESS', 'Measurements and progress photos', 2],
+    Doses: ['TRACKING', 'Dose history and administrations', 3],
+    Calendar: ['TRACKING', 'Schedule, taken and missed doses', 4],
+    Tools: ['SYSTEM', 'Inventory, notifications, reports and data', 5],
+    Labs: ['HEALTH DATA', 'Bloodwork history and trends', 6],
+    Wellness: ['OPTIONAL', 'Optional wellness tracking', 7],
+    Help: ['SUPPORT', 'Help, version and app information', 8],
   };
-
   Array.from(menu.querySelectorAll('.more-menu-item')).forEach((button) => {
-    const label = Array.from(button.querySelectorAll('span')).map(txt).find((value) => meta[value]);
-    if (!label) return;
+    const labelNode = Array.from(button.querySelectorAll('span')).find((span) => meta[txt(span)]);
+    if (!labelNode) return;
+    const label = txt(labelNode);
     const [group, description, order] = meta[label];
-    button.dataset.ptMoreLabel = label.toLowerCase();
-    button.dataset.ptMoreGroup = group.toLowerCase();
     button.style.order = String(order);
+    button.dataset.ptMoreGroup = group.toLowerCase().replaceAll(' ', '-');
+    labelNode.classList.add('pt-more-title');
+    if (!button.querySelector('.pt-more-kicker')) {
+      const kicker = document.createElement('span');
+      kicker.className = 'pt-more-kicker';
+      kicker.textContent = group;
+      labelNode.insertAdjacentElement('beforebegin', kicker);
+    }
     if (!button.querySelector('.pt-more-copy')) {
-      const textHost = Array.from(button.querySelectorAll('span')).find((span) => txt(span) === label);
-      if (textHost) {
-        textHost.classList.add('pt-more-title');
-        const copy = document.createElement('span');
-        copy.className = 'pt-more-copy';
-        copy.textContent = description;
-        textHost.insertAdjacentElement('afterend', copy);
-        const kicker = document.createElement('span');
-        kicker.className = 'pt-more-kicker';
-        kicker.textContent = group;
-        textHost.insertAdjacentElement('beforebegin', kicker);
-      }
+      const copy = document.createElement('span');
+      copy.className = 'pt-more-copy';
+      copy.textContent = description;
+      labelNode.insertAdjacentElement('afterend', copy);
     }
   });
+  menu.dataset.ptStructured = '1';
 }
 
 function ensureProtocolFilters() {
   if (activeMainPage() !== 'protocols') return;
   const scope = document.querySelector('.app-frame') || document.querySelector('.app-shell');
   if (!scope || scope.querySelector('.pt-protocol-filter')) return;
-
   const cards = Array.from(scope.querySelectorAll('.ui-card, .ui-hero-panel')).filter((card) => {
     const t = lower(card);
-    return t.includes('next dose') || t.includes('protocol') || t.includes('paused');
+    return (t.includes('next dose') || t.includes('paused') || t.includes('protocol')) && !t.includes('protocol editor');
   });
   if (cards.length < 2) return;
-
-  cards.forEach((card) => {
-    const t = lower(card);
-    card.dataset.ptProtocolStatus = t.includes('paused') ? 'paused' : 'active';
-  });
+  cards.forEach((card) => { card.dataset.ptProtocolStatus = lower(card).includes('paused') ? 'paused' : 'active'; });
 
   const bar = document.createElement('div');
   bar.className = 'pt-protocol-filter pt-segmented-structure';
-  bar.innerHTML = `
-    <button type="button" data-value="all" class="is-active">All</button>
-    <button type="button" data-value="active">Active</button>
-    <button type="button" data-value="paused">Paused</button>
-  `;
+  bar.innerHTML = '<button type="button" data-value="all" class="is-active">All</button><button type="button" data-value="active">Active</button><button type="button" data-value="paused">Paused</button>';
   bar.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-value]');
     if (!button) return;
     const value = button.dataset.value;
     bar.querySelectorAll('button').forEach((b) => b.classList.toggle('is-active', b === button));
-    cards.forEach((card) => {
-      card.hidden = value !== 'all' && card.dataset.ptProtocolStatus !== value;
-    });
+    cards.forEach((card) => { card.hidden = value !== 'all' && card.dataset.ptProtocolStatus !== value; });
   });
-
-  const anchor = Array.from(scope.querySelectorAll('h2, h3')).find((h) => /protocol/i.test(txt(h)));
-  const host = anchor?.parentElement?.parentElement || scope;
-  host.insertBefore(bar, host.children[1] || null);
+  const heading = Array.from(scope.querySelectorAll('h2, h3')).find((h) => /^protocols?$/i.test(txt(h)));
+  const anchor = heading?.parentElement || scope.firstElementChild;
+  anchor?.insertAdjacentElement('afterend', bar);
 }
 
 function ensureDoseStructure() {
@@ -139,47 +138,36 @@ function ensureDoseStructure() {
 
   const switcher = document.createElement('div');
   switcher.className = 'pt-dose-view-switch pt-segmented-structure';
-  switcher.innerHTML = `
-    <button type="button" data-value="history" class="is-active">Dose history</button>
-    <button type="button" data-value="inventory">Inventory</button>
-  `;
-  page.insertBefore(switcher, vialPanel);
-
-  const directChildren = Array.from(page.children);
-  directChildren.forEach((child) => {
-    if (child === switcher || child === vialPanel || child.contains?.(page.querySelector('h2'))) return;
+  switcher.innerHTML = '<button type="button" data-value="history" class="is-active">Dose history</button><button type="button" data-value="inventory">Inventory</button>';
+  vialPanel.insertAdjacentElement('beforebegin', switcher);
+  vialPanel.classList.add('pt-dose-inventory-surface');
+  Array.from(page.children).forEach((child) => {
+    if (child === switcher || child === vialPanel || child.querySelector?.('h2')) return;
     child.classList?.add('pt-dose-history-surface');
   });
-  vialPanel.classList.add('pt-dose-inventory-surface');
-
+  page.dataset.ptDoseView = 'history';
   switcher.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-value]');
     if (!button) return;
-    const value = button.dataset.value;
     switcher.querySelectorAll('button').forEach((b) => b.classList.toggle('is-active', b === button));
-    page.dataset.ptDoseView = value;
+    page.dataset.ptDoseView = button.dataset.value;
   });
-  page.dataset.ptDoseView = 'history';
 }
 
 function ensureCalendarStructure() {
   const adherenceHeading = Array.from(document.querySelectorAll('h3')).find((h) => txt(h) === 'Adherence Summary');
   const adherenceCard = adherenceHeading?.closest('.ui-card');
   const monthCard = adherenceCard?.previousElementSibling;
-  if (!adherenceCard || !monthCard || adherenceCard.parentElement?.querySelector('.pt-calendar-switch')) return;
+  const parent = adherenceCard?.parentElement;
+  if (!adherenceCard || !monthCard || !parent || parent.querySelector('.pt-calendar-switch')) return;
 
-  const parent = adherenceCard.parentElement;
   const switcher = document.createElement('div');
   switcher.className = 'pt-calendar-switch pt-segmented-structure';
-  switcher.innerHTML = `
-    <button type="button" data-value="month" class="is-active">Month</button>
-    <button type="button" data-value="adherence">Adherence</button>
-  `;
-  parent.insertBefore(switcher, monthCard);
+  switcher.innerHTML = '<button type="button" data-value="month" class="is-active">Month</button><button type="button" data-value="adherence">Adherence</button>';
+  monthCard.insertAdjacentElement('beforebegin', switcher);
   monthCard.classList.add('pt-calendar-month');
   adherenceCard.classList.add('pt-calendar-adherence');
   parent.dataset.ptCalendarView = 'month';
-
   switcher.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-value]');
     if (!button) return;
@@ -188,60 +176,30 @@ function ensureCalendarStructure() {
   });
 }
 
-function ensureSectionJumpRail() {
-  const page = activeMainPage();
-  if (!['weight', 'insights'].includes(page)) {
-    document.querySelector('.pt-section-rail')?.remove();
-    return;
-  }
-
-  const scope = document.querySelector('.app-frame') || document.querySelector('.app-shell');
-  if (!scope) return;
-  const headings = Array.from(scope.querySelectorAll('h2, h3'))
-    .filter((h) => h.offsetParent !== null)
-    .filter((h) => txt(h).length > 0 && txt(h).length < 34)
-    .slice(0, 5);
-  if (headings.length < 2) return;
-
-  let rail = scope.querySelector(':scope > .pt-section-rail');
-  if (!rail) {
-    rail = document.createElement('nav');
-    rail.className = 'pt-section-rail';
-    rail.setAttribute('aria-label', 'Jump to section');
-    scope.insertBefore(rail, scope.firstChild);
-  }
-  rail.innerHTML = '';
-  headings.forEach((heading, index) => {
-    const id = heading.id || `pt-section-${page}-${index}`;
-    heading.id = id;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = txt(heading);
-    button.addEventListener('click', () => heading.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-    rail.appendChild(button);
-  });
-}
-
 function enhanceStructure() {
+  removeWeightDuplicate();
   ensureSummaryStructure();
   ensureMoreStructure();
   ensureProtocolFilters();
   ensureDoseStructure();
   ensureCalendarStructure();
-  ensureSectionJumpRail();
 }
 
 let scheduled = false;
-function scheduleEnhance() {
-  if (scheduled) return;
-  scheduled = true;
-  requestAnimationFrame(() => {
-    scheduled = false;
-    enhanceStructure();
-  });
+function scheduleEnhance(delay = 100) {
+  window.setTimeout(() => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => { scheduled = false; enhanceStructure(); });
+  }, delay);
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleEnhance, { once: true });
-else scheduleEnhance();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scheduleEnhance(200), { once: true });
+else scheduleEnhance(150);
 
-new MutationObserver(scheduleEnhance).observe(document.documentElement, { childList: true, subtree: true });
+[400, 1000, 1900].forEach((delay) => scheduleEnhance(delay));
+window.addEventListener('pageshow', () => scheduleEnhance(100));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleEnhance(120); });
+document.addEventListener('click', (event) => {
+  if (event.target.closest('.peptalk-bottom-nav, .more-menu, button')) scheduleEnhance(120);
+}, { capture: true });
