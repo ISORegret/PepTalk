@@ -33,6 +33,36 @@ function normalizeWeightLossCopy() {
   });
 }
 
+function modernizeTitrationCopy() {
+  const replacements = new Map([
+    ['Recommended Dose', 'Planned Dose'],
+    ['Ready to increase?', 'Review next planned step'],
+    ['✓ On Track - Taking recommended dose', '✓ On track — matches planned dose'],
+    ['Titration Progress', 'Dose Plan Progress'],
+  ]);
+
+  document.querySelectorAll('div, span, h2, h3, h4, button').forEach((node) => {
+    if (node.children.length > 0) return;
+    const text = cleanText(node.textContent);
+    const replacement = replacements.get(text);
+    if (replacement && text !== replacement) node.textContent = replacement;
+  });
+}
+
+function simplifyDoseHistoryHeader() {
+  document.querySelectorAll('h2').forEach((heading) => {
+    if (cleanText(heading.textContent) !== 'Doses') return;
+    const page = heading.parentElement?.parentElement;
+    if (!page || page.dataset.ptDosePage === '1') return;
+    page.dataset.ptDosePage = '1';
+    const directGrids = Array.from(page.children).filter((node) => node instanceof HTMLElement && node.matches('.grid.grid-cols-4'));
+    directGrids.forEach((grid) => {
+      grid.hidden = true;
+      grid.setAttribute('aria-hidden', 'true');
+    });
+  });
+}
+
 function improveIconButtonLabels() {
   document.querySelectorAll('button').forEach((button) => {
     if (button.hasAttribute('aria-label')) return;
@@ -70,6 +100,8 @@ function enhance() {
     queued = false;
     detectPage();
     normalizeWeightLossCopy();
+    modernizeTitrationCopy();
+    simplifyDoseHistoryHeader();
     improveIconButtonLabels();
     markTechnicalCopy();
     markFocusSurfaces();
