@@ -1,0 +1,107 @@
+/* PepTalk 3.0 — Step 2: Today command-center hierarchy.
+ * Presentation-only while the Summary JSX is extracted from the legacy monolith.
+ */
+html[data-pt-main-page="summary"] .app-frame {
+  --today-gap: 14px;
+}
+
+.pt-v3-today-intro {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin: 2px 0 14px;
+  padding: 4px 2px 2px;
+}
+.pt-v3-today-eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.pt-v3-today-title {
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-size: 23px;
+  line-height: 1.1;
+  font-weight: 780;
+  letter-spacing: -.025em;
+}
+.pt-v3-today-copy {
+  margin-top: 5px;
+  max-width: 29rem;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.pt-v3-today-actions {
+  display: flex;
+  gap: 7px;
+}
+.pt-v3-quick-action {
+  min-height: 42px;
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 13px;
+  background: rgba(15,23,42,.72);
+  color: #e8eef7;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.pt-v3-quick-action:first-child {
+  border-color: rgba(94,234,212,.3);
+  background: rgba(94,234,212,.09);
+  color: #9bf6e8;
+}
+.pt-v3-quick-action:active { transform: scale(.98); }
+
+/* The Today surface should read as a command center, not a card gallery. */
+html[data-pt-main-page="summary"] .pt-summary-primary {
+  margin-bottom: var(--today-gap);
+}
+html[data-pt-main-page="summary"] .pt-summary-secondary {
+  opacity: .94;
+}
+html[data-pt-main-page="summary"][data-pt-summary-view="focus"] .pt-summary-secondary {
+  display: none !important;
+}
+
+.pt-summary-view-toggle {
+  margin: 6px 0 14px;
+  padding: 12px 13px;
+  border: 1px solid rgba(148,163,184,.13);
+  border-radius: 16px;
+  background: rgba(10,16,28,.6);
+}
+.pt-summary-view-toggle .pt-structure-copy {
+  color: #aeb9c9;
+  font-size: 12px;
+}
+.pt-summary-view-toggle .pt-structure-pill {
+  border-color: rgba(148,163,184,.2);
+  background: rgba(255,255,255,.035);
+  color: #dce5ef;
+}
+
+/* Low-supply/attention surfaces get the only warm treatment on Today. */
+html[data-pt-main-page="summary"] .pt-v3-today-warning {
+  border-color: rgba(245,158,11,.28) !important;
+  background: rgba(120,53,15,.12) !important;
+}
+
+@media (max-width: 430px) {
+  .pt-v3-today-intro {
+    grid-template-columns: 1fr;
+  }
+  .pt-v3-today-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .pt-v3-quick-action { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-v3-quick-action { transition: none !important; }
+}
