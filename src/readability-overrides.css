@@ -1,115 +1,267 @@
-/* PepTalk readability pass — keeps the modern dark UI while lifting low-contrast secondary text. */
+/* PepTalk 2.3 — app-wide QOL, readability, touch, and visual consistency pass. */
 
 :root {
-  --pt-text-secondary-strong: #c7d2e2;
-  --pt-text-muted-strong: #aebbd0;
-  --pt-text-dim-strong: #91a0b6;
+  --pt-text-secondary-strong: #d5deeb;
+  --pt-text-muted-strong: #b9c5d6;
+  --pt-text-dim-strong: #9eacc0;
+  --pt-panel: rgba(13, 22, 39, 0.90);
+  --pt-panel-soft: rgba(18, 29, 49, 0.72);
+  --pt-line: rgba(148, 163, 184, 0.15);
+  --pt-line-strong: rgba(148, 163, 184, 0.24);
+  --pt-mint: #5eead4;
+  --pt-violet: #a78bfa;
+  --pt-safe-bottom: max(env(safe-area-inset-bottom, 0px), 10px);
 }
 
-/* Tailwind utility classes used throughout legacy and modernized surfaces. */
+/* ---------- Global readability ---------- */
 .app-shell .text-gray-400,
 .app-frame .text-gray-400,
 .app-shell .text-slate-400,
-.app-frame .text-slate-400 {
-  color: var(--pt-text-secondary-strong) !important;
-}
+.app-frame .text-slate-400 { color: var(--pt-text-secondary-strong) !important; }
 
 .app-shell .text-gray-500,
 .app-frame .text-gray-500,
 .app-shell .text-slate-500,
-.app-frame .text-slate-500 {
-  color: var(--pt-text-muted-strong) !important;
-}
+.app-frame .text-slate-500 { color: var(--pt-text-muted-strong) !important; }
 
 .app-shell .text-gray-600,
 .app-frame .text-gray-600,
 .app-shell .text-slate-600,
-.app-frame .text-slate-600 {
-  color: var(--pt-text-dim-strong) !important;
+.app-frame .text-slate-600 { color: var(--pt-text-dim-strong) !important; }
+
+/* PepTalk had accumulated a lot of 9–11px helper text. Keep it compact, but readable on iPhone. */
+.app-shell [class*="text-[9px]"],
+.app-frame [class*="text-[9px]"],
+.app-shell [class*="text-[10px]"],
+.app-frame [class*="text-[10px]"],
+.app-shell [class*="text-[11px]"],
+.app-frame [class*="text-[11px]"] {
+  font-size: 12px !important;
+  line-height: 1.42 !important;
+}
+
+.app-shell .text-xs,
+.app-frame .text-xs {
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .app-shell input::placeholder,
 .app-shell textarea::placeholder,
 .app-frame input::placeholder,
 .app-frame textarea::placeholder {
-  color: #8f9db2 !important;
+  color: #9eacc0 !important;
   opacity: 1;
 }
 
-/* Summary weight snapshot: the percentage is relative to the first weigh-in in the selected range. */
+.app-shell input,
+.app-shell select,
+.app-shell textarea,
+.app-frame input,
+.app-frame select,
+.app-frame textarea {
+  border: 1px solid rgba(148, 163, 184, 0.15) !important;
+  background-color: rgba(30, 41, 59, 0.86) !important;
+  min-height: 46px;
+}
+
+.app-shell textarea,
+.app-frame textarea { min-height: 88px; }
+
+/* Touch targets: icon buttons remain compact visually but get a reliable hit area. */
+.app-shell button,
+.app-frame button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+.app-shell button:not(.ui-tab):not(.aspect-square),
+.app-frame button:not(.ui-tab):not(.aspect-square) { min-height: 40px; }
+
+.app-shell button:active,
+.app-frame button:active { transform: scale(0.985); }
+
+/* ---------- Card / surface system ---------- */
+.ui-card,
+.ui-hero-panel {
+  border-color: var(--pt-line) !important;
+  box-shadow: 0 16px 40px -28px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+.ui-card { background: linear-gradient(160deg, rgba(18,29,49,.91), rgba(12,20,36,.88)) !important; }
+.ui-card::before { opacity: .48 !important; }
+
+.ui-card:hover,
+.ui-hero-panel:hover { border-color: var(--pt-line-strong) !important; }
+
+.ui-card > h2:first-child,
+.ui-card > h3:first-child,
+.ui-hero-panel h2,
+.ui-hero-panel h3 { letter-spacing: -0.015em; }
+
+/* Stronger hierarchy between cards without adding more boxes. */
+.app-shell .space-y-4 > .ui-card + .ui-card,
+.app-frame .space-y-4 > .ui-card + .ui-card { margin-top: 18px; }
+
+/* ---------- Summary weight snapshot ---------- */
 .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3 > div:nth-child(2) > div:first-child {
   font-size: 0 !important;
   letter-spacing: 0 !important;
 }
 
 .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3 > div:nth-child(2) > div:first-child::after {
-  content: 'From first weigh-in';
+  content: 'Body weight lost';
   display: inline-block;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
-  font-weight: 700;
+  font-weight: 750;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #aebbd0;
+  color: #b9c5d6;
 }
 
 .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3::after {
-  content: 'Percent of body weight gained or lost since your first weigh-in in the selected date range.';
+  content: 'Change from your first weigh-in in the selected date range.';
   grid-column: 1 / -1;
   display: block;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pt-line);
   color: #aebbd0;
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
   letter-spacing: 0;
   text-transform: none;
 }
 
-/* Chart text was still too faint on iPhone. */
+/* ---------- Charts ---------- */
 .recharts-cartesian-axis-tick-value,
 .recharts-cartesian-axis-tick text,
 .recharts-label,
-.recharts-text {
-  fill: #aebbd0 !important;
+.recharts-text { fill: #bdc9d9 !important; }
+
+.recharts-cartesian-grid line { stroke: rgba(148, 163, 184, 0.17) !important; }
+.recharts-tooltip-wrapper { filter: drop-shadow(0 14px 22px rgba(0,0,0,.35)); }
+
+/* ---------- Navigation ---------- */
+.peptalk-bottom-nav {
+  padding-inline: 8px !important;
+  background: linear-gradient(180deg, transparent, rgba(6,9,17,.80) 24%, rgba(6,9,17,.985)) !important;
 }
 
-.recharts-cartesian-grid line {
-  stroke: rgba(148, 163, 184, 0.18) !important;
+.bottom-nav-shell {
+  padding: 5px !important;
+  border: 1px solid rgba(148,163,184,.13) !important;
+  border-radius: 22px !important;
+  background: rgba(10,17,30,.94) !important;
+  backdrop-filter: blur(24px) saturate(145%);
+  box-shadow: 0 18px 45px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.05) !important;
 }
 
-/* Make tiny uppercase section labels readable without overpowering primary values. */
-.app-shell .uppercase.text-gray-600,
-.app-frame .uppercase.text-gray-600,
-.app-shell .uppercase.text-gray-500,
-.app-frame .uppercase.text-gray-500 {
-  color: #a6b4c8 !important;
+.ui-tab { min-height: 56px !important; border-radius: 17px !important; }
+.ui-tab-active {
+  background: linear-gradient(145deg, rgba(94,234,212,.16), rgba(167,139,250,.09)) !important;
+  box-shadow: inset 0 0 0 1px rgba(94,234,212,.16), 0 10px 24px -20px rgba(94,234,212,.9) !important;
 }
 
-/* Weekly review / hydration supporting copy gets one extra contrast step. */
-.app-shell .ui-card p.text-xs,
-.app-shell .ui-hero-panel p.text-xs,
-.app-frame .ui-card p.text-xs,
-.app-frame .ui-hero-panel p.text-xs {
-  color: #aebbd0;
+/* ---------- More: cleaner settings-style launcher ---------- */
+.more-menu {
+  gap: 8px !important;
+  padding: 8px !important;
+  background: rgba(10,18,32,.82) !important;
 }
+
+.more-menu-item {
+  min-height: 62px !important;
+  justify-content: flex-start !important;
+  border: 1px solid rgba(148,163,184,.10);
+  background: rgba(255,255,255,.025);
+}
+
+.more-menu-item .more-menu-icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: rgba(94,234,212,.08);
+  color: var(--pt-mint);
+  flex: 0 0 auto;
+}
+
+.more-menu-item-active { border-color: rgba(94,234,212,.22) !important; }
+
+/* ---------- Protocol editor ---------- */
+[role="dialog"][aria-label="Protocol editor"] section.ui-card { overflow: visible; }
+[role="dialog"][aria-label="Protocol editor"] section.ui-card > h3:first-child { font-size: 15px; }
+[role="dialog"][aria-label="Protocol editor"] label > span:first-child { color: #c4cfde !important; }
+[role="dialog"][aria-label="Protocol editor"] .grid.grid-cols-7 button { min-height: 42px; }
+
+/* ---------- Calendar ---------- */
+.app-shell .grid.grid-cols-7 > button.min-h-16,
+.app-frame .grid.grid-cols-7 > button.min-h-16 {
+  min-height: 68px !important;
+  border-radius: 13px !important;
+}
+
+/* Calendar status chips need to remain small even after the global tiny-text lift. */
+.app-shell .grid.grid-cols-7 > button.min-h-16 [class*="text-[9px]"],
+.app-frame .grid.grid-cols-7 > button.min-h-16 [class*="text-[9px]"] {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+/* ---------- Data / danger zone ---------- */
+.app-shell .bg-red-500\/10,
+.app-frame .bg-red-500\/10 { margin-top: 28px; }
+
+/* ---------- Scroll panels ---------- */
+.peptalk-scroll-panel {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.48) rgba(15, 23, 42, 0.65);
+}
+.peptalk-scroll-panel::-webkit-scrollbar { width: 6px; height: 6px; }
+.peptalk-scroll-panel::-webkit-scrollbar-track { background: rgba(15,23,42,.5); border-radius: 999px; }
+.peptalk-scroll-panel::-webkit-scrollbar-thumb { background: rgba(100,116,139,.58); border-radius: 999px; }
 
 /* Keep intentionally disabled content visually distinct. */
-.app-shell [disabled],
-.app-frame [disabled],
-.app-shell .opacity-50,
-.app-frame .opacity-50 {
-  opacity: 0.58;
+.app-shell [disabled], .app-frame [disabled],
+.app-shell .opacity-50, .app-frame .opacity-50 { opacity: .58; }
+
+/* ---------- DOM-enhanced QOL hooks ---------- */
+html[data-peptalk-page="summary"] .pt-page-focus,
+html[data-peptalk-page="weight"] .pt-page-focus,
+html[data-peptalk-page="protocols"] .pt-page-focus,
+html[data-peptalk-page="insights"] .pt-page-focus,
+html[data-peptalk-page="more"] .pt-page-focus { scroll-margin-top: 88px; }
+
+.pt-collapsible-tech {
+  border-radius: 14px;
+  border: 1px dashed rgba(148,163,184,.15);
+  padding: 10px 12px;
+  opacity: .78;
+}
+
+/* ---------- Motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .ui-card, .ui-hero-panel, .more-menu-item { transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease, background .2s ease; }
+  .more-menu-item:active { transform: scale(.985); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
 @media (max-width: 520px) {
-  .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3::after {
-    font-size: 11.5px;
-  }
-
+  .app-shell { padding-inline: 10px !important; }
+  .app-frame { padding-inline: 0 !important; }
+  .ui-card, .ui-hero-panel { border-radius: 20px !important; }
+  .ui-card { padding-left: 14px; padding-right: 14px; }
+  .more-menu { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+  .more-menu-item { padding-inline: 10px !important; gap: 9px !important; }
   .recharts-cartesian-axis-tick-value,
-  .recharts-cartesian-axis-tick text {
-    font-size: 11px !important;
-  }
+  .recharts-cartesian-axis-tick text { font-size: 11px !important; }
+}
+
+@media (min-width: 700px) {
+  .more-menu { grid-template-columns: repeat(4, minmax(0,1fr)) !important; }
 }
