@@ -36,25 +36,25 @@
   opacity: 1;
 }
 
-/* Summary weight snapshot: explain exactly what the percentage represents. */
+/* Summary weight snapshot: the percentage is relative to the first weigh-in in the selected range. */
 .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3 > div:nth-child(2) > div:first-child {
   font-size: 0 !important;
   letter-spacing: 0 !important;
 }
 
 .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3 > div:nth-child(2) > div:first-child::after {
-  content: 'Total % from start';
+  content: 'From first weigh-in';
   display: inline-block;
   font-size: 10px;
   line-height: 1.2;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: #aebbd0;
 }
 
 .ui-hero-panel:has(.text-4xl) .grid.grid-cols-3::after {
-  content: 'Total % compares the first weight in the selected date range with your current weight.';
+  content: 'Percent of body weight gained or lost since your first weigh-in in the selected date range.';
   grid-column: 1 / -1;
   display: block;
   margin-top: 12px;
