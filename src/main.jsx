@@ -24,6 +24,7 @@ import './v3-history.js'
 import './v3-inventory.js'
 import './v3-calendar.js'
 import './v3-dose-equivalent.js'
+import './v3-dose-display.js'
 import './v3-release.js'
 
 /**
