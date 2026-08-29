@@ -17,7 +17,7 @@ import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
   { id: 'weight', icon: Scale, label: 'Weight' },
@@ -1442,6 +1442,7 @@ const PepTalk = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [expandedInjectionMed, setExpandedInjectionMed] = useState(null);
   const [weightHistoryFilterDate, setWeightHistoryFilterDate] = useState('');
+  const [showAllWeightHistory, setShowAllWeightHistory] = useState(false);
   const [injectionHistoryFilterDate, setInjectionHistoryFilterDate] = useState('');
   const [injectionHistorySearch, setInjectionHistorySearch] = useState('');
   const [injectionHistoryStatus, setInjectionHistoryStatus] = useState('all');
@@ -7583,8 +7584,161 @@ const wipeAllData = () => {
           </div>
         )}
 
-        {/* WEIGHT TAB */}
-        {activeTab === 'weight' && (
+        {/* WEIGHT TAB — progress-first dashboard */}
+        {activeTab === 'weight' && (() => {
+          const chartData = getSummaryChartData(chartRangeWeeks);
+          const trendPoints = chartData.filter((point) => point.weightTrend != null);
+          const latestTrend = trendPoints[trendPoints.length - 1];
+          const priorTrend = trendPoints[Math.max(0, trendPoints.length - 8)];
+          const trendWeekChange = latestTrend && priorTrend && latestTrend !== priorTrend
+            ? latestTrend.weightTrend - priorTrend.weightTrend
+            : null;
+          const sortedAsc = [...weightEntries].sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
+          const thirtyCutoff = new Date();
+          thirtyCutoff.setDate(thirtyCutoff.getDate() - 30);
+          const last30 = sortedAsc.filter((entry) => parseLocalDate(entry.date) >= thirtyCutoff);
+          const thirtyDayChange = last30.length > 1 ? Number(last30[last30.length - 1].weight) - Number(last30[0].weight) : null;
+          const weightValues = chartData.map((point) => point.weight).filter((value) => value != null && !Number.isNaN(value));
+          const yDomain = weightValues.length
+            ? [Math.floor(Math.min(...weightValues)) - 2, Math.ceil(Math.max(...weightValues)) + 2]
+            : ['auto', 'auto'];
+          const xInterval = chartData.length > 12 ? Math.max(0, Math.floor(chartData.length / 6)) : 0;
+          const { rows: weeklyRows } = getWeeklyDoseAndWeightSummary();
+          const historyRows = sortWeightByDateDesc(weightEntries).filter((entry) => {
+            if (!weightHistoryFilterDate) return true;
+            const selected = parseLocalDate(weightHistoryFilterDate);
+            const entryDate = parseLocalDate(entry.date);
+            if (!selected || !entryDate) return true;
+            const start = new Date(selected);
+            const diff = start.getDay() === 0 ? -6 : 1 - start.getDay();
+            start.setDate(start.getDate() + diff);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 7);
+            return entryDate >= start && entryDate < end;
+          });
+          const visibleHistoryRows = showAllWeightHistory ? historyRows : historyRows.slice(0, 5);
+          const formatDelta = (value) => value == null || Number.isNaN(value) ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
+          return (
+          <div key="weight-dashboard" className="space-y-4 tab-enter">
+            <div className="flex items-end justify-between gap-3 px-1">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-white">Weight</h2>
+                <p className="mt-1 text-sm text-gray-400">Your readings, trend, and weekly stack response.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-3 text-xs font-semibold text-gray-200">
+                  <Download className="h-4 w-4 text-violet-300" />
+                  <span className="hidden sm:inline">Apple Health</span>
+                  <input type="file" accept=".xml,.csv,text/xml,text/csv" onChange={importAppleHealthWeights} className="hidden" />
+                </label>
+                <button type="button" onClick={() => { resetWeightForm(); setShowAddForm(true); }} className="ui-btn-primary inline-flex min-h-11 items-center gap-2 px-3 text-xs">
+                  <Plus className="h-4 w-4" /> Log weight
+                </button>
+              </div>
+            </div>
+
+            <section className="weight-snapshot-grid grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="weight-stat weight-stat--primary">
+                <span>Current</span><strong>{stats.current || '—'}</strong><small>lb</small>
+              </div>
+              <div className="weight-stat">
+                <span>7-day trend</span><strong>{latestTrend ? latestTrend.weightTrend.toFixed(1) : '—'}</strong><small>lb</small>
+              </div>
+              <div className="weight-stat">
+                <span>This week</span><strong className={trendWeekChange != null && trendWeekChange < 0 ? 'text-emerald-300' : trendWeekChange > 0 ? 'text-rose-300' : ''}>{formatDelta(trendWeekChange)}</strong><small>lb</small>
+              </div>
+              <div className="weight-stat">
+                <span>30 days</span><strong className={thirtyDayChange != null && thirtyDayChange < 0 ? 'text-emerald-300' : thirtyDayChange > 0 ? 'text-rose-300' : ''}>{formatDelta(thirtyDayChange)}</strong><small>lb</small>
+              </div>
+            </section>
+
+            {weightEntries.length > 0 ? (
+              <section className="weight-chart-panel ui-hero-panel overflow-hidden">
+                <div className="ui-hero-panel__wash" aria-hidden />
+                <div className="ui-hero-panel__top-bar" aria-hidden />
+                <div className="relative px-3 pt-4 sm:px-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent/80">Primary trend</div>
+                      <h3 className="mt-1 text-base font-semibold text-white">Seven-day average</h3>
+                      <p className="mt-0.5 text-xs text-gray-400">Mint shows direction. Daily readings stay quiet in gray.</p>
+                    </div>
+                    <div className="ui-segmented !rounded-2xl !border-white/[0.08]">
+                      {[4, 8, 12, 26, 0].map((weeks) => (
+                        <button key={weeks || 'all'} type="button" onClick={() => setChartRangeWeeks(weeks)} className={`ui-segmented-btn !min-w-10 !px-2 ${chartRangeWeeks === weeks ? 'ui-segmented-btn-active' : ''}`}>
+                          {weeks === 0 ? 'All' : weeks === 26 ? '6m' : `${weeks}w`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="relative -mx-1 mt-3">
+                  <ResponsiveContainer width="100%" height={310}>
+                    <ComposedChart data={chartData} margin={{ top: 10, right: 12, left: 22, bottom: 8 }}>
+                      <defs>
+                        <linearGradient id="weightPageTrendFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#5EEAD4" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="#5EEAD4" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="rgba(148,163,184,.16)" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tickMargin={10} interval={xInterval} minTickGap={42} fontSize={11} />
+                      <YAxis axisLine={false} tickLine={false} tickMargin={7} width={34} domain={yDomain} allowDecimals={false} tickCount={6} fontSize={11} />
+                      <Tooltip content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const point = payload[0]?.payload;
+                        return <div className="rounded-2xl border border-white/[0.1] bg-slate-950/95 px-3 py-2.5 shadow-2xl"><div className="text-xs font-semibold text-white">{label}</div>{point?.weight != null && <div className="mt-1 text-sm text-gray-200">Reading {point.weight} lb</div>}{point?.weightTrend != null && <div className="text-xs text-accent">Trend {point.weightTrend.toFixed(1)} lb</div>}{point?.injections?.length > 0 && <div className="mt-2 border-t border-white/[0.08] pt-2 text-[11px] text-violet-200">{point.injections.map((item) => item.type).join(' · ')}</div>}</div>;
+                      }} />
+                      {weightGraphMode !== 'actual' && <Area type="monotone" dataKey="weightTrend" fill="url(#weightPageTrendFill)" stroke="none" connectNulls={false} />}
+                      {weightGraphMode !== 'trend' && <Line type="monotone" dataKey="weight" stroke="#94A3B8" strokeOpacity={0.55} strokeWidth={1.25} dot={{ r: 1.25, fill: '#94A3B8', strokeWidth: 0 }} activeDot={{ r: 3, fill: '#0F172A', stroke: '#CBD5E1', strokeWidth: 1.5 }} connectNulls={false} name="Reading" />}
+                      {weightGraphMode !== 'actual' && <Line type="monotone" dataKey="weightTrend" stroke="#5EEAD4" strokeWidth={4.5} dot={false} activeDot={{ r: 4, fill: '#071612', stroke: '#99F6E4', strokeWidth: 2 }} connectNulls={false} name="7-day trend" />}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="relative flex items-center justify-between gap-3 border-t border-white/[0.06] px-4 py-3">
+                  <p className="text-[11px] text-gray-400">Daily injection details appear when you tap a point.</p>
+                  <div className="inline-flex rounded-xl bg-black/20 p-1">
+                    {[['trend', 'Trend'], ['both', 'Both'], ['actual', 'Readings']].map(([mode, label]) => <button key={mode} type="button" onClick={() => setWeightGraphMode(mode)} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${weightGraphMode === mode ? 'bg-accent/15 text-accent' : 'text-gray-500'}`}>{label}</button>)}
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="ui-card p-8 text-center"><Scale className="mx-auto h-10 w-10 text-accent" /><h3 className="mt-3 font-semibold text-white">Log your first weight</h3><p className="mt-1 text-sm text-gray-400">Your seven-day trend will build as readings are added.</p><button type="button" onClick={() => setShowAddForm(true)} className="ui-btn-primary mt-4">Add weight</button></section>
+            )}
+
+            {showAddForm && (
+              <section className="ui-card p-4">
+                <div className="flex items-center justify-between gap-3"><div><div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent/80">Quick entry</div><h3 className="mt-1 font-semibold text-white">{editingWeight ? 'Edit weight' : 'Log weight'}</h3></div><button type="button" onClick={resetWeightForm} className="rounded-xl p-2 text-gray-400 hover:bg-white/[0.05] hover:text-white" aria-label="Close weight form"><X className="h-4 w-4" /></button></div>
+                <div className="mt-4 grid grid-cols-[1fr_9rem] gap-3"><label><span className="mb-1.5 block text-xs font-medium text-gray-400">Weight (lb)</span><input type="number" step="0.1" inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} className="w-full px-4 py-3 text-xl font-semibold" placeholder={stats.current || 'Weight'} /></label><label><span className="mb-1.5 block text-xs font-medium text-gray-400">Date</span><input type="date" value={weightDate} onChange={(event) => setWeightDate(event.target.value)} className="w-full px-3 py-3 text-sm" /></label></div>
+                <button type="button" onClick={addOrUpdateWeight} className="ui-btn-primary mt-4 w-full">{editingWeight ? 'Save changes' : 'Save weight'}</button>
+              </section>
+            )}
+
+            {weeklyRows.length > 0 && (
+              <section className="ui-card overflow-hidden">
+                <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] p-4"><div><div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">Stack response</div><h3 className="mt-1 text-base font-semibold text-white">Weekly weight &amp; protocols</h3><p className="mt-1 text-xs text-gray-400">What you took and how your weight moved.</p></div><select value={weeklyDoseWeekStartsOn} onChange={(event) => { const value = Number(event.target.value); setWeeklyDoseWeekStartsOn(value); saveData('health-weekly-dose-week-starts-on', value); }} className="!min-h-10 !w-20 !px-2 !py-1 text-xs" aria-label="Week starts on"><option value={1}>Mon</option><option value={0}>Sun</option><option value={2}>Tue</option><option value={3}>Wed</option><option value={4}>Thu</option><option value={5}>Fri</option><option value={6}>Sat</option></select></div>
+                <div className="divide-y divide-white/[0.06]">
+                  {weeklyRows.slice(-6).reverse().map((row) => {
+                    const doses = Object.entries(row.perMed || {}).filter(([, value]) => Number(value?.displayDose) > 0);
+                    return <div key={`${row.weekIndex}-${row.weekLabel}`} className="p-4"><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold text-white">{row.weekLabel}</div><div className="mt-1 text-xs text-gray-400">{row.weekStartWeight != null ? row.weekStartWeight.toFixed(1) : '—'} → {row.weekEndWeight != null ? row.weekEndWeight.toFixed(1) : '—'} lb</div></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.weightChange == null ? 'bg-white/[0.05] text-gray-400' : row.weightChange < 0 ? 'bg-emerald-500/12 text-emerald-300' : row.weightChange > 0 ? 'bg-rose-500/12 text-rose-300' : 'bg-white/[0.05] text-gray-300'}`}>{row.weightChange == null ? '—' : `${row.weightChange > 0 ? '+' : ''}${row.weightChange.toFixed(1)} lb`}</span></div><div className="mt-3 flex flex-wrap gap-1.5">{doses.length ? doses.map(([medName, value]) => <span key={medName} className="rounded-xl border border-white/[0.08] bg-white/[0.035] px-2.5 py-1.5 text-[11px] text-gray-300"><strong className="text-white">{medName}</strong> · {Number(value.displayDose).toFixed(2).replace(/\.00$/, '')} {value.unit || 'mg'}</span>) : <span className="text-xs text-gray-500">No doses logged</span>}</div></div>;
+                  })}
+                </div>
+                {weeklyRows.length > 6 && <button type="button" onClick={() => setActiveTab('insights')} className="w-full border-t border-white/[0.06] px-4 py-3 text-xs font-semibold text-accent">See full history in Insights</button>}
+              </section>
+            )}
+
+            <section className="ui-card overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] p-4"><div><h3 className="font-semibold text-white">Weight history</h3><p className="mt-1 text-xs text-gray-400">Five recent entries, with unusual changes flagged.</p></div><div className="flex items-center gap-2"><input type="date" value={weightHistoryFilterDate} onChange={(event) => setWeightHistoryFilterDate(event.target.value)} className="!min-h-10 !w-36 !px-2 !py-1 text-xs" aria-label="Filter weight history by week" />{weightHistoryFilterDate && <button type="button" onClick={() => setWeightHistoryFilterDate('')} className="text-xs font-medium text-gray-400">Clear</button>}</div></div>
+              {visibleHistoryRows.length ? <div className="divide-y divide-white/[0.06]">{visibleHistoryRows.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3"><div className="min-w-0"><div className="flex items-baseline gap-2"><span className="text-lg font-semibold text-white">{entry.weight}</span><span className="text-xs text-gray-500">lb</span>{isWeightOutlier(entry) && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">Review</span>}</div><div className="mt-0.5 text-xs text-gray-400">{parseLocalDate(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div></div><div className="flex items-center gap-1"><button type="button" onClick={() => { setEditingWeight(entry); setWeight(entry.weight.toString()); setWeightDate(entry.date); setShowAddForm(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-xl p-2.5 text-gray-400 hover:bg-white/[0.05] hover:text-white" aria-label={`Edit ${entry.weight} pounds`}><Edit2 className="h-4 w-4" /></button><button type="button" onClick={() => deleteWeight(entry.id)} className="rounded-xl p-2.5 text-gray-500 hover:bg-red-500/10 hover:text-red-300" aria-label={`Delete ${entry.weight} pounds`}><Trash2 className="h-4 w-4" /></button></div></div>)}</div> : <div className="p-8 text-center text-sm text-gray-400">No weight entries in this week.</div>}
+              {historyRows.length > 5 && <button type="button" onClick={() => setShowAllWeightHistory((value) => !value)} className="w-full border-t border-white/[0.06] px-4 py-3 text-xs font-semibold text-accent">{showAllWeightHistory ? 'Show recent only' : `Show all ${historyRows.length} entries`}</button>}
+            </section>
+          </div>
+          );
+        })()}
+
+        {/* Legacy weight tools are retained in data but no longer displayed on this focused page. */}
+        {false && activeTab === 'weight' && (
           <div key="weight" className="space-y-4 tab-enter">
             <div className="ui-card p-4">
               <div className="flex items-center justify-between">
