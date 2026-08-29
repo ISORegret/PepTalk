@@ -6141,7 +6141,7 @@ const wipeAllData = () => {
               <button type="button" onClick={() => { setActiveTab('weight'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left hover:bg-white/[0.05]">
                 <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Progress</span><span className="mt-1 block text-sm font-semibold text-white">Weight & check-ins</span>
               </button>
-              <button type="button" onClick={() => { setActiveTab('protocols'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left hover:bg-white/[0.05]">
+              <button type="button" onClick={() => { setActiveTab('protocols'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left hover:bg-white/[0.05]">
                 <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Regimen</span><span className="mt-1 block text-sm font-semibold text-white">Manage protocols</span>
               </button>
             </section>
@@ -11058,7 +11058,7 @@ const wipeAllData = () => {
       )}
 
       <nav className="peptalk-bottom-nav" aria-label="Main navigation">
-        <div className="bottom-nav-shell max-w-2xl mx-auto grid grid-cols-5 gap-1">
+        <div className="bottom-nav-shell max-w-2xl mx-auto grid grid-cols-4 gap-1">
           {MAIN_TABS.map((tab) => (
             <button
               type="button"
