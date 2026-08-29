@@ -95,11 +95,8 @@ function markFocusSurfaces() {
 
 function showWhatsNewOnce() {
   const key = `peptalk-whats-new-${RELEASE_VERSION}`;
-  try {
-    if (localStorage.getItem(key) === 'seen') return;
-  } catch (_) {}
+  try { if (localStorage.getItem(key) === 'seen') return; } catch (_) {}
   if (document.querySelector('.pt-whats-new-modal')) return;
-
   const overlay = document.createElement('div');
   overlay.className = 'pt-whats-new-modal';
   overlay.setAttribute('role', 'dialog');
@@ -140,16 +137,12 @@ function enhance() {
 }
 
 function scheduleEnhance(delay = 80) { window.setTimeout(enhance, delay); }
-
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scheduleEnhance(150), { once: true });
 else scheduleEnhance(100);
-
 window.addEventListener('pageshow', () => scheduleEnhance(80));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleEnhance(100); });
 document.addEventListener('click', (event) => {
-  if (event.target.closest('.peptalk-bottom-nav, .more-menu, button')) scheduleEnhance(100);
+  if (event.target.closest('.peptalk-bottom-nav, .more-menu')) scheduleEnhance(120);
 }, { capture: true });
-
-// A few bounded startup passes cover React/Supabase mounting without a permanent observer.
 [350, 900, 1800].forEach((delay) => scheduleEnhance(delay));
 window.setTimeout(showWhatsNewOnce, 1200);
