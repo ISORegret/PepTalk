@@ -29,7 +29,6 @@ const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Today' },
   { id: 'protocols', icon: Layers, label: 'Regimen' },
   { id: 'weight', icon: Scale, label: 'Progress' },
-  { id: 'insights', icon: Activity, label: 'Insights' },
   { id: 'more', icon: MoreHorizontal, label: 'More' },
 ];
 
@@ -4428,6 +4427,14 @@ const wipeAllData = () => {
     return row.dose != null ? `${formatSyringeDoseNumber(row.dose)} ${row.unit}` : 'Dose not set';
   };
 
+  // Protocol is the source of truth for this display. A vial may only support
+  // legacy records; no protocol dose or history value is changed here.
+  const formatProtocolDose = (schedule) => {
+    const pair = getSyringeDosePair(schedule.dose, schedule.unit, schedule.medication, schedule.doseConcentration, null);
+    if (pair) return `${formatSyringeDoseNumber(pair.mg)} mg · ${formatSyringeDoseNumber(pair.units)} units`;
+    return schedule.dose != null ? `${formatSyringeDoseNumber(schedule.dose)} ${schedule.unit || 'mg'}` : 'Dose not set';
+  };
+
   // For vial deduction: ml × conc; U-100 units × conc; Retatrutide pen dial = units ÷ 10 per mg (not U-100 volume)
   const getDoseMgForVial = (dose, unit, vialId, medicationName) => {
     const u = (unit || 'mg').toLowerCase();
@@ -6006,7 +6013,7 @@ const wipeAllData = () => {
             <div className="min-w-0">
               <h1 className="text-[1.35rem] font-bold text-white tracking-tight">PepTalk</h1>
               <p className="page-context text-xs mt-0.5 font-medium">
-                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Progress' : activeTab === 'protocols' ? 'Regimen' : activeTab === 'insights' ? 'Insights' : activeTab === 'injections' ? 'Dose history' : 'More'}
+                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Progress' : activeTab === 'protocols' ? 'Regimen' : activeTab === 'insights' ? 'Progress · analysis' : activeTab === 'injections' ? 'Dose history' : 'More'}
               </p>
             </div>
           </div>
@@ -6815,7 +6822,10 @@ const wipeAllData = () => {
                 </button>
               ) : (
                 <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight">Active stacks</h2>
+                  <button type="button" onClick={() => setActiveTab('weight')} className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-violet-300 hover:text-violet-200">
+                    <ChevronLeft className="h-3.5 w-3.5" /> Progress
+                  </button>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Advanced analysis</h2>
                   <p className="text-gray-500 text-xs mt-1">Tap a stack for levels, phase, protocol, and dose history.</p>
                 </div>
               )}
@@ -7792,6 +7802,9 @@ const wipeAllData = () => {
                 <p className="mt-1 text-sm text-gray-400">Your readings, trend, and weekly stack response.</p>
               </div>
               <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setActiveTab('insights')} className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-3 text-xs font-semibold text-gray-200 hover:bg-white/[0.07]">
+                  <Activity className="h-4 w-4 text-violet-300" /><span className="hidden sm:inline">Analysis</span>
+                </button>
                 <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-3 text-xs font-semibold text-gray-200">
                   <Download className="h-4 w-4 text-violet-300" />
                   <span className="hidden sm:inline">Apple Health</span>
@@ -9169,15 +9182,13 @@ const wipeAllData = () => {
         {(activeTab === 'more' || activeTab === 'protocols') && (
           <div key="more" className="space-y-4 tab-enter">
             {activeTab === 'more' && (
-            <div className="menu-3d more-menu grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5">
+            <div className="menu-3d more-menu grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5">
               {[
                 { id: 'profile', icon: User, label: 'Profile' },
-                { id: 'body', icon: Ruler, label: 'Body' },
                 { id: 'doses', icon: Syringe, label: 'Doses' },
                 { id: 'calendar', icon: CalendarDays, label: 'Calendar' },
                 { id: 'tools', icon: Wrench, label: 'Tools' },
                 { id: 'labs', icon: Activity, label: 'Labs' },
-                { id: 'wellness', icon: Moon, label: 'Wellness' },
                 { id: 'help', icon: HelpCircle, label: 'Help' }
               ].map(section => (
                 <button
@@ -9799,7 +9810,7 @@ const wipeAllData = () => {
 
                 {schedules.length > 0 && (
                   <div className="ui-card p-4">
-                    <h3 className="text-white font-medium mb-3">Saved protocols</h3>
+                    <h3 className="text-white font-medium mb-3">Your regimen</h3>
                     <div className="space-y-2">
                       {schedules.map(schedule => (
                         <div key={schedule.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${schedule.paused ? 'border-white/[0.05] bg-slate-800/35 opacity-70' : 'border-white/[0.06] bg-slate-700/40'}`}>
@@ -9810,7 +9821,7 @@ const wipeAllData = () => {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{schedule.medication}</span>{schedule.paused && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-medium text-amber-300">Paused</span>}</div>
                               <div className="mt-0.5 text-xs text-gray-400">
-                                {schedule.dose != null && `${schedule.dose} ${schedule.unit || 'mg'} · `}
+                                <span className="font-medium text-gray-200">{formatProtocolDose(schedule)}</span><span className="text-gray-600"> · </span>
                                 {schedule.scheduleType === 'specific_days' && schedule.specificDays?.length > 0 
                                   ? `${schedule.specificDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`
                                   : `Every ${schedule.frequencyDays} days`}
