@@ -1,0 +1,99 @@
+/* PepTalk 3.0 — Step 3: focused Weight page */
+html[data-pt-main-page="weight"] .app-frame { --weight-gap: 14px; }
+
+.pt-v3-weight-intro {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 2px 0 14px;
+  padding: 4px 2px 2px;
+}
+.pt-v3-weight-eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.pt-v3-weight-title {
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-size: 23px;
+  line-height: 1.1;
+  font-weight: 780;
+  letter-spacing: -.025em;
+}
+.pt-v3-weight-copy {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.pt-v3-weight-action {
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(94,234,212,.28);
+  border-radius: 13px;
+  background: rgba(94,234,212,.09);
+  color: #9bf6e8;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.pt-v3-weight-primary { margin-bottom: var(--weight-gap); }
+.pt-v3-weight-secondary { opacity: .95; }
+.pt-v3-weight-hidden { display: none !important; }
+
+/* Keep the trend visually dominant. */
+html[data-pt-main-page="weight"] .pt-v3-weight-chart {
+  border-color: rgba(94,234,212,.18) !important;
+  box-shadow: 0 14px 34px -28px rgba(45,212,191,.45) !important;
+}
+html[data-pt-main-page="weight"] .pt-v3-weight-chart .recharts-line-curve,
+html[data-pt-main-page="weight"] .pt-v3-weight-chart .recharts-area-curve {
+  stroke-width: 3px;
+}
+
+.pt-v3-weight-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -2px 0 12px;
+}
+.pt-v3-weight-chip {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(148,163,184,.16);
+  border-radius: 999px;
+  background: rgba(15,23,42,.58);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+}
+.pt-v3-weight-chip strong { color: #fff; font-weight: 800; }
+
+/* Stack analysis belongs in Insights, never Weight. */
+html[data-pt-main-page="weight"] [data-pt-duplicate-removed="weekly-stack-weight"],
+html[data-pt-main-page="weight"] .pt-v3-stack-analysis,
+html[data-pt-main-page="weight"] .pt-build5-stack-response {
+  display: none !important;
+}
+
+/* Recent readings should be easy to scan and edit on mobile. */
+html[data-pt-main-page="weight"] .pt-v3-weight-history {
+  border-top: 1px solid rgba(148,163,184,.11);
+}
+html[data-pt-main-page="weight"] .pt-v3-weight-history button {
+  min-width: 42px;
+  min-height: 42px;
+}
+
+@media (max-width: 430px) {
+  .pt-v3-weight-intro { grid-template-columns: 1fr; }
+  .pt-v3-weight-action { width: 100%; }
+}
