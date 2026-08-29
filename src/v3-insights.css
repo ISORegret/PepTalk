@@ -1,0 +1,82 @@
+/* PepTalk 3.0 — Step 4: Insights information architecture. */
+html[data-pt-main-page="insights"] .app-frame {
+  --insights-gap: 14px;
+}
+
+.pt-v3-insights-intro {
+  margin: 2px 0 14px;
+  padding: 4px 2px 2px;
+}
+.pt-v3-insights-eyebrow {
+  color: #c4b5fd;
+  font-size: 11px;
+  font-weight: 820;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.pt-v3-insights-title {
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-size: 23px;
+  line-height: 1.1;
+  font-weight: 780;
+  letter-spacing: -.025em;
+}
+.pt-v3-insights-copy {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.pt-v3-insights-delta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.pt-v3-delta-card {
+  border: 1px solid rgba(148,163,184,.14);
+  border-radius: 15px;
+  background: rgba(15,23,42,.66);
+  padding: 11px 12px;
+}
+.pt-v3-delta-label {
+  color: #9ca9ba;
+  font-size: 10.5px;
+  font-weight: 760;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.pt-v3-delta-value {
+  margin-top: 3px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 780;
+}
+
+html[data-pt-main-page="insights"] .pt-stack-response-card {
+  margin-bottom: var(--insights-gap);
+}
+html[data-pt-main-page="insights"] .pt-v3-active-compound {
+  border-color: rgba(167,139,250,.16) !important;
+}
+html[data-pt-main-page="insights"] .pt-v3-archived-compound {
+  opacity: .72;
+}
+html[data-pt-main-page="insights"] .pt-v3-duplicate-analysis {
+  display: none !important;
+}
+
+.pt-v3-insights-note {
+  margin: 8px 2px 0;
+  color: #9aa8ba;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 430px) {
+  .pt-v3-insights-delta {
+    grid-template-columns: 1fr;
+  }
+}
