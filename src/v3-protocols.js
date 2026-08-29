@@ -3,7 +3,7 @@
  * Bounded event-driven passes only; no MutationObserver.
  */
 const p5Text=n=>String(n?.textContent||'').replace(/\s+/g,' ').trim();const p5Lower=n=>p5Text(n).toLowerCase();
-function p5Active(){const page=p5Text(document.querySelector('.peptalk-bottom-nav .ui-tab-active span')).toLowerCase()||'today';return page==='regimen'?'protocols':page==='today'?'summary':page}
+function p5Active(){const page=p5Text(document.querySelector('.peptalk-bottom-nav .ui-tab-active span')).toLowerCase()||'today';return (page==='protocol'||page==='regimen')?'protocols':page==='today'?'summary':page}
 function p5Scope(){return document.querySelector('.app-frame')||document.querySelector('.app-shell')}
 function p5Read(key){try{const v=JSON.parse(localStorage.getItem(key)||'null');return Array.isArray(v)?v:[]}catch{return[]}}
 function p5Inventory(med,dose,unit){const vials=p5Read('health-vials').filter(v=>v?.medication===med);if(!vials.length)return null;const remaining=vials.reduce((sum,v)=>sum+Math.max(0,Number(v.remainingMg??v.totalMg)||0),0);const d=Number(dose);const mg=String(unit||'').toLowerCase()==='mg'&&d>0?d:null;return{remaining,doses:mg?Math.floor(remaining/mg):null}}

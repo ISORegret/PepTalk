@@ -27,7 +27,7 @@ const REGIMEN_PROTOCOL_CONCENTRATIONS = {
 };
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Today' },
-  { id: 'protocols', icon: Layers, label: 'Regimen' },
+  { id: 'protocols', icon: Layers, label: 'Protocol' },
   { id: 'weight', icon: Scale, label: 'Progress' },
   { id: 'more', icon: MoreHorizontal, label: 'More' },
 ];
@@ -6013,7 +6013,7 @@ const wipeAllData = () => {
             <div className="min-w-0">
               <h1 className="text-[1.35rem] font-bold text-white tracking-tight">PepTalk</h1>
               <p className="page-context text-xs mt-0.5 font-medium">
-                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Progress' : activeTab === 'protocols' ? 'Regimen' : activeTab === 'insights' ? 'Progress · analysis' : activeTab === 'injections' ? 'Dose history' : 'More'}
+                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Progress' : activeTab === 'protocols' ? 'Protocol' : activeTab === 'insights' ? 'Progress · analysis' : activeTab === 'injections' ? 'Dose history' : 'More'}
               </p>
             </div>
           </div>
@@ -6142,7 +6142,7 @@ const wipeAllData = () => {
                 <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Progress</span><span className="mt-1 block text-sm font-semibold text-white">Weight & check-ins</span>
               </button>
               <button type="button" onClick={() => { setActiveTab('protocols'); setActiveMoreSection('tools'); setActiveToolSection('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left hover:bg-white/[0.05]">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Regimen</span><span className="mt-1 block text-sm font-semibold text-white">Manage protocols</span>
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Protocol</span><span className="mt-1 block text-sm font-semibold text-white">Manage protocols</span>
               </button>
             </section>
 
@@ -9752,7 +9752,7 @@ const wipeAllData = () => {
                 <div className="ui-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="flex items-center gap-2 font-semibold text-white"><Layers className="h-5 w-5 text-gold-400" />Your regimen</h3>
+                      <h3 className="flex items-center gap-2 font-semibold text-white"><Layers className="h-5 w-5 text-gold-400" />Your protocols</h3>
                       <p className="mt-1 text-xs leading-relaxed text-gray-400">Set each medication’s dose, U-100 draw, schedule, route, and pause status in one place.</p>
                     </div>
                     <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-gray-400">{schedules.length}</span>
@@ -9810,7 +9810,7 @@ const wipeAllData = () => {
 
                 {schedules.length > 0 && (
                   <div className="ui-card p-4">
-                    <h3 className="text-white font-medium mb-3">Your regimen</h3>
+                    <h3 className="text-white font-medium mb-3">Your protocols</h3>
                     <div className="space-y-2">
                       {schedules.map(schedule => (
                         <div key={schedule.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${schedule.paused ? 'border-white/[0.05] bg-slate-800/35 opacity-70' : 'border-white/[0.06] bg-slate-700/40'}`}>
