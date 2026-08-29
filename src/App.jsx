@@ -2709,8 +2709,8 @@ const PepTalk = () => {
     }
   };
 
-  const concentrationFieldsForMedication = (medication) => {
-    const profile = getSavedDoseConcentrationProfile(medication);
+  const concentrationFieldsForMedication = (medication, protocolConcentration = null) => {
+    const profile = protocolConcentration || getSavedDoseConcentrationProfile(medication);
     return {
       concentrationTotalMg: profile.totalMg ? String(profile.totalMg) : '',
       concentrationBacWaterMl: profile.bacWaterMl ? String(profile.bacWaterMl) : '',
@@ -2744,7 +2744,7 @@ const PepTalk = () => {
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
       notes: existing?.protocolNotes || '',
       paused: Boolean(existing?.paused),
-      ...concentrationFieldsForMedication(medicationName),
+      ...concentrationFieldsForMedication(medicationName, existing?.doseConcentration),
     });
   };
 
@@ -2771,7 +2771,7 @@ const PepTalk = () => {
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
       notes: existing?.protocolNotes || '',
       paused: Boolean(existing?.paused),
-      ...concentrationFieldsForMedication(medName),
+      ...concentrationFieldsForMedication(medName, existing?.doseConcentration),
     });
   };
 
@@ -2802,6 +2802,12 @@ const PepTalk = () => {
         changeLog.push({ date: getTodayLocal(), type: protocolDraft.paused ? 'paused' : 'resumed', label: protocolDraft.paused ? 'Protocol paused' : 'Protocol resumed' });
       }
     }
+    const directConcentration = Number(protocolDraft.concentrationMgPerMl);
+    const concentrationTotalMg = Number(protocolDraft.concentrationTotalMg);
+    const concentrationBacWaterMl = Number(protocolDraft.concentrationBacWaterMl);
+    const protocolDoseConcentration = directConcentration > 0 || (concentrationTotalMg > 0 && concentrationBacWaterMl > 0)
+      ? { totalMg: concentrationTotalMg || 0, bacWaterMl: concentrationBacWaterMl || 0, concentration: directConcentration || 0 }
+      : existing?.doseConcentration || null;
     const saved = {
       ...(existing || { id: Date.now() }),
       medication: protocolDraft.medication,
@@ -2820,15 +2826,13 @@ const PepTalk = () => {
       cycleOffWeeks: protocolDraft.cycleOffWeeks === '' ? null : Math.max(0, Number(protocolDraft.cycleOffWeeks) || 0),
       protocolNotes: protocolDraft.notes || '',
       paused: Boolean(protocolDraft.paused),
+      ...(protocolDoseConcentration ? { doseConcentration: protocolDoseConcentration } : {}),
       updatedAt: new Date().toISOString(),
       changeLog: changeLog.slice(-30),
     };
     const updated = existing
       ? schedules.map((schedule) => schedule.medication === saved.medication ? saved : schedule)
       : [...schedules, saved];
-    const directConcentration = Number(protocolDraft.concentrationMgPerMl);
-    const concentrationTotalMg = Number(protocolDraft.concentrationTotalMg);
-    const concentrationBacWaterMl = Number(protocolDraft.concentrationBacWaterMl);
     if (directConcentration > 0 || (concentrationTotalMg > 0 && concentrationBacWaterMl > 0)) {
       const key = String(protocolDraft.medication).trim().toLowerCase();
       const nextProfiles = {
@@ -4365,9 +4369,11 @@ const wipeAllData = () => {
 
   // Dose profiles are the source of truth for presentation. A saved vial is only
   // a fallback, so this never supplies a concentration that the user has not saved.
-  const getKnownSyringeConcentration = (medication, vialId) => {
+  const getKnownSyringeConcentration = (medication, protocolConcentration, vialId) => {
     const key = String(medication || '').trim().toLowerCase();
     if (!key) return 0;
+    const protocolValue = getVialConcentrationMgPerMl(protocolConcentration);
+    if (protocolValue > 0) return protocolValue;
     // Read the persisted profile as a defensive fallback for a profile written by
     // an older form enhancer before it could emit the React refresh event.
     let storedProfiles = doseConcentrations;
@@ -4387,9 +4393,9 @@ const wipeAllData = () => {
     return getVialConcentrationMgPerMl(matchingVial);
   };
 
-  const getSyringeDosePair = (dose, unit, medication, vialId) => {
+  const getSyringeDosePair = (dose, unit, medication, protocolConcentration, vialId) => {
     const amount = Number(dose);
-    const concentration = getKnownSyringeConcentration(medication, vialId);
+    const concentration = getKnownSyringeConcentration(medication, protocolConcentration, vialId);
     if (!(amount > 0) || !(concentration > 0)) return null;
     const normalizedUnit = String(unit || 'mg').trim().toLowerCase();
     if (normalizedUnit === 'units' || normalizedUnit === 'unit') return { mg: (amount / 100) * concentration, units: amount };
@@ -4400,7 +4406,7 @@ const wipeAllData = () => {
   };
 
   const formatTodayDose = (row) => {
-    const pair = getSyringeDosePair(row.dose, row.unit, row.medication, row.entry?.vialId || row.lastEntry?.vialId);
+    const pair = getSyringeDosePair(row.dose, row.unit, row.medication, row.protocolConcentration, row.entry?.vialId || row.lastEntry?.vialId);
     if (pair) return `${formatSyringeDoseNumber(pair.mg)} mg · ${formatSyringeDoseNumber(pair.units)} units`;
     return row.dose != null ? `${formatSyringeDoseNumber(row.dose)} ${row.unit}` : 'Dose not set';
   };
@@ -5251,6 +5257,7 @@ const wipeAllData = () => {
           preferredTime: actionTime,
           dose,
           unit,
+          protocolConcentration: schedule.doseConcentration || null,
           entry: todayEntry || null,
           lastEntry,
           action: todayAction || null,
@@ -5276,6 +5283,7 @@ const wipeAllData = () => {
               preferredTime,
               dose,
               unit,
+              protocolConcentration: schedule.doseConcentration || null,
               entry: null,
               lastEntry,
               overdueDays: offset,
@@ -5294,6 +5302,7 @@ const wipeAllData = () => {
           preferredTime: actionTime,
           dose,
           unit,
+          protocolConcentration: schedule.doseConcentration || null,
           entry: todayEntry || null,
           lastEntry,
           action: todayAction || null,
