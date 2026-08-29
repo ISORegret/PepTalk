@@ -9,10 +9,12 @@ import './structural-redesign.css'
 import './insights-build5.css'
 import './v3-foundation.css'
 import './v3-today.css'
+import './v3-weight.css'
 import './qol-enhancements.js'
 import './structural-redesign.js'
 import './insights-build5.js'
 import './v3-today.js'
+import './v3-weight.js'
 
 /**
  * GitHub Pages and other static hosts often build without VITE_* secrets.
