@@ -5,14 +5,16 @@
 
 const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
-const RELEASE_VERSION = '2.5.1';
+const RELEASE_VERSION = '3.0.0';
 const RELEASE_CHANGES = [
-  'Moved the preferred Stack Response presentation into Insights',
-  'Insights now uses the clearer Weekly weight & protocols heading and Stack Response label',
-  'Weight keeps the duplicate weekly stack analysis hidden so the same information appears in one place only',
-  'Kept the more compact week-by-week protocol pill layout you preferred',
-  'Retained the PepTalk 2.5 structural redesign and iPhone stability changes',
-  'No stored weights, doses, protocols, vials or history were changed',
+  'New Today command center with schedule-first daily actions',
+  'Focused Weight page and a single Stack Response analysis in Insights',
+  'Rebuilt Protocols, Dose History, Inventory and agenda-first Calendar surfaces',
+  'Unit-based doses now show the calculated mg equivalent when vial concentration is known',
+  'More/settings cleaned up with Wellness and other legacy clutter removed from normal navigation',
+  'Backup status, changelog, stronger contrast, calmer motion and a unified mint-first design system',
+  'Retired the older 2.5 structural and Build 5 runtime layers',
+  'No stored weights, doses, protocols, vials or history were intentionally changed by the 3.0 UI cleanup',
 ];
 
 function detectPage() {
@@ -58,6 +60,7 @@ function simplifyDoseHistoryHeader() {
     const page = heading.parentElement?.parentElement;
     if (!page || page.dataset.ptDosePage === '1') return;
     page.dataset.ptDosePage = '1';
+    heading.textContent = 'History';
     Array.from(page.children)
       .filter((node) => node instanceof HTMLElement && node.matches('.grid.grid-cols-4'))
       .forEach((grid) => {
@@ -102,7 +105,7 @@ function showWhatsNewOnce() {
     <div class="pt-whats-new-card">
       <div class="pt-release-notes__eyebrow">WHAT’S NEW</div>
       <div class="pt-whats-new-title">PepTalk ${RELEASE_VERSION}</div>
-      <div class="pt-whats-new-subtitle">Build 5 — Insights response refinement</div>
+      <div class="pt-whats-new-subtitle">The full PepTalk 3.0 rebuild</div>
       <ul>${RELEASE_CHANGES.map((item) => `<li>${item}</li>`).join('')}</ul>
       <button type="button" class="pt-whats-new-dismiss">Got it</button>
     </div>
