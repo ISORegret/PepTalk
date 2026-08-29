@@ -17,7 +17,7 @@ import GraphicalSummaryModal from './GraphicalSummaryModal.jsx';
 import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '3.0.0';
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
   { id: 'weight', icon: Scale, label: 'Weight' },
@@ -1467,6 +1467,9 @@ const PepTalk = () => {
   const previousActiveTabRef = useRef(null);
   const [selectedVialId, setSelectedVialId] = useState(null);
   const [vials, setVials] = useState([]);
+  // Protocol concentration profiles live outside the legacy schedule model. Keep a
+  // React copy solely for presentation; dose/history records remain untouched.
+  const [doseConcentrations, setDoseConcentrations] = useState({});
   const [blendConversions, setBlendConversions] = useState({}); // { medication: { component: mgPerIU } }
   const [vialMedication, setVialMedication] = useState('Semaglutide');
   const [vialTotalMg, setVialTotalMg] = useState('');
@@ -1658,6 +1661,29 @@ const PepTalk = () => {
 
   useEffect(() => { loadData(); }, []);
 
+  // The Protocol concentration UI is currently an event-driven enhancement. Its
+  // custom event lets native Today cards update immediately without observing the
+  // document or changing any stored dose values.
+  useEffect(() => {
+    const refreshDoseConcentrations = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('health-dose-concentrations') || '{}');
+        setDoseConcentrations(saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {});
+      } catch {
+        setDoseConcentrations({});
+      }
+    };
+    const onStorage = (event) => {
+      if (event.key === 'health-dose-concentrations') refreshDoseConcentrations();
+    };
+    window.addEventListener('peptalk-dose-concentrations-changed', refreshDoseConcentrations);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('peptalk-dose-concentrations-changed', refreshDoseConcentrations);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
   // Welcome/tutorial: after local data loads, when Supabase is off — version-based only. When Supabase is on — only after sign-in (version change or first signed-in tutorial). Cloud opt-out treats the app like local-only for welcome.
   useEffect(() => {
     if (isLoading) return;
@@ -1809,6 +1835,7 @@ const PepTalk = () => {
       const blendConversionData = localStorage.getItem('health-blend-conversions');
       const inactiveInsightsData = localStorage.getItem('health-insights-inactive-meds');
       const doseActionsData = localStorage.getItem('health-dose-actions');
+      const doseConcentrationData = localStorage.getItem('health-dose-concentrations');
       {
         const parsed = weightData ? JSON.parse(weightData) : [];
         const existing = Array.isArray(parsed) ? parsed : [];
@@ -1968,6 +1995,12 @@ const PepTalk = () => {
           const parsed = JSON.parse(doseActionsData);
           if (Array.isArray(parsed)) setDoseActions(parsed);
         } catch (_) { /* ignore */ }
+      }
+      if (doseConcentrationData) {
+        try {
+          const parsed = JSON.parse(doseConcentrationData);
+          setDoseConcentrations(parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
+        } catch (_) { /* ignore malformed saved concentration profiles */ }
       }
       const sleepData = localStorage.getItem('health-sleep-entries');
       if (sleepData) {
@@ -4278,6 +4311,49 @@ const wipeAllData = () => {
     return 0;
   };
 
+  const formatSyringeDoseNumber = (value) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '';
+    if (number >= 10) return number.toFixed(1).replace(/\.0$/, '');
+    if (number >= 1) return number.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
+    return number.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  };
+
+  // Dose profiles are the source of truth for presentation. A saved vial is only
+  // a fallback, so this never supplies a concentration that the user has not saved.
+  const getKnownSyringeConcentration = (medication, vialId) => {
+    const key = String(medication || '').trim().toLowerCase();
+    if (!key) return 0;
+    const profile = Object.entries(doseConcentrations).find(([profileKey, value]) =>
+      String(profileKey).trim().toLowerCase() === key || String(value?.medication || '').trim().toLowerCase() === key,
+    )?.[1];
+    const profileConcentration = getVialConcentrationMgPerMl(profile);
+    if (profileConcentration > 0) return profileConcentration;
+    const linkedVial = vialId ? vials.find((vial) => vial.id === vialId) : null;
+    const linkedConcentration = getVialConcentrationMgPerMl(linkedVial);
+    if (linkedConcentration > 0) return linkedConcentration;
+    const matchingVial = vials.find((vial) => String(vial.medication || '').trim().toLowerCase() === key && getVialConcentrationMgPerMl(vial) > 0);
+    return getVialConcentrationMgPerMl(matchingVial);
+  };
+
+  const getSyringeDosePair = (dose, unit, medication, vialId) => {
+    const amount = Number(dose);
+    const concentration = getKnownSyringeConcentration(medication, vialId);
+    if (!(amount > 0) || !(concentration > 0)) return null;
+    const normalizedUnit = String(unit || 'mg').trim().toLowerCase();
+    if (normalizedUnit === 'units' || normalizedUnit === 'unit') return { mg: (amount / 100) * concentration, units: amount };
+    if (normalizedUnit === 'mg') return { mg: amount, units: (amount / concentration) * 100 };
+    if (normalizedUnit === 'mcg') return { mg: amount / 1000, units: ((amount / 1000) / concentration) * 100 };
+    if (normalizedUnit === 'ml') return { mg: amount * concentration, units: amount * 100 };
+    return null;
+  };
+
+  const formatTodayDose = (row) => {
+    const pair = getSyringeDosePair(row.dose, row.unit, row.medication, row.entry?.vialId || row.lastEntry?.vialId);
+    if (pair) return `${formatSyringeDoseNumber(pair.mg)} mg · ${formatSyringeDoseNumber(pair.units)} units`;
+    return row.dose != null ? `${formatSyringeDoseNumber(row.dose)} ${row.unit}` : 'Dose not set';
+  };
+
   // For vial deduction: ml × conc; U-100 units × conc; Retatrutide pen dial = units ÷ 10 per mg (not U-100 volume)
   const getDoseMgForVial = (dose, unit, vialId, medicationName) => {
     const u = (unit || 'mg').toLowerCase();
@@ -5943,7 +6019,8 @@ const wipeAllData = () => {
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2"><h3 className="truncate text-sm font-semibold text-white">{row.medication}</h3>{isOverdue && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-300">Overdue</span>}{row.action?.status === 'later' && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300">Later</span>}</div>
-                                    <p className="mt-0.5 text-xs text-gray-500">{row.dose != null ? `${Number(row.dose).toFixed(2).replace(/\.00$/, '')} ${row.unit}` : 'Dose not set'}<span className="mx-1.5 text-gray-700">•</span>{isDone ? `Taken ${formatDoseTime(row.entry?.time)}` : isSkipped ? 'Skipped today' : isOverdue ? `${row.overdueDays} day${row.overdueDays === 1 ? '' : 's'} late` : formatDoseTime(row.preferredTime)}</p>
+                                    <p className="mt-0.5 text-xs font-medium text-gray-300">{formatTodayDose(row)}</p>
+                                    <p className="mt-0.5 text-[11px] text-gray-500">{isDone ? `Taken ${formatDoseTime(row.entry?.time)}` : isSkipped ? 'Skipped today' : isOverdue ? `${row.overdueDays} day${row.overdueDays === 1 ? '' : 's'} late` : formatDoseTime(row.preferredTime)}</p>
                                   </div>
                                   {isDone ? <button type="button" onClick={() => openTodayDoseForm(row)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-medium text-gray-400 hover:bg-white/[0.05] hover:text-white">Edit</button> : isSkipped ? <button type="button" onClick={() => setTodayDoseAction(row, null)} className="shrink-0 rounded-xl px-3 py-2 text-xs font-medium text-gray-400 hover:bg-white/[0.05] hover:text-white">Restore</button> : <button type="button" onClick={() => markTodayDoseTaken(row)} className="shrink-0 rounded-xl bg-accent px-3.5 py-2.5 text-xs font-bold text-slate-950 shadow-[0_5px_20px_rgba(45,212,191,.2)]">Taken</button>}
                                 </div>

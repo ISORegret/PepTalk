@@ -19,6 +19,7 @@ function deSaveProfile(med,next){
   const clean={medication:med,totalMg:Number(next.totalMg)||0,bacWaterMl:Number(next.bacWaterMl)||0,concentration:Number(next.concentration)||0,updatedAt:new Date().toISOString()};
   if(!(clean.totalMg>0)&&!(clean.bacWaterMl>0)&&!(clean.concentration>0))delete all[key];else all[key]=clean;
   deWrite(DE_PROFILE_KEY,all);
+  window.dispatchEvent(new Event('peptalk-dose-concentrations-changed'));
 }
 function deMedication(scope){
   const medLabel=Array.from(scope.querySelectorAll('label')).find(l=>deText(l.querySelector('span')||l).toLowerCase()==='medication');

@@ -5,7 +5,7 @@
 const DCF_KEY='health-dose-concentrations';
 const dcfText=n=>String(n?.textContent||'').replace(/\s+/g,' ').trim();
 const dcfRead=()=>{try{const v=JSON.parse(localStorage.getItem(DCF_KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch{return{}}};
-const dcfWrite=v=>{try{localStorage.setItem(DCF_KEY,JSON.stringify(v))}catch{}};
+const dcfWrite=v=>{try{localStorage.setItem(DCF_KEY,JSON.stringify(v));window.dispatchEvent(new Event('peptalk-dose-concentrations-changed'))}catch{}};
 const dcfKey=s=>String(s||'').trim().toLowerCase();
 const dcfFmt=n=>{const x=Number(n);if(!Number.isFinite(x))return'';if(x>=10)return x.toFixed(1).replace(/\.0$/,'');if(x>=1)return x.toFixed(2).replace(/0$/,'').replace(/\.$/,'');return x.toFixed(3).replace(/0+$/,'').replace(/\.$/,'')};
 function dcfLabel(scope,name){return Array.from(scope.querySelectorAll('label')).find(l=>dcfText(l.querySelector('span')||l).toLowerCase()===name.toLowerCase())||null}
