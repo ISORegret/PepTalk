@@ -5,17 +5,13 @@
 
 const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
-const RELEASE_VERSION = '2.5.0';
+const RELEASE_VERSION = '2.5.1';
 const RELEASE_CHANGES = [
-  'Removed the duplicate weekly stack/weight analysis from Weight; it now lives in Insights only',
-  'Reorganized More into a cleaner settings-style menu with clearer destinations',
-  'Added focused Summary presentation so the dashboard prioritizes today and progress',
-  'Added All, Active and Paused views for Protocols',
-  'Separated Dose History from vial Inventory',
-  'Separated Calendar schedule and adherence views without adding a blocked top navigation rail',
-  'Improved page hierarchy and reduced repeated information',
-  'Removed continuous DOM observers that could cause freezing or missed taps on iPhone',
-  'Added a built-in What’s New popup that appears once per PepTalk release',
+  'Moved the preferred Stack Response presentation into Insights',
+  'Insights now uses the clearer Weekly weight & protocols heading and Stack Response label',
+  'Weight keeps the duplicate weekly stack analysis hidden so the same information appears in one place only',
+  'Kept the more compact week-by-week protocol pill layout you preferred',
+  'Retained the PepTalk 2.5 structural redesign and iPhone stability changes',
   'No stored weights, doses, protocols, vials or history were changed',
 ];
 
@@ -106,7 +102,7 @@ function showWhatsNewOnce() {
     <div class="pt-whats-new-card">
       <div class="pt-release-notes__eyebrow">WHAT’S NEW</div>
       <div class="pt-whats-new-title">PepTalk ${RELEASE_VERSION}</div>
-      <div class="pt-whats-new-subtitle">Structural redesign & stability update</div>
+      <div class="pt-whats-new-subtitle">Build 5 — Insights response refinement</div>
       <ul>${RELEASE_CHANGES.map((item) => `<li>${item}</li>`).join('')}</ul>
       <button type="button" class="pt-whats-new-dismiss">Got it</button>
     </div>
