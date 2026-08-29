@@ -18,6 +18,13 @@ import { computeSleepHours } from './lib/sleepUtils.js';
 import { compressImageFileToDataUrl } from './lib/imageCompress.js';
 
 const APP_VERSION = '3.0.0';
+// Confirmed Regimen protocol concentrations. These belong to the protocol, not
+// to Inventory, and let Today show the agreed U-100 draw without vial linking.
+const REGIMEN_PROTOCOL_CONCENTRATIONS = {
+  'Testosterone Cypionate': { concentration: 250 }, // 125 mg = 50 units
+  Retatrutide: { concentration: 10 }, // 2.5 mg = 25 units
+  KLOW: { concentration: 40 }, // 4 mg = 10 units
+};
 const MAIN_TABS = [
   { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
   { id: 'weight', icon: Scale, label: 'Weight' },
@@ -1926,6 +1933,16 @@ const PepTalk = () => {
             changed = true;
           }
           if (alreadyExists || changed) localStorage.setItem(key, 'done');
+        });
+        // Backfill the confirmed Regimen concentration onto its protocol. This
+        // never changes an entered dose or any history record.
+        merged = merged.map((schedule) => {
+          const preset = REGIMEN_PROTOCOL_CONCENTRATIONS[schedule.medication];
+          const existingConcentration = schedule.doseConcentration;
+          const hasConcentration = Number(existingConcentration?.concentration) > 0 || (Number(existingConcentration?.totalMg) > 0 && Number(existingConcentration?.bacWaterMl) > 0);
+          if (!preset || hasConcentration) return schedule;
+          changed = true;
+          return { ...schedule, doseConcentration: { ...preset } };
         });
         setSchedules(merged);
         if (changed) saveData('health-schedules', merged);
