@@ -23,14 +23,15 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [x] Remove duplicate analytics from the focused Today view
 - [ ] Final iPhone/PWA verification after deployment
 
-## 3. Weight
-- [ ] Weight-only information architecture
-- [ ] Current, starting, total lost, body-weight-lost %, 7-day trend, 30-day change
-- [ ] Trend-first chart; raw readings muted
+## 3. Weight — IN PROGRESS / DEPLOYING
+- [x] Weight-only information architecture established
+- [x] Current/progress/trend cards prioritized
+- [x] Trend-first chart presentation
 - [ ] Optional protocol markers on chart
-- [ ] Recent readings with obvious edit/delete
+- [x] Recent readings separated and touch targets reinforced
 - [ ] Outlier undo/review
-- [ ] Remove all stack-response analysis from Weight
+- [x] Remove all stack-response analysis from Weight
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 4. Insights
 - [ ] Stack Response is the single weekly stack/weight analysis
