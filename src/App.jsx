@@ -26,9 +26,9 @@ const REGIMEN_PROTOCOL_CONCENTRATIONS = {
   KLOW: { concentration: 40 }, // 4 mg = 10 units
 };
 const MAIN_TABS = [
-  { id: 'summary', icon: LayoutDashboard, label: 'Summary' },
-  { id: 'weight', icon: Scale, label: 'Weight' },
-  { id: 'protocols', icon: Layers, label: 'Protocols' },
+  { id: 'summary', icon: LayoutDashboard, label: 'Today' },
+  { id: 'protocols', icon: Layers, label: 'Regimen' },
+  { id: 'weight', icon: Scale, label: 'Progress' },
   { id: 'insights', icon: Activity, label: 'Insights' },
   { id: 'more', icon: MoreHorizontal, label: 'More' },
 ];
@@ -6006,7 +6006,7 @@ const wipeAllData = () => {
             <div className="min-w-0">
               <h1 className="text-[1.35rem] font-bold text-white tracking-tight">PepTalk</h1>
               <p className="page-context text-xs mt-0.5 font-medium">
-                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Weight & trend' : activeTab === 'protocols' ? 'Protocols' : activeTab === 'insights' ? 'Insights' : activeTab === 'injections' ? 'Dose history' : 'More'}
+                {activeTab === 'summary' ? 'Today' : activeTab === 'weight' ? 'Progress' : activeTab === 'protocols' ? 'Regimen' : activeTab === 'insights' ? 'Insights' : activeTab === 'injections' ? 'Dose history' : 'More'}
               </p>
             </div>
           </div>
@@ -6130,6 +6130,16 @@ const wipeAllData = () => {
               </div>
             </section>
 
+            <section className="pt-today-quick grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => { setActiveTab('weight'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left hover:bg-white/[0.05]">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Progress</span><span className="mt-1 block text-sm font-semibold text-white">Weight & check-ins</span>
+              </button>
+              <button type="button" onClick={() => { setActiveTab('protocols'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3 text-left hover:bg-white/[0.05]">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">Regimen</span><span className="mt-1 block text-sm font-semibold text-white">Manage protocols</span>
+              </button>
+            </section>
+
+            <div className="pt-today-secondary space-y-4">
             {/* Time Range Selector */}
             <div className="ui-segmented">
               {[{ id: '1m', label: '1m' }, { id: '3m', label: '3m' }, { id: '6m', label: '6m' }, { id: '12m', label: '12m' }, { id: 'all', label: 'All' }].map(range => (
@@ -6790,6 +6800,7 @@ const wipeAllData = () => {
               </div>
             )}
 
+            </div>
           </div>
         )}
 

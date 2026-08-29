@@ -1,0 +1,7 @@
+/* The daily screen should be a calm action queue, not a second analytics page. */
+.pt-today-secondary { display: none; }
+.pt-today-quick { margin-top: 2px; }
+.pt-today-quick button { min-height: 74px; }
+
+/* Keep the bottom navigation task-first on compact screens. */
+.peptalk-bottom-nav .bottom-nav-shell { grid-template-columns: repeat(5, minmax(0, 1fr)); }
