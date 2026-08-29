@@ -1,4 +1,4 @@
-/* PepTalk 2.4 — structural redesign layer */
+/* PepTalk 2.5 — safe structural redesign. Normal document flow only; no top rails. */
 
 .pt-structure-eyebrow,
 .pt-more-kicker {
@@ -7,53 +7,44 @@
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: #7f90a8;
+  color: #8292a9;
 }
 
-.pt-structure-copy {
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #aebbd0;
-}
+.pt-structure-copy { margin-top: 4px; font-size: 12.5px; line-height: 1.42; color: #b6c2d3; }
 
+/* Summary: keep the first screen useful, while supporting detail remains available. */
 .pt-summary-view-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin: 18px 2px 2px;
+  margin: 18px 0 4px;
   padding: 13px 14px;
-  border: 1px solid rgba(148,163,184,.12);
+  border: 1px solid rgba(148,163,184,.13);
   border-radius: 18px;
-  background: rgba(10,18,32,.62);
-  backdrop-filter: blur(18px);
+  background: linear-gradient(145deg, rgba(18,29,49,.82), rgba(10,18,32,.76));
 }
 
 .pt-structure-pill {
   flex: 0 0 auto;
-  min-height: 38px !important;
-  padding: 0 13px;
-  border: 1px solid rgba(94,234,212,.18);
+  min-height: 40px !important;
+  padding: 0 14px;
+  border: 1px solid rgba(94,234,212,.2);
   border-radius: 999px;
-  background: rgba(94,234,212,.08);
-  color: #8bf7e7;
+  background: rgba(94,234,212,.09);
+  color: #86f4e4;
   font-size: 12px;
   font-weight: 750;
 }
 
-html[data-pt-summary-view="focus"] .pt-summary-secondary {
-  display: none !important;
-}
+html[data-pt-summary-view="focus"] .pt-summary-secondary { display: none !important; }
+html[data-pt-summary-view="full"] .pt-summary-secondary { display: block; }
 
-html[data-pt-summary-view="full"] .pt-summary-secondary {
-  display: block;
-}
-
-/* More becomes a true settings list rather than a tile launcher. */
+/* More: one clean settings list on phones instead of an equal-weight tile wall. */
 .more-menu {
   display: flex !important;
-  flex-direction: column;
+  flex-direction: column !important;
+  grid-template-columns: none !important;
   gap: 7px !important;
   padding: 7px !important;
   border-radius: 22px !important;
@@ -62,16 +53,16 @@ html[data-pt-summary-view="full"] .pt-summary-secondary {
 .more-menu-item {
   position: relative;
   display: grid !important;
-  grid-template-columns: 42px 1fr auto;
-  grid-template-rows: auto auto auto;
+  grid-template-columns: 42px minmax(0,1fr) 18px !important;
+  grid-template-rows: auto auto auto !important;
   align-items: center !important;
   column-gap: 11px !important;
   row-gap: 2px !important;
   width: 100%;
-  min-height: 76px !important;
+  min-height: 78px !important;
   padding: 11px 13px !important;
   border-radius: 16px !important;
-  text-align: left;
+  text-align: left !important;
 }
 
 .more-menu-item .more-menu-icon {
@@ -81,161 +72,93 @@ html[data-pt-summary-view="full"] .pt-summary-secondary {
   height: 40px !important;
   border-radius: 13px !important;
 }
-
-.more-menu-item .pt-more-kicker {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.more-menu-item .pt-more-title {
-  grid-column: 2;
-  grid-row: 2;
-  color: #f8fafc;
-  font-size: 14px;
-  font-weight: 750;
-}
-
-.more-menu-item .pt-more-copy {
-  grid-column: 2;
-  grid-row: 3;
-  color: #aebbd0;
-  font-size: 11.5px;
-  line-height: 1.35;
-}
-
-.more-menu-item::after {
-  content: '›';
-  grid-column: 3;
-  grid-row: 1 / span 3;
-  align-self: center;
-  color: #708198;
-  font-size: 22px;
-  font-weight: 400;
-}
-
+.more-menu-item .pt-more-kicker { grid-column: 2; grid-row: 1; }
+.more-menu-item .pt-more-title { grid-column: 2; grid-row: 2; color: #f8fafc; font-size: 14px; font-weight: 750; }
+.more-menu-item .pt-more-copy { grid-column: 2; grid-row: 3; color: #aebbd0; font-size: 11.5px; line-height: 1.35; }
+.more-menu-item::after { content: '›'; grid-column: 3; grid-row: 1 / span 3; align-self: center; color: #75859b; font-size: 22px; }
 .more-menu-item-active::after { color: #5eead4; }
 
-.more-menu-item[data-pt-more-group="tracking"] { background: rgba(94,234,212,.025); }
-.more-menu-item[data-pt-more-group="account"],
-.more-menu-item[data-pt-more-group="system"] { background: rgba(167,139,250,.025); }
-
-/* Shared structural segmented control. */
+/* Shared in-page switches. These remain in normal flow so they never cover the app header. */
 .pt-segmented-structure {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   gap: 4px;
   padding: 4px;
-  margin: 2px 0 14px;
-  border: 1px solid rgba(148,163,184,.12);
+  margin: 12px 0 16px;
+  border: 1px solid rgba(148,163,184,.13);
   border-radius: 15px;
-  background: rgba(10,18,32,.76);
+  background: rgba(10,18,32,.74);
 }
-
 .pt-segmented-structure button {
-  min-height: 38px !important;
+  min-height: 40px !important;
   padding: 0 10px;
   border-radius: 11px;
-  color: #aebbd0;
+  color: #b5c1d2;
   font-size: 12px;
   font-weight: 700;
 }
-
 .pt-segmented-structure button.is-active {
   background: linear-gradient(145deg, rgba(94,234,212,.16), rgba(167,139,250,.10));
   color: #f8fafc;
   box-shadow: inset 0 0 0 1px rgba(94,234,212,.15);
 }
 
-.pt-protocol-filter {
-  position: sticky;
-  top: 72px;
-  z-index: 20;
-  backdrop-filter: blur(16px);
-}
-
-/* Doses: split history from inventory without duplicating data. */
+/* Doses: inventory gets its own view rather than competing with dose history. */
 [data-pt-dose-view="history"] .pt-dose-inventory-surface { display: none !important; }
 [data-pt-dose-view="inventory"] .pt-dose-history-surface { display: none !important; }
-[data-pt-dose-view="inventory"] .pt-dose-inventory-surface {
-  display: block !important;
-  margin-top: 4px;
-}
+[data-pt-dose-view="inventory"] .pt-dose-inventory-surface { display: block !important; }
 
-.pt-dose-view-switch {
-  position: sticky;
-  top: 72px;
-  z-index: 20;
-  backdrop-filter: blur(16px);
-}
-
-/* Calendar gets explicit modes so the page is not month grid + analytics at once. */
+/* Calendar: month and adherence are explicit views. */
 [data-pt-calendar-view="month"] .pt-calendar-adherence { display: none !important; }
 [data-pt-calendar-view="adherence"] .pt-calendar-month { display: none !important; }
 
-.pt-calendar-switch { margin-bottom: 10px; }
-
-/* Weight and Insights get a horizontal jump rail. */
-.pt-section-rail {
-  position: sticky;
-  top: 70px;
-  z-index: 22;
+/* What’s New is independent of the old Android update manifest. */
+.pt-whats-new-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
   display: flex;
-  gap: 7px;
-  overflow-x: auto;
-  margin: 0 -2px 12px;
-  padding: 4px 2px 7px;
-  scrollbar-width: none;
-  background: linear-gradient(180deg, rgba(6,9,17,.92), rgba(6,9,17,.72) 70%, transparent);
-  backdrop-filter: blur(14px);
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px 14px max(18px, env(safe-area-inset-bottom));
+  background: rgba(3,7,14,.72);
+  backdrop-filter: blur(12px);
+}
+.pt-whats-new-card {
+  width: min(100%, 520px);
+  max-height: min(78vh, 680px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid rgba(94,234,212,.2);
+  border-radius: 24px;
+  background: linear-gradient(160deg, rgba(18,29,49,.99), rgba(8,14,26,.99));
+  box-shadow: 0 24px 70px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.pt-whats-new-title { margin-top: 5px; color: #fff; font-size: 24px; font-weight: 800; letter-spacing: -.025em; }
+.pt-whats-new-subtitle { margin-top: 3px; color: #aebbd0; font-size: 13px; }
+.pt-whats-new-card ul { margin: 18px 0; padding-left: 20px; color: #d4deeb; font-size: 13px; line-height: 1.5; }
+.pt-whats-new-card li + li { margin-top: 8px; }
+.pt-whats-new-dismiss {
+  width: 100%;
+  min-height: 48px !important;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #5eead4, #78e7db);
+  color: #07111d;
+  font-size: 14px;
+  font-weight: 800;
 }
 
-.pt-section-rail::-webkit-scrollbar { display: none; }
-
-.pt-section-rail button {
-  flex: 0 0 auto;
-  min-height: 36px !important;
-  padding: 0 12px;
-  border: 1px solid rgba(148,163,184,.12);
-  border-radius: 999px;
-  background: rgba(255,255,255,.035);
-  color: #c6d1df;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-.pt-section-rail button:active {
-  background: rgba(94,234,212,.10);
-  border-color: rgba(94,234,212,.18);
-  color: #8bf7e7;
-}
-
-/* Stronger page rhythm. */
-html[data-peptalk-page="weight"] .ui-card,
-html[data-peptalk-page="insights"] .ui-card,
-html[data-peptalk-page="protocols"] .ui-card {
-  scroll-margin-top: 126px;
-}
+/* Keep bottom navigation clear of page content. */
+.app-frame, .app-shell { padding-bottom: max(112px, calc(92px + env(safe-area-inset-bottom))) !important; }
 
 @media (max-width: 520px) {
-  .pt-summary-view-toggle {
-    margin-inline: 0;
-    padding: 12px;
-  }
-
-  .more-menu-item {
-    min-height: 74px !important;
-    padding-inline: 11px !important;
-  }
-
-  .pt-protocol-filter,
-  .pt-dose-view-switch,
-  .pt-section-rail { top: 64px; }
+  .pt-summary-view-toggle { padding: 12px; }
+  .more-menu { grid-template-columns: none !important; }
+  .more-menu-item { min-height: 76px !important; padding-inline: 11px !important; }
 }
 
 @media (min-width: 700px) {
-  .more-menu {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .more-menu { display: grid !important; grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+  .pt-whats-new-modal { align-items: center; }
 }
