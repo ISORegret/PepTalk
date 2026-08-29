@@ -4,6 +4,21 @@
 
 const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
+const RELEASE_CHANGES = {
+  '2.3.0': [
+    'Improved readability and contrast across the app',
+    'Larger helper text and easier-to-tap controls on iPhone',
+    'Summary now labels weight loss as body weight lost instead of a negative percent',
+    'Cleaner card hierarchy and more consistent spacing',
+    'Refined bottom navigation and More menu styling',
+    'Cleaner protocol editor fields and schedule controls',
+    'Simplified Dose History header and removed low-value category counters',
+    'Updated titration wording to Planned Dose / Dose Plan Progress',
+    'Improved chart labels, calendar readability, and reduced-motion support',
+    'Automatic app-version stamping for future releases',
+  ],
+};
+
 function detectPage() {
   const active = document.querySelector('.peptalk-bottom-nav .ui-tab-active span');
   if (!active) return;
@@ -63,6 +78,36 @@ function simplifyDoseHistoryHeader() {
   });
 }
 
+function improveUpdatePrompts() {
+  const candidates = document.querySelectorAll('[role="dialog"], .ui-modal, .fixed');
+  candidates.forEach((modal) => {
+    if (!(modal instanceof HTMLElement) || modal.dataset.ptReleaseNotes === '1') return;
+    const text = cleanText(modal.textContent).toLowerCase();
+    const looksLikeUpdate = text.includes('update available') || text.includes('new version') || text.includes('update peptalk');
+    if (!looksLikeUpdate) return;
+
+    const versionMatch = cleanText(modal.textContent).match(/\b(\d+\.\d+\.\d+)\b/g);
+    const version = versionMatch?.[versionMatch.length - 1] || '2.3.0';
+    const changes = RELEASE_CHANGES[version] || RELEASE_CHANGES['2.3.0'];
+    if (!changes?.length) return;
+
+    const actionButton = Array.from(modal.querySelectorAll('button, a')).find((node) => /update|download|install/i.test(cleanText(node.textContent)));
+    const host = actionButton?.parentElement || modal;
+    if (!host) return;
+
+    const box = document.createElement('section');
+    box.className = 'pt-release-notes';
+    box.setAttribute('aria-label', `What's new in PepTalk ${version}`);
+    box.innerHTML = `
+      <div class="pt-release-notes__eyebrow">WHAT'S NEW</div>
+      <div class="pt-release-notes__title">PepTalk ${version}</div>
+      <ul>${changes.map((item) => `<li>${item}</li>`).join('')}</ul>
+    `;
+    host.insertBefore(box, actionButton || host.firstChild);
+    modal.dataset.ptReleaseNotes = '1';
+  });
+}
+
 function improveIconButtonLabels() {
   document.querySelectorAll('button').forEach((button) => {
     if (button.hasAttribute('aria-label')) return;
@@ -102,6 +147,7 @@ function enhance() {
     normalizeWeightLossCopy();
     modernizeTitrationCopy();
     simplifyDoseHistoryHeader();
+    improveUpdatePrompts();
     improveIconButtonLabels();
     markTechnicalCopy();
     markFocusSurfaces();
