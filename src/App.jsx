@@ -9210,7 +9210,7 @@ const wipeAllData = () => {
               ))}
             </div>
             )}
-            {activeMoreSection === 'profile' && (
+            {activeTab === 'more' && activeMoreSection === 'profile' && (
               <div className="space-y-4">
                 <div className="ui-card p-4 border border-cyan-500/20">
                   <h3 className="text-white font-medium mb-2 flex items-center gap-2"><Cloud className="h-5 w-5 text-cyan-400" />Account &amp; cloud backup</h3>
@@ -9368,7 +9368,7 @@ const wipeAllData = () => {
                 </div>
               </div>
             )}
-            {activeMoreSection === 'body' && (
+            {activeTab === 'more' && activeMoreSection === 'body' && (
           <div className="space-y-4">
             {/* Measurement Stats */}
             {Object.keys(measurementStats).length > 0 && (
@@ -9495,7 +9495,7 @@ const wipeAllData = () => {
             </div>
           </div>
             )}
-            {activeMoreSection === 'daily' && (
+            {activeTab === 'more' && activeMoreSection === 'daily' && (
           <div className="space-y-4">
             <div className="ui-card p-4">
               <h3 className="text-white font-medium mb-3 flex items-center gap-2"><Droplets className="h-4 w-4 text-sky-400" /><Beef className="h-4 w-4 text-gold-400" /><UtensilsCrossed className="h-4 w-4 text-gold-400" />Daily — Hydration, Protein & Nutrition</h3>
@@ -10571,7 +10571,7 @@ const wipeAllData = () => {
             )}
           </div>
             )}
-            {activeMoreSection === 'wellness' && (
+            {activeTab === 'more' && activeMoreSection === 'wellness' && (
           <div className="space-y-4 tab-enter">
             <div className="ui-card p-4">
               <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Moon className="h-6 w-6 text-indigo-400" />Sleep</h2>
@@ -10657,7 +10657,7 @@ const wipeAllData = () => {
             </div>
           </div>
             )}
-            {activeMoreSection === 'help' && (
+            {activeTab === 'more' && activeMoreSection === 'help' && (
           <div className="space-y-4 tab-enter">
             <div className="ui-card p-4">
               <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><HelpCircle className="h-6 w-6 text-gold-400" />FAQ</h2>
@@ -10676,7 +10676,7 @@ const wipeAllData = () => {
             </div>
           </div>
             )}
-            {activeMoreSection === 'glucose' && (
+            {activeTab === 'more' && activeMoreSection === 'glucose' && (
           <div className="space-y-4 tab-enter">
             <div className="ui-card p-4">
               <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Droplet className="h-6 w-6 text-green-500" />Glucose & A1C</h2>
@@ -10772,7 +10772,7 @@ const wipeAllData = () => {
             </div>
           </div>
             )}
-            {activeMoreSection === 'labs' && (
+            {activeTab === 'more' && activeMoreSection === 'labs' && (
           <div className="space-y-4 tab-enter">
             <div className="ui-card p-4">
               <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><Activity className="h-6 w-6 text-cyan-400" />Bloodwork & Labs</h2>
@@ -10834,7 +10834,7 @@ const wipeAllData = () => {
             </div>
           </div>
             )}
-            {activeMoreSection === 'calendar' && (
+            {activeTab === 'more' && activeMoreSection === 'calendar' && (
           <div className="space-y-4">
             <div className="ui-card p-4">
               <div className="flex justify-between items-center mb-4">
