@@ -43,15 +43,17 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [x] Hide duplicate giant combined analysis surfaces when repeated
 - [ ] Final iPhone/PWA verification after deployment
 
-## 5. Protocols
-- [ ] Cards show planned dose, days/time, next dose, status and inventory remaining
-- [ ] Active / Paused / All organization
-- [ ] Progressive editor: Basics → Schedule → Dose plan → Vial/blend → Alerts → Notes
+## 5. Protocols — IN PROGRESS / DEPLOYING
+- [x] Protocol cards prioritize planned dose, timing/route, status and linked inventory remaining when available
+- [x] Active / Paused / All organization
+- [x] Protocol editor gets progressive section navigation for Basics & schedule → Vial/blend → Notes without moving React-owned fields
+- [ ] Split the large Basics & schedule surface further into Dose plan and Alerts during native component extraction
 - [ ] Effective-date future dose changes preserve history
 - [ ] Duplicate protocol
 - [ ] Pause-until date
-- [ ] Calendar export kept with protocol
-- [ ] No invented medical dosing recommendations
+- [x] Existing calendar export remains with protocol tools
+- [x] No invented medical dosing recommendations; Step 5 additions are organization and stored-data math only
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 6. Dose History
 - [ ] Rename/position as History
