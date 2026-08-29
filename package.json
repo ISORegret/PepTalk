@@ -1,7 +1,7 @@
 {
   "name": "health-tracker-app",
   "private": true,
-  "version": "2.5.1",
+  "version": "3.0.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -24,7 +24,6 @@
     "@capacitor/ios": "^8.0.2",
     "@capacitor/local-notifications": "^8.0.0",
     "@capacitor/share": "^8.0.0",
-    "@capacitor/status-bar": "^8.0.0",
     "@supabase/supabase-js": "^2.100.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
