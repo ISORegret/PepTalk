@@ -21,8 +21,7 @@ function removeWeightDuplicate() {
   if (!scope) return;
   Array.from(scope.querySelectorAll('.ui-card, .ui-hero-panel')).forEach((card) => {
     const text = lower(card);
-    const duplicate = text.includes('stack response') && text.includes('weekly weight & protocols');
-    if (duplicate) {
+    if (text.includes('stack response') && text.includes('weekly weight & protocols')) {
       card.hidden = true;
       card.setAttribute('aria-hidden', 'true');
       card.dataset.ptDuplicateRemoved = 'weekly-stack-weight';
@@ -34,10 +33,8 @@ function ensureSummaryStructure() {
   if (activeMainPage() !== 'summary') return;
   const scope = document.querySelector('.app-frame') || document.querySelector('.app-shell');
   if (!scope || scope.querySelector('.pt-summary-view-toggle')) return;
-
   const cards = Array.from(scope.querySelectorAll('.ui-card, .ui-hero-panel')).filter((card) => !card.closest('[role="dialog"]'));
   if (cards.length < 5) return;
-
   let firstSecondary = null;
   cards.forEach((card, index) => {
     const text = lower(card);
@@ -46,17 +43,10 @@ function ensureSummaryStructure() {
     if (!primary && !firstSecondary) firstSecondary = card;
   });
   if (!firstSecondary) return;
-
   document.documentElement.dataset.ptSummaryView = document.documentElement.dataset.ptSummaryView || 'focus';
   const row = document.createElement('div');
   row.className = 'pt-summary-view-toggle';
-  row.innerHTML = `
-    <div>
-      <div class="pt-structure-eyebrow">SUMMARY</div>
-      <div class="pt-structure-copy">Today and progress first. Supporting detail stays one tap away.</div>
-    </div>
-    <button type="button" class="pt-structure-pill" aria-pressed="false">Show more</button>
-  `;
+  row.innerHTML = '<div><div class="pt-structure-eyebrow">SUMMARY</div><div class="pt-structure-copy">Today and progress first. Supporting detail stays one tap away.</div></div><button type="button" class="pt-structure-pill" aria-pressed="false">Show more</button>';
   const button = row.querySelector('button');
   button.addEventListener('click', () => {
     const showingAll = document.documentElement.dataset.ptSummaryView === 'full';
@@ -114,7 +104,6 @@ function ensureProtocolFilters() {
   });
   if (cards.length < 2) return;
   cards.forEach((card) => { card.dataset.ptProtocolStatus = lower(card).includes('paused') ? 'paused' : 'active'; });
-
   const bar = document.createElement('div');
   bar.className = 'pt-protocol-filter pt-segmented-structure';
   bar.innerHTML = '<button type="button" data-value="all" class="is-active">All</button><button type="button" data-value="active">Active</button><button type="button" data-value="paused">Paused</button>';
@@ -135,7 +124,6 @@ function ensureDoseStructure() {
   if (!page || page.querySelector('.pt-dose-view-switch')) return;
   const vialPanel = Array.from(page.querySelectorAll('.ui-hero-panel, .ui-card')).find((node) => lower(node).includes('your vials'));
   if (!vialPanel) return;
-
   const switcher = document.createElement('div');
   switcher.className = 'pt-dose-view-switch pt-segmented-structure';
   switcher.innerHTML = '<button type="button" data-value="history" class="is-active">Dose history</button><button type="button" data-value="inventory">Inventory</button>';
@@ -160,7 +148,6 @@ function ensureCalendarStructure() {
   const monthCard = adherenceCard?.previousElementSibling;
   const parent = adherenceCard?.parentElement;
   if (!adherenceCard || !monthCard || !parent || parent.querySelector('.pt-calendar-switch')) return;
-
   const switcher = document.createElement('div');
   switcher.className = 'pt-calendar-switch pt-segmented-structure';
   switcher.innerHTML = '<button type="button" data-value="month" class="is-active">Month</button><button type="button" data-value="adherence">Adherence</button>';
@@ -193,13 +180,11 @@ function scheduleEnhance(delay = 100) {
     requestAnimationFrame(() => { scheduled = false; enhanceStructure(); });
   }, delay);
 }
-
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scheduleEnhance(200), { once: true });
 else scheduleEnhance(150);
-
 [400, 1000, 1900].forEach((delay) => scheduleEnhance(delay));
 window.addEventListener('pageshow', () => scheduleEnhance(100));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleEnhance(120); });
 document.addEventListener('click', (event) => {
-  if (event.target.closest('.peptalk-bottom-nav, .more-menu, button')) scheduleEnhance(120);
+  if (event.target.closest('.peptalk-bottom-nav, .more-menu')) scheduleEnhance(140);
 }, { capture: true });
