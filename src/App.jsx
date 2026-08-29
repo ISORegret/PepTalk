@@ -4324,7 +4324,14 @@ const wipeAllData = () => {
   const getKnownSyringeConcentration = (medication, vialId) => {
     const key = String(medication || '').trim().toLowerCase();
     if (!key) return 0;
-    const profile = Object.entries(doseConcentrations).find(([profileKey, value]) =>
+    // Read the persisted profile as a defensive fallback for a profile written by
+    // an older form enhancer before it could emit the React refresh event.
+    let storedProfiles = doseConcentrations;
+    try {
+      const saved = JSON.parse(localStorage.getItem('health-dose-concentrations') || '{}');
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) storedProfiles = { ...saved, ...doseConcentrations };
+    } catch { /* use the current React copy */ }
+    const profile = Object.entries(storedProfiles).find(([profileKey, value]) =>
       String(profileKey).trim().toLowerCase() === key || String(value?.medication || '').trim().toLowerCase() === key,
     )?.[1];
     const profileConcentration = getVialConcentrationMgPerMl(profile);

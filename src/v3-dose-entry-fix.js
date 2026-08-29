@@ -5,7 +5,7 @@
 const dxText=n=>String(n?.textContent||'').replace(/\s+/g,' ').trim();
 const DX_KEY='health-dose-concentrations';
 const dxRead=()=>{try{const v=JSON.parse(localStorage.getItem(DX_KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch{return{}}};
-const dxSave=(med,p)=>{if(!med)return;try{const all=dxRead();all[String(med).trim().toLowerCase()]={medication:med,totalMg:Number(p.totalMg)||0,bacWaterMl:Number(p.bacWaterMl)||0,concentration:Number(p.concentration)||0,updatedAt:new Date().toISOString()};localStorage.setItem(DX_KEY,JSON.stringify(all))}catch{}};
+const dxSave=(med,p)=>{if(!med)return;try{const all=dxRead();all[String(med).trim().toLowerCase()]={medication:med,totalMg:Number(p.totalMg)||0,bacWaterMl:Number(p.bacWaterMl)||0,concentration:Number(p.concentration)||0,updatedAt:new Date().toISOString()};localStorage.setItem(DX_KEY,JSON.stringify(all));window.dispatchEvent(new Event('peptalk-dose-concentrations-changed'))}catch{}};
 const dxFmt=n=>{const x=Number(n);if(!Number.isFinite(x))return'';return x.toFixed(x>=10?1:x>=1?2:3).replace(/0+$/,'').replace(/\.$/,'')};
 const dxCaption=l=>{if(!l)return'';for(const n of l.childNodes){if(n.nodeType===3&&String(n.textContent||'').trim())return String(n.textContent).trim()}return dxText(l.querySelector(':scope > span')||l).split(/\s{2,}/)[0].trim()};
 function dxField(label){return label?.querySelector('input,select')||null}
