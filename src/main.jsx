@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 import App from './App.jsx'
 import { SupabaseAuthProvider } from './context/SupabaseAuthContext.jsx'
 import './index.css'
+import './readability-overrides.css'
 
 /**
  * GitHub Pages and other static hosts often build without VITE_* secrets.
