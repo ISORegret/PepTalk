@@ -2,7 +2,7 @@
 
 PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI is deployed and the previous duplicate/legacy surface for that feature is retired.
 
-## 1. Design foundation — IN PROGRESS
+## 1. Design foundation — COMPLETE / VERIFYING IN PRODUCTION
 - [x] New dark neutral/slate visual system
 - [x] Mint primary accent; violet reserved for analytics
 - [x] Amber attention; red only for genuine problems
@@ -10,16 +10,18 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [x] Stronger typography and readable secondary text
 - [x] Consistent card/control/nav radii and spacing
 - [x] Calmer motion and reduced-motion support
-- [ ] Verify production deployment and iPhone behavior
+- [ ] Final iPhone verification continues through staged rebuild
 
-## 2. Today / Summary command center
-- [ ] Make Summary function as Today
-- [ ] Next scheduled dose and daily completion first
-- [ ] Quick Log weight and Log dose actions
-- [ ] Compact weight/trend snapshot
-- [ ] Important inventory/run-out warning only
-- [ ] One concise weekly snapshot
-- [ ] Remove supporting clutter and duplicate analytics
+## 2. Today / Summary command center — COMPLETE / DEPLOYING
+- [x] Make Summary function as Today
+- [x] Next scheduled dose and daily completion first
+- [x] Quick Log weight and Log dose actions
+- [x] Compact weight/trend snapshot retained as primary progress information
+- [x] Important inventory/run-out warning only receives attention styling
+- [x] Weekly progress kept concise on Today; deeper stack analysis stays in Insights
+- [x] Supporting cards collapsed behind Show more
+- [x] Remove duplicate analytics from the focused Today view
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 3. Weight
 - [ ] Weight-only information architecture
