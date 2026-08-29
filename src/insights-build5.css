@@ -1,0 +1,63 @@
+/* PepTalk Build 5 — make Insights use the preferred Stack Response presentation. */
+
+.pt-stack-response-card {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(139, 92, 246, .18) !important;
+  background:
+    linear-gradient(160deg, rgba(19, 31, 53, .96), rgba(12, 22, 39, .94)) !important;
+  box-shadow:
+    0 20px 48px -32px rgba(0,0,0,.95),
+    inset 0 1px 0 rgba(255,255,255,.045) !important;
+}
+
+.pt-stack-response-card::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(94,234,212,.58), rgba(167,139,250,.42), transparent 88%);
+  pointer-events: none;
+}
+
+.pt-stack-response-eyebrow {
+  margin: 0 0 7px 12px;
+  color: #c4a7ff;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 850;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.pt-stack-response-title {
+  letter-spacing: -.018em !important;
+}
+
+.pt-stack-response-subtitle {
+  color: #c0cad8 !important;
+}
+
+.pt-stack-response-old-icon {
+  display: none !important;
+}
+
+/* The old Stack Response card breathed a little more between weeks but kept the protocol pills tight. */
+.pt-stack-response-card [class*="border-t"] {
+  border-color: rgba(148,163,184,.11) !important;
+}
+
+.pt-stack-response-card [class*="rounded-xl"],
+.pt-stack-response-card [class*="rounded-lg"] {
+  border-color: rgba(148,163,184,.14) !important;
+}
+
+@media (max-width: 520px) {
+  .pt-stack-response-card {
+    border-radius: 22px !important;
+  }
+
+  .pt-stack-response-eyebrow {
+    margin-left: 10px;
+  }
+}
