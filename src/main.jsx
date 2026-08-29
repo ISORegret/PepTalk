@@ -6,8 +6,10 @@ import { SupabaseAuthProvider } from './context/SupabaseAuthContext.jsx'
 import './index.css'
 import './readability-overrides.css'
 import './structural-redesign.css'
+import './insights-build5.css'
 import './qol-enhancements.js'
 import './structural-redesign.js'
+import './insights-build5.js'
 
 /**
  * GitHub Pages and other static hosts often build without VITE_* secrets.
