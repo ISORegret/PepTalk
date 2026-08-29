@@ -2694,6 +2694,30 @@ const PepTalk = () => {
     saveData('health-schedules', updated);
   };
 
+  const getSavedDoseConcentrationProfile = (medication) => {
+    const key = String(medication || '').trim().toLowerCase();
+    if (!key) return {};
+    const fromState = Object.entries(doseConcentrations).find(([profileKey, value]) =>
+      String(profileKey).trim().toLowerCase() === key || String(value?.medication || '').trim().toLowerCase() === key,
+    )?.[1];
+    if (fromState) return fromState;
+    try {
+      const saved = JSON.parse(localStorage.getItem('health-dose-concentrations') || '{}');
+      return saved?.[key] || {};
+    } catch {
+      return {};
+    }
+  };
+
+  const concentrationFieldsForMedication = (medication) => {
+    const profile = getSavedDoseConcentrationProfile(medication);
+    return {
+      concentrationTotalMg: profile.totalMg ? String(profile.totalMg) : '',
+      concentrationBacWaterMl: profile.bacWaterMl ? String(profile.bacWaterMl) : '',
+      concentrationMgPerMl: profile.concentration ? String(profile.concentration) : '',
+    };
+  };
+
   const openProtocolEditor = (medName = null) => {
     const medicationName = medName || schedules[0]?.medication || MEDICATIONS[0].name;
     const existing = schedules.find((schedule) => schedule.medication === medicationName);
@@ -2720,6 +2744,7 @@ const PepTalk = () => {
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
       notes: existing?.protocolNotes || '',
       paused: Boolean(existing?.paused),
+      ...concentrationFieldsForMedication(medicationName),
     });
   };
 
@@ -2746,6 +2771,7 @@ const PepTalk = () => {
       cycleOffWeeks: existing?.cycleOffWeeks ?? '',
       notes: existing?.protocolNotes || '',
       paused: Boolean(existing?.paused),
+      ...concentrationFieldsForMedication(medName),
     });
   };
 
@@ -2800,6 +2826,24 @@ const PepTalk = () => {
     const updated = existing
       ? schedules.map((schedule) => schedule.medication === saved.medication ? saved : schedule)
       : [...schedules, saved];
+    const directConcentration = Number(protocolDraft.concentrationMgPerMl);
+    const concentrationTotalMg = Number(protocolDraft.concentrationTotalMg);
+    const concentrationBacWaterMl = Number(protocolDraft.concentrationBacWaterMl);
+    if (directConcentration > 0 || (concentrationTotalMg > 0 && concentrationBacWaterMl > 0)) {
+      const key = String(protocolDraft.medication).trim().toLowerCase();
+      const nextProfiles = {
+        ...doseConcentrations,
+        [key]: {
+          medication: protocolDraft.medication,
+          totalMg: concentrationTotalMg || 0,
+          bacWaterMl: concentrationBacWaterMl || 0,
+          concentration: directConcentration || 0,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      setDoseConcentrations(nextProfiles);
+      saveData('health-dose-concentrations', nextProfiles);
+    }
     setSchedules(updated);
     saveData('health-schedules', updated);
     if (notificationPermission === 'granted') scheduleLocalInjectionReminders(notificationSettings, updated);
@@ -10844,6 +10888,33 @@ const wipeAllData = () => {
                       </select>
                     </label>
                   </div>
+
+                  {(() => {
+                    const totalMg = Number(protocolDraft.concentrationTotalMg);
+                    const bacWaterMl = Number(protocolDraft.concentrationBacWaterMl);
+                    const directConcentration = Number(protocolDraft.concentrationMgPerMl);
+                    const concentration = directConcentration > 0 ? directConcentration : totalMg > 0 && bacWaterMl > 0 ? totalMg / bacWaterMl : 0;
+                    const dose = Number(protocolDraft.dose);
+                    const unit = String(protocolDraft.unit || '').toLowerCase();
+                    const pair = dose > 0 && concentration > 0
+                      ? unit === 'units' ? { mg: (dose / 100) * concentration, units: dose }
+                        : unit === 'mg' ? { mg: dose, units: (dose / concentration) * 100 }
+                          : unit === 'mcg' ? { mg: dose / 1000, units: ((dose / 1000) / concentration) * 100 }
+                            : unit === 'ml' ? { mg: dose * concentration, units: dose * 100 }
+                              : null
+                      : null;
+                    return (
+                      <div className="mt-4 rounded-xl border border-accent/20 bg-accent/[0.045] p-3">
+                        <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-white">Dose concentration</h3><p className="mt-0.5 text-[11px] text-gray-400">Saved for this compound’s U-100 syringe math. No inventory vial is required.</p></div><span className="rounded-full border border-accent/20 px-2 py-1 text-[10px] font-semibold text-accent">Optional</span></div>
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          <label className="block"><span className="text-xs font-medium text-gray-400">Vial strength (mg)</span><input type="number" min="0" step="any" inputMode="decimal" value={protocolDraft.concentrationTotalMg} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, concentrationTotalMg: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-2.5 text-white" placeholder="5" /></label>
+                          <label className="block"><span className="text-xs font-medium text-gray-400">BAC water (mL)</span><input type="number" min="0" step="any" inputMode="decimal" value={protocolDraft.concentrationBacWaterMl} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, concentrationBacWaterMl: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-2.5 text-white" placeholder="2" /></label>
+                        </div>
+                        <label className="mt-3 block"><span className="text-xs font-medium text-gray-400">Or known concentration (mg/mL)</span><input type="number" min="0" step="any" inputMode="decimal" value={protocolDraft.concentrationMgPerMl} onChange={(event) => setProtocolDraft((draft) => ({ ...draft, concentrationMgPerMl: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-slate-800 px-3 py-2.5 text-white" placeholder="2.5" /></label>
+                        {concentration > 0 ? <div className="mt-3 rounded-lg bg-black/15 px-3 py-2 text-xs text-gray-300"><span className="font-semibold text-accent">{formatSyringeDoseNumber(concentration)} mg/mL</span>{pair && <span className="ml-2">· Today will show <span className="font-semibold text-white">{formatSyringeDoseNumber(pair.mg)} mg · {formatSyringeDoseNumber(pair.units)} units</span></span>}</div> : <p className="mt-3 text-[11px] text-gray-500">Enter a concentration to display the paired dose on Today. PepTalk will not guess one.</p>}
+                      </div>
+                    );
+                  })()}
 
                   <label className="mt-4 block">
                     <span className="text-xs font-medium text-gray-400">Route</span>
