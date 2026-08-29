@@ -74,14 +74,20 @@ PepTalk 3.0 is a staged rebuild. A step is not considered complete until the UI 
 - [x] Reconstituted/opened and expiration status surfaced per vial
 - [x] Low supply warnings limited to low-dose-count / low-remaining cases
 - [x] Source vial indicator already surfaced from Dose History when a recorded entry has a vial reference
+- [x] Resolve Step 7 build-name collision before Calendar integration
 - [ ] Native Inventory component extraction and direct edit/add actions
 - [ ] Final iPhone/PWA verification after deployment
 
-## 8. Calendar
-- [ ] Agenda-first mobile view
-- [ ] Month as secondary mode
-- [ ] Day detail: Scheduled / Taken / Skipped / Missed + weight
-- [ ] Adherence summary secondary, not competing with schedule
+## 8. Calendar — IN PROGRESS / DEPLOYING
+- [x] Agenda-first mobile view
+- [x] Month retained as secondary mode
+- [x] Seven-day agenda includes Scheduled / Taken / Skipped / Missed status from stored protocol/history/action data
+- [x] Weight is surfaced on each agenda day when a reading exists
+- [x] Unscheduled recorded administrations remain visible instead of disappearing from the agenda
+- [x] Adherence summary moved behind a secondary view instead of competing with the daily schedule
+- [x] No continuous observer and no calendar/health-data mutation
+- [ ] Native React calendar extraction and selected-day interaction refinement
+- [ ] Final iPhone/PWA verification after deployment
 
 ## 9. More / settings cleanup
 - [ ] Profile / account
