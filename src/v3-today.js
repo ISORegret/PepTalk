@@ -13,18 +13,41 @@ function ptScope() {
   return document.querySelector('.app-frame') || document.querySelector('.app-shell');
 }
 
-function ptFindButton(scope, patterns) {
+function ptFindButton(scope, patterns, exclude = null) {
   const buttons = Array.from(scope.querySelectorAll('button'));
-  return buttons.find((button) => patterns.some((pattern) => pattern.test(ptText(button)))) || null;
+  return buttons.find((button) => {
+    if (exclude && button.matches(exclude)) return false;
+    return patterns.some((pattern) => pattern.test(ptText(button)));
+  }) || null;
 }
 
-function ptClickExisting(scope, patterns) {
-  const target = ptFindButton(scope, patterns);
+function ptClickExisting(scope, patterns, exclude = null) {
+  const target = ptFindButton(scope, patterns, exclude);
   if (target) {
     target.click();
     return true;
   }
   return false;
+}
+
+function ptOpenWeightLogger() {
+  const weightTab = Array.from(document.querySelectorAll('.peptalk-bottom-nav button'))
+    .find((button) => /^weight$/i.test(ptText(button).trim()));
+  if (!weightTab) return false;
+  weightTab.click();
+
+  const tryOpen = () => {
+    if (ptActivePage() !== 'weight') return false;
+    const scope = ptScope();
+    if (!scope) return false;
+    const button = ptFindButton(scope, [/^log weight$/i, /^add weight$/i], '.pt-v3-quick-action');
+    if (!button) return false;
+    button.click();
+    return true;
+  };
+
+  [80, 180, 350, 650].forEach((delay) => window.setTimeout(tryOpen, delay));
+  return true;
 }
 
 function ptMarkSummaryCards(scope) {
@@ -69,12 +92,9 @@ function ptEnsureTodayIntro(scope) {
     if (!button) return;
     const action = button.dataset.action;
     if (action === 'weight') {
-      if (!ptClickExisting(scope, [/log weight/i, /add weight/i, /quick weight/i])) {
-        const weightTab = Array.from(document.querySelectorAll('.peptalk-bottom-nav button')).find((b) => /weight/i.test(ptText(b)));
-        weightTab?.click();
-      }
+      ptOpenWeightLogger();
     } else if (action === 'dose') {
-      if (!ptClickExisting(scope, [/log dose/i, /unscheduled dose/i, /add dose/i])) {
+      if (!ptClickExisting(scope, [/log dose/i, /unscheduled dose/i, /add dose/i], '.pt-v3-quick-action')) {
         const moreTab = Array.from(document.querySelectorAll('.peptalk-bottom-nav button')).find((b) => /more/i.test(ptText(b)));
         moreTab?.click();
       }
@@ -128,4 +148,12 @@ window.addEventListener('pageshow', () => ptScheduleToday(80));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ptScheduleToday(100); });
 document.addEventListener('click', (event) => {
   if (event.target.closest('.peptalk-bottom-nav')) ptScheduleToday(130);
+
+  const button = event.target.closest('button');
+  if (!button || button.classList.contains('pt-v3-quick-action')) return;
+  if (ptActivePage() === 'summary' && /^log weight$/i.test(ptText(button))) {
+    event.preventDefault();
+    event.stopPropagation();
+    ptOpenWeightLogger();
+  }
 }, { capture: true });
