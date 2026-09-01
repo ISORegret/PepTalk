@@ -57,7 +57,7 @@ html[data-pt-main-page="summary"] .app-frame {
 }
 .pt-v3-quick-action:active { transform: scale(.98); }
 
-/* Summary quick weight entry */
+/* Shared quick-entry modal */
 html.pt-v3-modal-open,
 html.pt-v3-modal-open body { overflow: hidden !important; }
 .pt-v3-weight-modal {
@@ -129,7 +129,8 @@ html.pt-v3-modal-open body { overflow: hidden !important; }
   display: block;
   margin-top: 18px;
 }
-.pt-v3-weight-modal__field > span {
+.pt-v3-weight-modal__field > span,
+.pt-v3-dose-field > span {
   display: block;
   margin-bottom: 7px;
   color: #c7d2df;
@@ -181,6 +182,55 @@ html.pt-v3-modal-open body { overflow: hidden !important; }
 }
 .pt-v3-weight-modal__save:disabled { opacity: .65; }
 
+/* Dose popup uses the same sheet, with compact app-style fields. */
+.pt-v3-dose-modal__sheet {
+  max-height: min(720px, calc(100dvh - 24px));
+  overflow-y: auto;
+}
+.pt-v3-dose-field {
+  display: block;
+  margin-top: 14px;
+}
+.pt-v3-dose-field input,
+.pt-v3-dose-field select {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid rgba(148,163,184,.18) !important;
+  border-radius: 14px;
+  background: rgba(15,23,42,.82) !important;
+  color: #f8fafc;
+  padding: 0 13px;
+  font-size: 15px;
+  font-weight: 650;
+  outline: 0;
+  box-shadow: none !important;
+}
+.pt-v3-dose-modal__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.pt-insights-quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 2px 0 12px;
+}
+.pt-insights-quick-actions button {
+  min-height: 44px;
+  border: 1px solid rgba(148,163,184,.16);
+  border-radius: 14px;
+  background: rgba(255,255,255,.035);
+  color: #dce5ef;
+  font-size: 12px;
+  font-weight: 750;
+}
+.pt-insights-quick-actions button:first-child {
+  border-color: rgba(94,234,212,.24);
+  background: rgba(94,234,212,.08);
+  color: #9bf6e8;
+}
+
 /* The Today surface should read as a command center, not a card gallery. */
 html[data-pt-main-page="summary"] .pt-summary-primary {
   margin-bottom: var(--today-gap);
@@ -230,6 +280,7 @@ html[data-pt-main-page="summary"] .pt-v3-today-warning {
     grid-template-columns: 1fr 1fr;
   }
   .pt-v3-quick-action { width: 100%; }
+  .pt-v3-dose-modal__row { grid-template-columns: 1fr 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
