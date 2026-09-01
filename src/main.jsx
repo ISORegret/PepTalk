@@ -28,6 +28,7 @@ import './v3-dose-equivalent.js'
 import './v3-dose-concentration-force.js'
 import './v3-dose-display.js'
 import './v3-release.js'
+import './v3-nav-weight-hotfix.js'
 
 /**
  * GitHub Pages and other static hosts often build without VITE_* secrets.
