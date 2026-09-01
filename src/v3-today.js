@@ -1,5 +1,5 @@
 /* PepTalk 3.0 — Step 2: Summary becomes Today.
- * Bounded enhancement only: no MutationObserver, no health/protocol data mutation.
+ * Bounded enhancement only: no MutationObserver, no direct health/protocol data mutation.
  */
 const ptText = (node) => String(node?.textContent || '').replace(/\s+/g, ' ').trim();
 const ptLower = (node) => ptText(node).toLowerCase();
@@ -30,24 +30,128 @@ function ptClickExisting(scope, patterns, exclude = null) {
   return false;
 }
 
-function ptOpenWeightLogger() {
+function ptNativeSet(input, value) {
+  if (!input) return;
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function ptFindLabelInput(scope, pattern, selector = 'input') {
+  const labels = Array.from(scope.querySelectorAll('label'));
+  const label = labels.find((node) => pattern.test(ptText(node)));
+  return label?.querySelector(selector) || label?.parentElement?.querySelector(selector) || null;
+}
+
+function ptSubmitWeightThroughNativeForm(weightValue, onDone) {
   const weightTab = Array.from(document.querySelectorAll('.peptalk-bottom-nav button'))
     .find((button) => /^weight$/i.test(ptText(button).trim()));
   if (!weightTab) return false;
   weightTab.click();
 
-  const tryOpen = () => {
-    if (ptActivePage() !== 'weight') return false;
+  let attempts = 0;
+  const openAndFill = () => {
+    attempts += 1;
     const scope = ptScope();
-    if (!scope) return false;
-    const button = ptFindButton(scope, [/^log weight$/i, /^add weight$/i], '.pt-v3-quick-action');
-    if (!button) return false;
-    button.click();
-    return true;
+    if (!scope || ptActivePage() !== 'weight') {
+      if (attempts < 12) window.setTimeout(openAndFill, 80);
+      return;
+    }
+
+    const openButton = ptFindButton(scope, [/^log weight$/i, /^add weight$/i], '.pt-v3-quick-action');
+    if (openButton) openButton.click();
+
+    window.setTimeout(() => {
+      const currentScope = ptScope();
+      if (!currentScope) return;
+      const weightInput = ptFindLabelInput(currentScope, /weight\s*\(lb\)|^weight\b/i, 'input[type="number"]');
+      const dateInput = ptFindLabelInput(currentScope, /^date\b/i, 'input[type="date"]');
+      const saveButton = ptFindButton(currentScope, [/^save weight$/i, /^save changes$/i]);
+      if (!weightInput || !saveButton) {
+        if (attempts < 12) window.setTimeout(openAndFill, 100);
+        return;
+      }
+      ptNativeSet(weightInput, String(weightValue));
+      if (dateInput && !dateInput.value) ptNativeSet(dateInput, new Date().toISOString().slice(0, 10));
+      saveButton.click();
+      window.setTimeout(() => {
+        const summaryTab = Array.from(document.querySelectorAll('.peptalk-bottom-nav button'))
+          .find((button) => /^summary$/i.test(ptText(button).trim()));
+        summaryTab?.click();
+        onDone?.();
+      }, 180);
+    }, 90);
   };
 
-  [80, 180, 350, 650].forEach((delay) => window.setTimeout(tryOpen, delay));
+  window.setTimeout(openAndFill, 80);
   return true;
+}
+
+function ptCloseWeightModal() {
+  document.querySelector('.pt-v3-weight-modal')?.remove();
+  document.documentElement.classList.remove('pt-v3-modal-open');
+}
+
+function ptShowWeightModal() {
+  ptCloseWeightModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'pt-v3-weight-modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Log weight');
+  overlay.innerHTML = `
+    <div class="pt-v3-weight-modal__backdrop" data-close="1"></div>
+    <section class="pt-v3-weight-modal__sheet">
+      <div class="pt-v3-weight-modal__handle" aria-hidden="true"></div>
+      <div class="pt-v3-weight-modal__head">
+        <div>
+          <div class="pt-v3-weight-modal__eyebrow">QUICK ENTRY</div>
+          <h2>Log weight</h2>
+          <p>Add today's weight without leaving Summary.</p>
+        </div>
+        <button type="button" class="pt-v3-weight-modal__close" data-close="1" aria-label="Close">×</button>
+      </div>
+      <label class="pt-v3-weight-modal__field">
+        <span>Weight</span>
+        <div><input type="number" step="0.1" inputmode="decimal" autofocus placeholder="189.2"><b>lb</b></div>
+      </label>
+      <div class="pt-v3-weight-modal__error" hidden>Enter a valid weight.</div>
+      <button type="button" class="pt-v3-weight-modal__save">Save weight</button>
+    </section>`;
+
+  const input = overlay.querySelector('input');
+  const error = overlay.querySelector('.pt-v3-weight-modal__error');
+  const save = overlay.querySelector('.pt-v3-weight-modal__save');
+  overlay.addEventListener('click', (event) => {
+    if (event.target.closest('[data-close="1"]')) ptCloseWeightModal();
+  });
+  const submit = () => {
+    const value = Number(input.value);
+    if (!(value > 0)) {
+      error.hidden = false;
+      input.focus();
+      return;
+    }
+    error.hidden = true;
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    const started = ptSubmitWeightThroughNativeForm(value, ptCloseWeightModal);
+    if (!started) {
+      save.disabled = false;
+      save.textContent = 'Save weight';
+      error.textContent = 'Could not open the weight logger. Try again.';
+      error.hidden = false;
+    }
+  };
+  save.addEventListener('click', submit);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') submit();
+    if (event.key === 'Escape') ptCloseWeightModal();
+  });
+  document.body.appendChild(overlay);
+  document.documentElement.classList.add('pt-v3-modal-open');
+  window.setTimeout(() => input.focus(), 50);
 }
 
 function ptMarkSummaryCards(scope) {
@@ -92,7 +196,7 @@ function ptEnsureTodayIntro(scope) {
     if (!button) return;
     const action = button.dataset.action;
     if (action === 'weight') {
-      ptOpenWeightLogger();
+      ptShowWeightModal();
     } else if (action === 'dose') {
       if (!ptClickExisting(scope, [/log dose/i, /unscheduled dose/i, /add dose/i], '.pt-v3-quick-action')) {
         const moreTab = Array.from(document.querySelectorAll('.peptalk-bottom-nav button')).find((b) => /more/i.test(ptText(b)));
@@ -154,6 +258,6 @@ document.addEventListener('click', (event) => {
   if (ptActivePage() === 'summary' && /^log weight$/i.test(ptText(button))) {
     event.preventDefault();
     event.stopPropagation();
-    ptOpenWeightLogger();
+    ptShowWeightModal();
   }
 }, { capture: true });
